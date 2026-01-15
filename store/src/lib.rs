@@ -23,9 +23,7 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate failure_derive;
-#[macro_use]
-extern crate grin_core as core;
+extern crate grin_core;
 extern crate grin_util as util;
 
 //use grin_core as core;
@@ -120,5 +118,5 @@ pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
 	let f_md = bitmap_file.metadata()?;
 	let mut buffer = Vec::with_capacity(f_md.len() as usize);
 	bitmap_file.read_to_end(&mut buffer)?;
-	Ok(Bitmap::deserialize(&buffer))
+	Ok(Bitmap::deserialize::<croaring::Portable>(&buffer))
 }

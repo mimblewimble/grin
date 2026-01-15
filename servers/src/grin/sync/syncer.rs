@@ -207,8 +207,9 @@ impl SyncRunner {
 
 			let mut check_state_sync = false;
 			match self.sync_state.status() {
-				SyncStatus::TxHashsetDownload { .. }
-				| SyncStatus::TxHashsetSetup
+				SyncStatus::TxHashsetPibd { .. }
+				| SyncStatus::TxHashsetDownload { .. }
+				| SyncStatus::TxHashsetSetup { .. }
 				| SyncStatus::TxHashsetRangeProofsValidation { .. }
 				| SyncStatus::TxHashsetKernelsValidation { .. }
 				| SyncStatus::TxHashsetSave
@@ -228,7 +229,13 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
-				state_sync.check_run(&header_head, &head, &tail, highest_height);
+				state_sync.check_run(
+					&header_head,
+					&head,
+					&tail,
+					highest_height,
+					self.stop_state.clone(),
+				);
 			}
 		}
 	}

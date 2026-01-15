@@ -192,7 +192,7 @@ fn pmmr_compact_leaf_sibling() {
 		assert_eq!(backend.get_from_file(0).unwrap(), pos_0_hash);
 
 		// aggressively compact the PMMR files
-		backend.check_compact(1, &Bitmap::create()).unwrap();
+		backend.check_compact(1, &Bitmap::new()).unwrap();
 
 		// check pos 0, 1, 2 are in the state we expect after compacting
 		{
@@ -252,7 +252,7 @@ fn pmmr_prune_compact() {
 		}
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 
 		// recheck the root and stored data
 		{
@@ -302,7 +302,7 @@ fn pmmr_reload() {
 			assert_eq!(backend.unpruned_size(), mmr_size);
 
 			// now check and compact the backend
-			backend.check_compact(1, &Bitmap::create()).unwrap();
+			backend.check_compact(1, &Bitmap::new()).unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
@@ -316,7 +316,7 @@ fn pmmr_reload() {
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
 
-			backend.check_compact(4, &Bitmap::create()).unwrap();
+			backend.check_compact(4, &Bitmap::new()).unwrap();
 
 			backend.sync().unwrap();
 			assert_eq!(backend.unpruned_size(), mmr_size);
@@ -414,7 +414,7 @@ fn pmmr_rewind() {
 		backend.sync().unwrap();
 
 		// and compact the MMR to remove the pruned elements
-		backend.check_compact(6, &Bitmap::create()).unwrap();
+		backend.check_compact(6, &Bitmap::new()).unwrap();
 		backend.sync().unwrap();
 
 		println!("root1 {:?}, root2 {:?}, root3 {:?}", root1, root2, root3);
@@ -459,7 +459,7 @@ fn pmmr_rewind() {
 
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
-			pmmr.rewind(5, &Bitmap::create()).unwrap();
+			pmmr.rewind(5, &Bitmap::new()).unwrap();
 			assert_eq!(pmmr.root().unwrap(), root1);
 		}
 		backend.sync().unwrap();
@@ -507,7 +507,7 @@ fn pmmr_compact_single_leaves() {
 		backend.sync().unwrap();
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 
 		{
 			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -518,7 +518,7 @@ fn pmmr_compact_single_leaves() {
 		backend.sync().unwrap();
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 	}
 
 	teardown(data_dir);
@@ -551,7 +551,7 @@ fn pmmr_compact_entire_peak() {
 		backend.sync().unwrap();
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 
 		// now check we have pruned up to and including the peak at pos 7
 		// hash still available in underlying hash file
@@ -702,7 +702,7 @@ fn pmmr_compact_horizon() {
 			}
 
 			// compact some more
-			backend.check_compact(9, &Bitmap::create()).unwrap();
+			backend.check_compact(9, &Bitmap::new()).unwrap();
 		}
 
 		// recheck stored data
@@ -773,7 +773,7 @@ fn compact_twice() {
 		}
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 
 		// recheck the root and stored data
 		{
@@ -800,7 +800,7 @@ fn compact_twice() {
 		}
 
 		// compact
-		backend.check_compact(2, &Bitmap::create()).unwrap();
+		backend.check_compact(2, &Bitmap::new()).unwrap();
 
 		// recheck the root and stored data
 		{

@@ -391,6 +391,8 @@ bitflags! {
 		const PIBD_HIST = 0b0001_0000;
 		/// Can provide historical blocks for archival sync.
 		const BLOCK_HIST = 0b0010_0000;
+		/// As above, with crucial serialization fix #3705 applied
+		const PIBD_HIST_1 = 0b0100_0000;
 	}
 }
 
@@ -402,6 +404,7 @@ impl Default for Capabilities {
 			| Capabilities::PEER_LIST
 			| Capabilities::TX_KERNEL_HASH
 			| Capabilities::PIBD_HIST
+			| Capabilities::PIBD_HIST_1
 	}
 }
 
@@ -667,6 +670,32 @@ pub trait ChainAdapter: Sync + Send {
 		hash: Hash,
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error>;
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error>;
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error>;
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error>;
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error>;
 }
 
 /// Additional methods required by the protocol that don't need to be

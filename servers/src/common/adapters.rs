@@ -32,7 +32,7 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::{
 	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
-	TxKernel,
+	SegmentType, SegmentTypeIdentifier, TxKernel,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -205,7 +205,7 @@ where
 				.chain()
 				.process_block_header(&cb.header, chain::Options::NONE)
 			{
-				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
+				debug!("Invalid compact block header {}: {:?}", cb_hash, e);
 				return Ok(!e.is_bad_data());
 			}
 
@@ -286,11 +286,7 @@ where
 		let res = self.chain().process_block_header(&bh, chain::Options::NONE);
 
 		if let Err(e) = res {
-			debug!(
-				"Block header {} refused by chain: {:?}",
-				bh.hash(),
-				e.kind()
-			);
+			debug!("Block header {} refused by chain: {:?}", bh.hash(), e);
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
@@ -480,9 +476,9 @@ where
 				if is_bad_data {
 					self.chain().clean_txhashset_sandbox();
 					error!("Failed to save txhashset archive: bad data");
-					self.sync_state.set_sync_error(
-						chain::ErrorKind::TxHashSetErr("bad txhashset data".to_string()).into(),
-					);
+					self.sync_state.set_sync_error(chain::Error::TxHashSetErr(
+						"bad txhashset data".to_string(),
+					));
 				} else {
 					info!("Received valid txhashset data for {}.", h);
 				}
@@ -511,11 +507,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<Segment<TxKernel>, chain::Error> {
 		if !KERNEL_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.kernel_segment(id)
 	}
@@ -526,11 +522,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<(Segment<BitmapChunk>, Hash), chain::Error> {
 		if !BITMAP_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.bitmap_segment(id)
 	}
@@ -541,11 +537,11 @@ where
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), chain::Error> {
 		if !OUTPUT_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.output_segment(id)
 	}
@@ -556,13 +552,143 @@ where
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		if !RANGEPROOF_SEGMENT_HEIGHT_RANGE.contains(&id.height) {
-			return Err(chain::ErrorKind::InvalidSegmentHeight.into());
+			return Err(chain::Error::InvalidSegmentHeight);
 		}
 		let segmenter = self.chain().segmenter()?;
 		if segmenter.header().hash() != hash {
-			return Err(chain::ErrorKind::SegmenterHeaderMismatch.into());
+			return Err(chain::Error::SegmenterHeaderMismatch);
 		}
 		segmenter.rangeproof_segment(id)
+	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received bitmap segment {} for block_hash: {}, output_root: {}",
+			segment.identifier().idx,
+			block_hash,
+			output_root
+		);
+		// TODO: Entire process needs to be restarted if the horizon block
+		// has changed (perhaps not here, NB this has to go somewhere)
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_bitmap_segment(segment, output_root);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Bitmap,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+			segment.identifier().idx,
+			block_hash,
+			bitmap_root,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_output_segment(segment, Some(bitmap_root));
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming output segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Output,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received proof segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_rangeproof_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::RangeProof,
+			identifier,
+		});
+		retval
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		debug!(
+			"Received kernel segment {} for block_hash: {}",
+			segment.identifier().idx,
+			block_hash,
+		);
+		let archive_header = self.chain().txhashset_archive_header_header_only()?;
+		let identifier = segment.identifier().clone();
+		let mut retval = Ok(true);
+		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
+			let res = d.add_kernel_segment(segment);
+			if let Err(e) = res {
+				error!(
+					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
+					identifier, e
+				);
+				retval = Err(e);
+			}
+		}
+		// Remove segment from outgoing list
+		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
+			segment_type: SegmentType::Kernel,
+			identifier,
+		});
+		retval
 	}
 }
 
@@ -660,8 +786,8 @@ where
 				Ok(false)
 			}
 			Err(e) => {
-				match e.kind() {
-					chain::ErrorKind::Orphan => {
+				match e {
+					chain::Error::Orphan => {
 						if let Ok(previous) = previous {
 							// make sure we did not miss the parent block
 							if !self.chain().is_orphan(&previous.hash())
@@ -674,11 +800,7 @@ where
 						Ok(true)
 					}
 					_ => {
-						debug!(
-							"process_block: block {} refused by chain: {}",
-							bhash,
-							e.kind()
-						);
+						debug!("process_block: block {} refused by chain: {}", bhash, e);
 						Ok(true)
 					}
 				}

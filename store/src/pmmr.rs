@@ -16,10 +16,10 @@
 use std::fs;
 use std::{io, time};
 
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::pmmr::{self, family, Backend};
-use crate::core::core::BlockHeader;
-use crate::core::ser::{PMMRable, ProtocolVersion};
+use crate::grin_core::core::hash::{Hash, Hashed};
+use crate::grin_core::core::pmmr::{self, family, Backend};
+use crate::grin_core::core::BlockHeader;
+use crate::grin_core::ser::{PMMRable, ProtocolVersion};
 use crate::leaf_set::LeafSet;
 use crate::prune_list::PruneList;
 use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
@@ -102,6 +102,13 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		Ok(())
 	}
 
+	fn append_hash(&mut self, hash: Hash) -> Result<(), String> {
+		self.hash_file
+			.append(&hash)
+			.map_err(|e| format!("Failed to append hash to file. {}", e))?;
+		Ok(())
+	}
+
 	fn get_from_file(&self, pos0: u64) -> Option<Hash> {
 		if self.is_compacted(pos0) {
 			return None;
@@ -149,6 +156,11 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.get_data_from_file(pos0)
 	}
 
+	/// Remove leaf from leaf set
+	fn remove_from_leaf_set(&mut self, pos0: u64) {
+		self.leaf_set.remove(pos0);
+	}
+
 	/// Returns an iterator over all the leaf positions.
 	/// for a prunable PMMR this is an iterator over the leaf_set bitmap.
 	/// For a non-prunable PMMR this is *all* leaves (this is not yet implemented).
@@ -165,6 +177,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			self.leaf_set.len() as u64
 		} else {
 			pmmr::n_leaves(self.unpruned_size())
+		}
+	}
+
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		if self.prunable {
+			self.leaf_set.n_unpruned_leaves_to_index(to_index)
+		} else {
+			pmmr::n_leaves(pmmr::insertion_to_pmmr_index(to_index))
 		}
 	}
 
@@ -215,6 +235,14 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		self.data_file.rewind(flatfile_pos - leaf_shift);
 
 		Ok(())
+	}
+
+	fn reset_prune_list(&mut self) {
+		let bitmap = Bitmap::new();
+		self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
+		if let Err(e) = self.prune_list.flush() {
+			error!("Flushing reset prune list: {}", e);
+		}
 	}
 
 	/// Remove by insertion position.
@@ -349,6 +377,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			.and(self.hash_file.flush())
 			.and(self.data_file.flush())
 			.and(self.sync_leaf_set())
+			.and(self.prune_list.flush())
 			.map_err(|e| {
 				io::Error::new(
 					io::ErrorKind::Interrupted,
@@ -448,7 +477,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 	}
 
 	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
-		let mut expanded = Bitmap::create();
+		let mut expanded = Bitmap::new();
 
 		let leaf_pos_to_rm =
 			self.leaf_set

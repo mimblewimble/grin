@@ -17,11 +17,11 @@
 
 use std::path::{Path, PathBuf};
 
-use croaring::Bitmap;
+use croaring::{Bitmap, Portable};
 
-use crate::core::core::hash::Hashed;
-use crate::core::core::pmmr;
-use crate::core::core::BlockHeader;
+use crate::grin_core::core::hash::Hashed;
+use crate::grin_core::core::pmmr;
+use crate::grin_core::core::BlockHeader;
 use crate::prune_list::PruneList;
 use crate::{read_bitmap, save_via_temp_file};
 
@@ -44,14 +44,14 @@ impl LeafSet {
 		let bitmap = if file_path.exists() {
 			read_bitmap(&file_path)?
 		} else {
-			Bitmap::create()
+			Bitmap::new()
 		};
 
 		if !bitmap.is_empty() {
 			debug!(
 				"bitmap {} pos ({} bytes)",
 				bitmap.cardinality(),
-				bitmap.get_serialized_size_in_bytes(),
+				bitmap.get_serialized_size_in_bytes::<Portable>(),
 			);
 		}
 
@@ -114,8 +114,8 @@ impl LeafSet {
 
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let to_remove = ((cutoff_pos + 1) as u32)..bitmap.maximum().unwrap_or(0);
-		bitmap.remove_range_closed(to_remove);
+		let to_remove = ((cutoff_pos + 1) as u32)..=bitmap.maximum().unwrap_or(0);
+		bitmap.remove_range(to_remove);
 
 		// Then add back output pos to the leaf_set
 		// that were removed.
@@ -123,7 +123,7 @@ impl LeafSet {
 
 		// Invert bitmap for the leaf pos and return the resulting bitmap.
 		bitmap
-			.flip(1..(cutoff_pos + 1))
+			.flip(1u32..(cutoff_pos + 1) as u32)
 			.and(&self.unpruned_pre_cutoff(cutoff_pos, prune_list))
 	}
 
@@ -133,8 +133,8 @@ impl LeafSet {
 	pub fn rewind(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) {
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		let to_remove = ((cutoff_pos + 1) as u32)..self.bitmap.maximum().unwrap_or(0);
-		self.bitmap.remove_range_closed(to_remove);
+		let to_remove = ((cutoff_pos + 1) as u32)..=self.bitmap.maximum().unwrap_or(0);
+		self.bitmap.remove_range(to_remove);
 
 		// Then add back output pos to the leaf_set
 		// that were removed.
@@ -160,7 +160,7 @@ impl LeafSet {
 
 		let cp_path = format!("{}.{}", self.path.to_str().unwrap(), header.hash());
 		let mut file = BufWriter::new(File::create(cp_path)?);
-		file.write_all(&cp_bitmap.serialize())?;
+		file.write_all(&cp_bitmap.serialize::<Portable>())?;
 		file.flush()?;
 		Ok(())
 	}
@@ -172,7 +172,7 @@ impl LeafSet {
 
 		// Write the updated bitmap file to disk.
 		save_via_temp_file(&self.path, ".tmp", |file| {
-			file.write_all(&self.bitmap.serialize())
+			file.write_all(&self.bitmap.serialize::<Portable>())
 		})?;
 
 		// Make sure our backup in memory is up to date.
@@ -194,6 +194,11 @@ impl LeafSet {
 	/// Number of positions stored in the leaf_set.
 	pub fn len(&self) -> usize {
 		self.bitmap.cardinality() as usize
+	}
+
+	/// Number of positions up to index n in the leaf set
+	pub fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		self.bitmap.range_cardinality(0u32..to_index as u32)
 	}
 
 	/// Is the leaf_set empty.

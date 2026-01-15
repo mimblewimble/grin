@@ -38,6 +38,7 @@ use grin_util as util;
 mod chain;
 mod error;
 pub mod linked_list;
+pub mod pibd_params;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;
@@ -46,7 +47,7 @@ pub mod types;
 // Re-export the base interface
 
 pub use crate::chain::{Chain, MAX_ORPHAN_SIZE};
-pub use crate::error::{Error, ErrorKind};
+pub use crate::error::Error;
 pub use crate::store::ChainStore;
 pub use crate::types::{
 	BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, Tip, TxHashsetDownloadStats,

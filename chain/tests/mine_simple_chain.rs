@@ -954,10 +954,12 @@ fn test_overflow_cached_rangeproof() {
 		let res = chain.process_block(next, chain::Options::SKIP_POW);
 
 		assert_eq!(
-			res.unwrap_err().kind(),
-			chain::ErrorKind::InvalidBlockProof(block::Error::Transaction(
-				transaction::Error::Secp(util::secp::Error::InvalidRangeProof)
-			))
+			res.unwrap_err(),
+			chain::Error::InvalidBlockProof {
+				source: block::Error::Transaction(transaction::Error::Secp(
+					util::secp::Error::InvalidRangeProof
+				))
+			}
 		);
 	}
 	clean_output_dir(".grin_overflow");

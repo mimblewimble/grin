@@ -21,6 +21,7 @@ extern crate clap;
 extern crate log;
 use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
+use crate::tools::check_seeds;
 use crate::util::init_logger;
 use clap::App;
 use futures::channel::oneshot;
@@ -32,9 +33,16 @@ use grin_p2p as p2p;
 use grin_servers as servers;
 use grin_util as util;
 use grin_util::logger::LogEntry;
+use std::fs::File;
+use std::io::Write;
 use std::sync::mpsc;
 
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+
 mod cmd;
+mod tools;
 pub mod tui;
 
 // include build information
@@ -79,7 +87,7 @@ fn real_main() -> i32 {
 	let args = App::from_yaml(yml)
 		.version(built_info::PKG_VERSION)
 		.get_matches();
-	let node_config;
+	let mut node_config;
 
 	let chain_type = if args.is_present("testnet") {
 		global::ChainTypes::Testnet
@@ -127,6 +135,25 @@ fn real_main() -> i32 {
 	let config = node_config.clone().unwrap();
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
+
+	// Handle global --no-tui flag and GRIN_NO_TUI environment variable
+	let no_tui = args.is_present("no-tui")
+		|| std::env::var("GRIN_NO_TUI")
+			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+			.unwrap_or(false);
+
+	if no_tui {
+		// Deactivate logger TUI
+		logging_config.tui_running = Some(false);
+
+		// Deactivate Server TUI in node config, so
+		// cmd::server_command(...) will not use it
+		if let Some(gc) = node_config.as_mut() {
+			if let Some(members) = gc.members.as_mut() {
+				members.server.run_tui = Some(false);
+			}
+		}
+	}
 
 	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
 		Box::leak(Box::new(oneshot::channel::<()>()));
@@ -195,6 +222,23 @@ fn real_main() -> i32 {
 				Ok(_) => 0,
 				Err(_) => 1,
 			}
+		}
+
+		// seedcheck command
+		("seedcheck", Some(seedcheck_args)) => {
+			let is_testnet = seedcheck_args.is_present("testnet");
+			let results = check_seeds(is_testnet);
+			let output =
+				serde_json::to_string_pretty(&results).expect("Unable to serialize results");
+
+			if let Some(output_file) = seedcheck_args.value_of("output") {
+				let mut file = File::create(output_file).expect("Unable to create file");
+				writeln!(file, "{}", output).expect("Unable to write data");
+				println!("Results written to {}", output_file);
+			} else {
+				println!("{}", output);
+			}
+			0
 		}
 
 		// If nothing is specified, try to just use the config file instead

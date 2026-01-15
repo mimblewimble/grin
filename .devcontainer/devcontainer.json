@@ -1,0 +1,20 @@
+{
+    "name": "rust-grin-devcontainer",
+    "build": {
+      "dockerfile": "Dockerfile",
+      "context": ".."
+    },
+    "customizations": {
+      "vscode": {
+        "extensions": [
+          "dbaeumer.vscode-eslint",
+          "vadimcn.vscode-lldb",
+          "tamasfe.even-better-toml",
+          "rust-lang.rust-analyzer",
+          "esbenp.prettier-vscode",
+          "github.copilot",
+          "github.copilot-chat"
+        ]
+      }
+    }
+  }

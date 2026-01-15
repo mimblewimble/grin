@@ -15,7 +15,7 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 use rand::{thread_rng, Rng};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -79,8 +79,8 @@ pub fn get_block(
 	while let Err(e) = result {
 		let mut new_key_id = key_id.to_owned();
 		match e {
-			self::Error::Chain(c) => match c.kind() {
-				chain::ErrorKind::DuplicateCommitment(_) => {
+			self::Error::Chain(c) => match c {
+				chain::Error::DuplicateCommitment(_) => {
 					debug!(
 						"Duplicate commit for potential coinbase detected. Trying next derivation."
 					);
@@ -168,7 +168,11 @@ fn build_block(
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.pow.secondary_scaling = difficulty.secondary_scaling;
-	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);
+	let ts = DateTime::<Utc>::from_timestamp(now_sec, 0);
+	if ts.is_none() {
+		return Err(Error::General("Utc::now into timestamp".into()));
+	}
+	b.header.timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc);
 
 	debug!(
 		"Built new block with {} inputs and {} outputs, block difficulty: {}, cumulative difficulty {}",
@@ -182,20 +186,18 @@ fn build_block(
 	match chain.set_txhashset_roots(&mut b) {
 		Ok(_) => Ok((b, block_fees)),
 		Err(e) => {
-			match e.kind() {
+			match e {
 				// If this is a duplicate commitment then likely trying to use
 				// a key that hass already been derived but not in the wallet
 				// for some reason, allow caller to retry.
-				chain::ErrorKind::DuplicateCommitment(e) => Err(Error::Chain(
-					chain::ErrorKind::DuplicateCommitment(e).into(),
-				)),
+				chain::Error::DuplicateCommitment(e) => {
+					Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
+				}
 
 				// Some other issue, possibly duplicate kernel
 				_ => {
 					error!("Error setting txhashset root to build a block: {:?}", e);
-					Err(Error::Chain(
-						chain::ErrorKind::Other(format!("{:?}", e)).into(),
-					))
+					Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
 				}
 			}
 		}

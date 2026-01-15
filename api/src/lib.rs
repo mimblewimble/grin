@@ -20,8 +20,6 @@ use grin_pool as pool;
 use grin_util as util;
 
 #[macro_use]
-extern crate failure_derive;
-#[macro_use]
 extern crate lazy_static;
 
 #[macro_use]
@@ -35,11 +33,11 @@ mod web;
 pub mod auth;
 pub mod client;
 mod foreign;
-mod foreign_rpc;
+pub mod foreign_rpc;
 mod handlers;
 pub mod json_rpc;
 mod owner;
-mod owner_rpc;
+pub mod owner_rpc;
 mod rest;
 mod router;
 pub mod types;

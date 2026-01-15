@@ -5,12 +5,9 @@ authors = ["Automatically generated"]
 publish = false
 edition = "2018"
 
-[package.metadata]
-cargo-fuzz = true
-
 [dependencies]
 chrono = "0.4.11"
-libfuzzer-sys = "0.3"
+libfuzzer-sys = "0.4.0"
 grin_chain = { path = "../../chain" }
 grin_core = { path = "../../core" }
 grin_keychain = { path = "../../keychain" }

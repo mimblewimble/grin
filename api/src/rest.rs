@@ -20,95 +20,43 @@
 
 use crate::router::{Handler, HandlerObj, ResponseFuture, Router, RouterError};
 use crate::web::response;
-use failure::{Backtrace, Context, Fail, ResultExt};
 use futures::channel::oneshot;
-use futures::TryStreamExt;
 use hyper::server::accept;
 use hyper::service::make_service_fn;
 use hyper::{Body, Request, Server, StatusCode};
-use rustls::internal::pemfile;
+use rustls_pemfile as pemfile;
 use std::convert::Infallible;
-use std::fmt::{self, Display};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::{io, thread};
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
-use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
-#[derive(Debug)]
-pub struct Error {
-	inner: Context<ErrorKind>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Fail, Serialize, Deserialize)]
-pub enum ErrorKind {
-	#[fail(display = "Internal error: {}", _0)]
+#[derive(Clone, Eq, PartialEq, Debug, thiserror::Error, Serialize, Deserialize)]
+pub enum Error {
+	#[error("Internal error: {0}")]
 	Internal(String),
-	#[fail(display = "Bad arguments: {}", _0)]
+	#[error("Bad arguments: {0}")]
 	Argument(String),
-	#[fail(display = "Not found.")]
+	#[error("Not found.")]
 	NotFound,
-	#[fail(display = "Request error: {}", _0)]
+	#[error("Request error: {0}")]
 	RequestError(String),
-	#[fail(display = "ResponseError error: {}", _0)]
+	#[error("ResponseError error: {0}")]
 	ResponseError(String),
-	#[fail(display = "Router error: {}", _0)]
-	Router(RouterError),
-}
-
-impl Fail for Error {
-	fn cause(&self) -> Option<&dyn Fail> {
-		self.inner.cause()
-	}
-
-	fn backtrace(&self) -> Option<&Backtrace> {
-		self.inner.backtrace()
-	}
-}
-
-impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		Display::fmt(&self.inner, f)
-	}
-}
-
-impl Error {
-	pub fn kind(&self) -> &ErrorKind {
-		self.inner.get_context()
-	}
-}
-
-impl From<ErrorKind> for Error {
-	fn from(kind: ErrorKind) -> Error {
-		Error {
-			inner: Context::new(kind),
-		}
-	}
-}
-
-impl From<Context<ErrorKind>> for Error {
-	fn from(inner: Context<ErrorKind>) -> Error {
-		Error { inner: inner }
-	}
-}
-
-impl From<RouterError> for Error {
-	fn from(error: RouterError) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::Router(error)),
-		}
-	}
+	#[error("Router error: {source}")]
+	Router {
+		#[from]
+		source: RouterError,
+	},
 }
 
 impl From<crate::chain::Error> for Error {
 	fn from(error: crate::chain::Error) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::Internal(error.to_string())),
-		}
+		Error::Internal(error.to_string())
 	}
 }
 
@@ -128,39 +76,40 @@ impl TLSConfig {
 	}
 
 	fn load_certs(&self) -> Result<Vec<rustls::Certificate>, Error> {
-		let certfile = File::open(&self.certificate).context(ErrorKind::Internal(format!(
-			"failed to open file {}",
-			self.certificate
-		)))?;
+		let certfile = File::open(&self.certificate).map_err(|e| {
+			Error::Internal(format!("failed to open file {} {}", self.certificate, e))
+		})?;
 		let mut reader = io::BufReader::new(certfile);
 
-		pemfile::certs(&mut reader)
-			.map_err(|_| ErrorKind::Internal("failed to load certificate".to_string()).into())
+		let certs = pemfile::certs(&mut reader)
+			.map_err(|_| Error::Internal("failed to load certificate".to_string()))?;
+
+		Ok(certs.into_iter().map(rustls::Certificate).collect())
 	}
 
 	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
-		let keyfile = File::open(&self.private_key).context(ErrorKind::Internal(format!(
-			"failed to open file {}",
-			self.private_key
-		)))?;
+		let keyfile = File::open(&self.private_key)
+			.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
 		let mut reader = io::BufReader::new(keyfile);
 
 		let keys = pemfile::pkcs8_private_keys(&mut reader)
-			.map_err(|_| ErrorKind::Internal("failed to load private key".to_string()))?;
+			.map_err(|_| Error::Internal("failed to load private key".to_string()))?;
 		if keys.len() != 1 {
-			return Err(ErrorKind::Internal("expected a single private key".to_string()).into());
+			return Err(Error::Internal("expected a single private key".to_string()));
 		}
-		Ok(keys[0].clone())
+		Ok(rustls::PrivateKey(keys[0].clone()))
 	}
 
 	pub fn build_server_config(&self) -> Result<Arc<rustls::ServerConfig>, Error> {
 		let certs = self.load_certs()?;
 		let key = self.load_private_key()?;
-		let mut cfg = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-		cfg.set_single_cert(certs, key)
-			.context(ErrorKind::Internal(
-				"set single certificate failed".to_string(),
-			))?;
+
+		let cfg = rustls::ServerConfig::builder()
+			.with_safe_defaults()
+			.with_no_client_auth()
+			.with_single_cert(certs, key)
+			.map_err(|e| Error::Internal(format!("set single certificate failed {}", e)))?;
+
 		Ok(Arc::new(cfg))
 	}
 }
@@ -202,10 +151,9 @@ impl ApiServer {
 		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
-			return Err(ErrorKind::Internal(
+			return Err(Error::Internal(
 				"Can't start HTTP API server, it's running already".to_string(),
-			)
-			.into());
+			));
 		}
 		let rx = &mut api_chan.1;
 		let tx = &mut api_chan.0;
@@ -231,14 +179,14 @@ impl ApiServer {
 					server.await
 				};
 
-				let mut rt = Runtime::new()
+				let rt = Runtime::new()
 					.map_err(|e| eprintln!("HTTP API server error: {}", e))
 					.unwrap();
 				if let Err(e) = rt.block_on(server) {
 					eprintln!("HTTP API server error: {}", e)
 				}
 			})
-			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
+			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
 	/// Starts the TLS ApiServer at the provided address.
@@ -251,10 +199,9 @@ impl ApiServer {
 		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
-			return Err(ErrorKind::Internal(
+			return Err(Error::Internal(
 				"Can't start HTTPS API server, it's running already".to_string(),
-			)
-			.into());
+			));
 		}
 
 		let rx = &mut api_chan.1;
@@ -271,13 +218,26 @@ impl ApiServer {
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = async move {
-					let mut listener = TcpListener::bind(&addr).await.expect("failed to bind");
-					let listener = listener
-						.incoming()
-						.and_then(move |s| acceptor.accept(s))
-						.filter(|r| r.is_ok());
+					let listener = TcpListener::bind(&addr).await.expect("failed to bind");
 
-					let server = Server::builder(accept::from_stream(listener))
+					let tls_stream = async_stream::stream! {
+						loop {
+							let (socket, _addr) = match listener.accept().await {
+								Ok(conn) => conn,
+								Err(e) => {
+									eprintln!("Error accepting connection: {}", e);
+									continue;
+								}
+							};
+
+							match acceptor.accept(socket).await {
+								Ok(stream) => yield Ok::<_, std::io::Error>(stream),
+								Err(_) => continue,
+							}
+						}
+					};
+
+					let server = Server::builder(accept::from_stream(tls_stream))
 						.serve(make_service_fn(move |_| {
 							let router = router.clone();
 							async move { Ok::<_, Infallible>(router) }
@@ -289,14 +249,14 @@ impl ApiServer {
 					server.await
 				};
 
-				let mut rt = Runtime::new()
+				let rt = Runtime::new()
 					.map_err(|e| eprintln!("HTTP API server error: {}", e))
 					.unwrap();
 				if let Err(e) = rt.block_on(server) {
 					eprintln!("HTTP API server error: {}", e)
 				}
 			})
-			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
+			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
 	/// Stops the API server, it panics in case of error

@@ -41,7 +41,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.
-	pub fn new(backend: &'a B) -> ReadonlyPMMR<'_, T, B> {
+	pub fn new(backend: &'a B) -> ReadonlyPMMR<'a, T, B> {
 		ReadonlyPMMR {
 			backend,
 			size: 0,
@@ -51,7 +51,7 @@ where
 
 	/// Build a new readonly PMMR pre-initialized to
 	/// size with the provided backend.
-	pub fn at(backend: &'a B, size: u64) -> ReadonlyPMMR<'_, T, B> {
+	pub fn at(backend: &'a B, size: u64) -> ReadonlyPMMR<'a, T, B> {
 		ReadonlyPMMR {
 			backend,
 			size,
@@ -73,7 +73,8 @@ where
 			Some(p) => p,
 			None => self.size,
 		};
-		let mut pmmr_index = pmmr_index1 - 1;
+		let mut pmmr_index = pmmr_index1.saturating_sub(1);
+
 		while return_vec.len() < max_count as usize && pmmr_index < size {
 			if let Some(t) = self.get_data(pmmr_index) {
 				return_vec.push(t);
@@ -174,5 +175,9 @@ where
 
 	fn n_unpruned_leaves(&self) -> u64 {
 		self.backend.n_unpruned_leaves()
+	}
+
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64 {
+		self.backend.n_unpruned_leaves_to_index(to_index)
 	}
 }

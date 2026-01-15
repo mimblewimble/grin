@@ -27,8 +27,7 @@ use crate::pow::{verify_size, Difficulty, Proof, ProofOfWork};
 use crate::ser::{
 	self, deserialize_default, serialize_default, PMMRable, Readable, Reader, Writeable, Writer,
 };
-use chrono::naive::{MAX_DATE, MIN_DATE};
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
+use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use keychain::{self, BlindingFactor};
 use std::convert::TryInto;
@@ -37,7 +36,7 @@ use util::from_hex;
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
-#[derive(Debug, Clone, Eq, PartialEq, Fail)]
+#[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
@@ -232,7 +231,10 @@ impl Default for BlockHeader {
 		BlockHeader {
 			version: HeaderVersion(1),
 			height: 0,
-			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+			timestamp: DateTime::from_naive_utc_and_offset(
+				DateTime::<Utc>::from_timestamp(0, 0).unwrap().naive_utc(),
+				Utc,
+			),
 			prev_hash: ZERO_HASH,
 			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
@@ -289,16 +291,31 @@ fn read_block_header<R: Reader>(reader: &mut R) -> Result<BlockHeader, ser::Erro
 	let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
 	let pow = ProofOfWork::read(reader)?;
 
-	if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
-		|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
+	if timestamp
+		> chrono::NaiveDate::MAX
+			.and_hms_opt(0, 0, 0)
+			.unwrap()
+			.and_utc()
+			.timestamp()
+		|| timestamp
+			< chrono::NaiveDate::MIN
+				.and_hms_opt(0, 0, 0)
+				.unwrap()
+				.and_utc()
+				.timestamp()
 	{
+		return Err(ser::Error::CorruptedData);
+	}
+
+	let ts = DateTime::<Utc>::from_timestamp(timestamp, 0);
+	if ts.is_none() {
 		return Err(ser::Error::CorruptedData);
 	}
 
 	Ok(BlockHeader {
 		version,
 		height,
-		timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
+		timestamp: DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc),
 		prev_hash,
 		prev_root,
 		output_root,
@@ -646,8 +663,13 @@ impl Block {
 		let version = consensus::header_version(height);
 
 		let now = Utc::now().timestamp();
-		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		let ts = DateTime::<Utc>::from_timestamp(now, 0);
+		if ts.is_none() {
+			return Err(Error::Other("Converting Utc::now() into timestamp".into()));
+		}
+
+		let timestamp = DateTime::from_naive_utc_and_offset(ts.unwrap().naive_utc(), Utc);
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.

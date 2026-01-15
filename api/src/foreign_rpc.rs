@@ -19,10 +19,10 @@ use crate::core::core::transaction::Transaction;
 use crate::foreign::Foreign;
 use crate::pool::PoolEntry;
 use crate::pool::{BlockChain, PoolAdapter};
-use crate::rest::ErrorKind;
+use crate::rest::Error;
 use crate::types::{
-	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
-	Version,
+	BlockHeaderPrintable, BlockListing, BlockPrintable, LocatedTxKernel, OutputListing,
+	OutputPrintable, Tip, Version,
 };
 use crate::util;
 
@@ -126,7 +126,7 @@ pub trait ForeignRpc: Sync + Send {
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockHeaderPrintable, ErrorKind>;
+	) -> Result<BlockHeaderPrintable, Error>;
 
 	/**
 	Networked version of [Foreign::get_block](struct.Foreign.html#method.get_block).
@@ -244,7 +244,252 @@ pub trait ForeignRpc: Sync + Send {
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockPrintable, ErrorKind>;
+	) -> Result<BlockPrintable, Error>;
+
+	/**
+	Networked version of [Foreign::get_blocks](struct.Foreign.html#method.get_blocks).
+
+	# Json rpc example
+
+	```
+	# grin_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_blocks",
+		"params": [2299309, 2300309, 2, false],
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": {
+				"blocks": [
+					{
+						"header": {
+							"cuckoo_solution": [
+								20354215,
+								100524565,
+								169529296,
+								259818619,
+								261952555,
+								265003136,
+								290685286,
+								307792709,
+								329993483,
+								331550733,
+								478902211,
+								707186317,
+								717277083,
+								742312701,
+								763869950,
+								785680094,
+								791217416,
+								1156641404,
+								1244452354,
+								1277970471,
+								1405106926,
+								1663783361,
+								1701259732,
+								1795507572,
+								1845900835,
+								2060172013,
+								2067055232,
+								2169213199,
+								2191128830,
+								2253855427,
+								2626425322,
+								2678973678,
+								2815586448,
+								2921010487,
+								3042894274,
+								3103031603,
+								3492595971,
+								3603041347,
+								3853538391,
+								3974438280,
+								4199558832,
+								4262968379
+							],
+							"edge_bits": 32,
+							"hash": "0004331bb122685f12644e40b163e4557951b2b835ad2493502750ea787af7cc",
+							"height": 2299309,
+							"kernel_mmr_size": 8568165,
+							"kernel_root": "6b4adb9ee193ad043910b5a8c1bac0864ab99f57845101a3b422031bcf5c2ce1",
+							"nonce": 4185528505858938389,
+							"output_mmr_size": 13524183,
+							"output_root": "b642891741b56adaf7762813490d161377d0fbf7b47170d235beef33c25a4d77",
+							"prev_root": "a0ba3206b6a8089ef05690d40767c41cc0514eaa5031ebce1960a7cc2edcc211",
+							"previous": "000207548609a9007eacd7dfcdc8006252d6b1ad70864ea8ddebe4ca9e82bd74",
+							"range_proof_root": "d8cefda00f325fd9a1223454f23276b73d8a1d7c72ec74cdfb9bdf5c77a04dee",
+							"secondary_scaling": 0,
+							"timestamp": "2023-06-05T20:18:45+00:00",
+							"total_difficulty": 2072532663425232,
+							"total_kernel_offset": "b0a0c21326532b4a91c18d2355aedca4d8ed68b77db9882feb85da8120b4f533",
+							"version": 5
+						},
+						"inputs": [
+							"092b140b1500812ac58ef68c17a2bbf2ec3531bcf0ce4dc32bbf8a29351d1784d7",
+							"083b72230921abeacd637dae8505233ab035c20dff1bfdab5ff5bb41b2f5238458"
+						],
+						"kernels": [
+							{
+								"excess": "08ab720dc374f099e6726e2dceada508a0331bb1f13b8a4e56afde83ff42f7a351",
+								"excess_sig": "6858120e9758d7587e27fd5dc9c26117a2ce0d5a7d871ce805e03eb494bfa1f86a27991865b3ab709064c43692433fd58f008c3bba2c88ad5f95a0c8ff3cf11f",
+								"features": "Plain",
+								"fee": 23500000,
+								"fee_shift": 0,
+								"lock_height": 0
+							},
+							{
+								"excess": "08d0a44b22952b03b29e3d88391102c281dcab4763def22cab65ed45e35b9078e8",
+								"excess_sig": "32f91d5671e334a87843a8b02c550c9e0fbdfe507ee62417cc123b5078d7884701a42e257357a1bed9dc4a8e07540b1629e9fa95a05c44adb5cb001c8fb777ee",
+								"features": "Coinbase",
+								"fee": 0,
+								"fee_shift": 0,
+								"lock_height": 0
+							}
+						],
+						"outputs": [
+							{
+								"block_height": 2299309,
+								"commit": "0857c94df51dd226fa0c5920aae6d73d069603f973b2e06551698c6d39fdc2c192",
+								"merkle_proof": null,
+								"mmr_index": 13524176,
+								"output_type": "Coinbase",
+								"proof": null,
+								"proof_hash": "0937291a8a3c81cea4421fa0d0b291aacb5d46065cfd93747a15f58d99d781b6",
+								"spent": false
+							},
+							{
+								"block_height": 2299309,
+								"commit": "08d4681b904695edee6e183cd40564ea0f5589b35d4d386da2eb980a6a92b1b307",
+								"merkle_proof": null,
+								"mmr_index": 0,
+								"output_type": "Transaction",
+								"proof": null,
+								"proof_hash": "41694ab6dcd9b1664ca28e79c3302144b99a4c1cb45d13c8728604c1d26e37bf",
+								"spent": true
+							},
+							{
+								"block_height": 2299309,
+								"commit": "08255a260a65fc87cfd924780d896eaadb42468b0fe3ba6adeace378793b5d8172",
+								"merkle_proof": null,
+								"mmr_index": 13524182,
+								"output_type": "Transaction",
+								"proof": null,
+								"proof_hash": "58c77a5716ec4806dbddac64a83d6e4351b6eeffca391be1b11ec74aac0514dc",
+								"spent": false
+							}
+						]
+					},
+					{
+						"header": {
+							"cuckoo_solution": [
+								898450,
+								353949138,
+								440882514,
+								500154010,
+								555236503,
+								615120852,
+								740100750,
+								754668484,
+								1056458121,
+								1071299788,
+								1130460099,
+								1414281857,
+								1444894533,
+								1481124421,
+								1551877341,
+								1666859923,
+								1682642953,
+								1837365586,
+								1845508478,
+								1872787697,
+								2040619654,
+								2078971700,
+								2104947318,
+								2206501084,
+								2233951742,
+								2360961460,
+								2378988856,
+								2402500295,
+								2438384422,
+								2532261092,
+								2879360933,
+								3011869457,
+								3023365279,
+								3412207020,
+								3509607650,
+								3793770861,
+								3850043972,
+								3873426868,
+								3965579806,
+								4007877324,
+								4090157476,
+								4141650723
+							],
+							"edge_bits": 32,
+							"hash": "00006871e1fb8e7dddcc46343d7fbba14d08946c67b4568f3c2e98ec8c554ae9",
+							"height": 2299310,
+							"kernel_mmr_size": 8568166,
+							"kernel_root": "87184dc2f9efa6467ce797191c5d3ef086403d0103ba0b5adc6a71ed203a053c",
+							"nonce": 13726392224838330049,
+							"output_mmr_size": 13524184,
+							"output_root": "9570fbccef29609c5d3c68b07771bf4e7e80d0b139d9bd0215d1e9d1aaaed813",
+							"prev_root": "df1c67366b9cdd8deea570534a00a320748899e146288be067c0f402038e6aa0",
+							"previous": "0004331bb122685f12644e40b163e4557951b2b835ad2493502750ea787af7cc",
+							"range_proof_root": "987d7aff01e201269d4c6b00e885b9ed9c10f47205edd7727e3490aab953ca80",
+							"secondary_scaling": 0,
+							"timestamp": "2023-06-05T20:19:27+00:00",
+							"total_difficulty": 2072532872584027,
+							"total_kernel_offset": "b0a0c21326532b4a91c18d2355aedca4d8ed68b77db9882feb85da8120b4f533",
+							"version": 5
+						},
+						"inputs": [],
+						"kernels": [
+							{
+								"excess": "08224a7946a75071b127af45496ddd3fc438db325cc35c3e4b0fdf23ed27703dd8",
+								"excess_sig": "d8c81bd8130c30016e38655a32b4c7a1f8fffda34a736dd8cdbcad05d28d09e3708d1f01e21276747eb03f28b9f5a834cb0ef8532330183df2b10d47ae7e68c6",
+								"features": "Coinbase",
+								"fee": 0,
+								"fee_shift": 0,
+								"lock_height": 0
+							}
+						],
+						"outputs": [
+							{
+								"block_height": 2299310,
+								"commit": "09997d3c1eff72b7efa7bfb52032d713f5907755838c01a6e178a87a0ac170a279",
+								"merkle_proof": null,
+								"mmr_index": 13524184,
+								"output_type": "Coinbase",
+								"proof": null,
+								"proof_hash": "6c2c10af5c4b6d2bcf71084c2bd9685ae91427f03a8b78736ab27d6c5bc7e4db",
+								"spent": false
+							}
+						]
+					}
+				],
+				"last_retrieved_height": 2299310
+			}
+		}
+	}
+	# "#
+	# );
+	```
+	 */
+	fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<BlockListing, Error>;
 
 	/**
 	Networked version of [Foreign::get_version](struct.Foreign.html#method.get_version).
@@ -277,7 +522,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_version(&self) -> Result<Version, ErrorKind>;
+	fn get_version(&self) -> Result<Version, Error>;
 
 	/**
 	Networked version of [Foreign::get_tip](struct.Foreign.html#method.get_tip).
@@ -312,7 +557,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_tip(&self) -> Result<Tip, ErrorKind>;
+	fn get_tip(&self) -> Result<Tip, Error>;
 
 	/**
 	Networked version of [Foreign::get_kernel](struct.Foreign.html#method.get_kernel).
@@ -355,7 +600,7 @@ pub trait ForeignRpc: Sync + Send {
 		excess: String,
 		min_height: Option<u64>,
 		max_height: Option<u64>,
-	) -> Result<LocatedTxKernel, ErrorKind>;
+	) -> Result<LocatedTxKernel, Error>;
 
 	/**
 	Networked version of [Foreign::get_outputs](struct.Foreign.html#method.get_outputs).
@@ -401,7 +646,7 @@ pub trait ForeignRpc: Sync + Send {
 			{
 				"block_height": 376151,
 				"commit": "08ecd94ae293863286e99d37f4685f07369bc084ba74d5c59c7f15359a75c84c03",
-				"merkle_proof": "6b2abbd334c9d75409461fba9c1acd4a8d7bc2ab0bc43143f42388b2a3a87b881505ccf8ffc8737fa6fd4fe412a082d974911bd223eae612d0d1d7ddcc09b5e6079c40b011405b2ccb49ce32473c93aea6d843488d5765fea114d3368d34cd05fcb8c2de3903fbaf39b1f064c809f9f1c0d47959d81a508957040eda55c6dce6dd8c43a79c72faffacfabe1d73055790b6249de2f7c603f186cb109eee58fb1426ea48cb781f88df9acd8996d235fe6bfe60e02aae6e3bfe38ed2599baca1430b3b637072d9bdcdc7644f873728e3cd38eff7124ea848cfad67f8e114cf8595c89a3686a4271cfb2b5098597c315c01d04270ca8f70262af967a947f49adacfa4aad8b6fd196dd0ef4e5cefa132c38c7e5f43db12b3d74f0a8d83c3404e73c6b25a12bff70a8ef4526c89b1558810bb744ede53f8c4cc8cc2555e953637722adb41ea5752281cf1f75599f7e59b17f11f5f9ce4f6b2da4141a3398f51d8b834cdc8b00f61915a41d200572a10bb2102cbae7e94aa7ced3c388dcd58282932c99a8fa66f6fc511ff3e8c60d442bbdb49cca1166328ca8c9bbc97d024570b4cc1ca6c7dba3db223e9e27fd9345b94d3cf10e2b54915b87c57e32965bc2db1b1f956d1962812738ca9b2c93fd7825adf4dffddc97aa85ca0f3f412f02d30678a816d2efbfb6778305fd5e610b6e8af30030bc059880c337bfde326b392d5dcd7c36cb0076fbccc7099b94f1f03bdb525d6e3818b6d50b93ced802957a4b03892c71b6679052bd35e92ceea71a96b22b2ed2c129755f0c74fa172f43da2790f3132a7e57e408d2fc5f1126b088cd0398e6dedcb237242e6720e12e8d7a5a1e196eda6241cfee1cc85e9d20af67f3f9bdf91160516ebcd0b8da6bb7b12229e1112b22c9f1aaef1d75441465cfee2ac1c47b5255514316ed4637e192b00ff28491168f2f2b00",
+				"merkle_proof": null,
 				"mmr_index": 4107711,
 				"output_type": "Coinbase",
 				"proof": "7083884b5f64e4e61fb910d2c3c603f7c94490716d95e7144b4c927d0ca6ccc0e069cc285e25f38ee90c402ef26005cad2b4073eeba17f0ae3ea2b87095106ef00634f321d8a49c2feaad485bc9ee552564a6a883c99886d0d3a85af3490d718f5a5cbc70f9dcc9bf5d987fb6072132a4c247d4bbd4af927532a887b1e4250b7277771f6b82f43f4fb5a48089ed58e7d3190a19197e07acfed650f8b2cd5f103e994fb3d3735c5727f06f302bd1f182586297dd57a7951ff296bdf6106704abedc39db77f1293effaa7496a77d19420a6208bc1c589b33dad9540cb6180cccf5e085006b01309419f931e54531d770e5fe00eca584072692a7e4883fd65ed4a7c460665608ab96bf0c7d564fe96a341f14066db413a6fddc359eb11f6f962aca70ca1414c35d7941ce06b77d0a0606081b78d5e64a4501f8e8eba9f0e0889042bc54b4cbfd71087a95af63e0306dba214084d4860b0ce66dc80af44224e5a6fef55800650b05cf1639f81bfdc30950f3634d1fd4375d50c22c7f13f3dfb690e5f155a535aff041b7f800bfe74c60f606e8ab47df60754a0e08221c2a50abe643bb086433afd040a7e6290d1d00b3fe657be3bb05c67f90eb183c2acb53c81e1ca15cd8d35fe9d7d52d8f455398e905bdc77ffb211697d477af25704cf9896e8ce797f4fed03e2ba1615e3ad5646eecaa698470f99437d01d5193f041201502763e8bde51e6dc830b5c676d05c8f7f87c4972c578b8d9d5922ba29f6e4a89a123311d02b5ac44a7d5307f7ed5e4e66aaf749afc76c6fc1114445d6fafeea816a0f985eeacdbe9e6d32a8514ca4aaf7faad4e9d43cde55327ac84bac4d70a9319840e136e713aa31d639e43302f3c71a79f08f4e5c9a19a48d4b46403734cd8f3cc9b67bc26ea8e2a01e63a6f5be6e044e8ed5db5f26d15d25de75f672a79315c5e2407e",
@@ -411,7 +656,7 @@ pub trait ForeignRpc: Sync + Send {
 			{
 				"block_height": 376154,
 				"commit": "095c12db5e57e4a1ead0870219bda4ebfb1419f6ab1501386b9dd8dc9811a8c5ff",
-				"merkle_proof": "00000000003eadc6000000000000000e13c509a17cbb0d81634215cd2482ab6d9eb58b332fcbe6b2c4fa458a63d3cb0dfe3614ebe6e52657870df225d132179fa1ea0fdc2105f0e51d03bc3765a9cd059c60d434a7cae0a3d669b37588c25410f57405c841312cfa50cf514678877a3f4ce8bd3e57723ba75a2b7d61027b2088fbabebdb7336b97ea88b00a7e809a6245def980eba18d987601f4cbd6c3cc9f12a5684fe7a1bc2565a9f8ab63c2db1afa8304f5e23d4754cd97f29c8b06dcb3de4f6d3a83079676b6e9941afe5553a7195384b564ecd6d37522cb5e452cc930d2b549af22698a8fd9bf6cad05a06b09e3f6e672b94e82c0255394b5c187ab76fda653a2491378997ba3d49f9d9c34ca93bc627fe5d98b327c03d429b5473f62672e9d73c4eafd9cb8f62e5158a1ec7eb56653696b10fb9ec205f5e4d1c7a1f3e2dd2994b12eeed93e84776d8dcd8a5d78aecd4f96ae95c0b090d104adf2aa84f0a1fbd8d319fea5476d1a306b2800716e60b00115a5cca678617361c5a89660b4536c56254bc8dd7035d96f05de62b042d16acaeff57c111fdf243b859984063e3fcfdf40c4c4a52889706857a7c3e90e264f30f40cc87bd20e74689f14284bc5ea0a540950dfcc8d33c503477eb1c60",
+				"merkle_proof": null,
 				"mmr_index": 4107717,
 				"output_type": "Coinbase",
 				"proof": "073593bc475478f1e4b648ab261df3b0a6e5a58a617176dd0c8f5e0e1d58b012b40eb9b341d16ee22baf3645ea37705895e731dee5c220b58b0f780d781806a10dfa33e870d0494fba18aaa8a7a709bfb3ddf9eb3e4e75a525b382df68dc6f710275cdffb623373c47c1310ae63479826f435ca4520fdc13bb0d995b7d9a10a7587d61bd4a51c9e32c87f3eb6b0f862cdff19a9ac6cb04d6f7fafb8e94508a851dcf5dc6acea4271bb40117a45319da5522b966091b089698f4f940842458b5b49e212d846be35e0c2b98a00ac3d0b7ceaf081272dbed8abd84fe8f26d57bac1340e8184602436ed8c4470ef9dc214df3405de0e71703abec4456b15e122a94706852bb476213ceadf00529d00d8d3b16dc57f4e4a9a86dacfa719e00366728de42f3f830e73f6113f1e391fab07eba1b40f6466203b0ce14701230e934f6138c575660a03dbb0e59d7295df3115a4fc0909a5520d74657b319fc83481079ad6c13400175e39fa2b86071ba563ce8836320713ef8f55d4e90bee3f57df96c7aef0f2e896f57192fae9675471cd9751bcaf2b15e5a65a9733a6f7f9b8147b8f6e8dac51d056018d411fd252225cf88e56f143143f49e8a0d2e43c10de0442dbc84966817532b1256b6769db987526790a389c371a1fe7a36eacffef82877b4db7a9b5e58722ffbd0fc4fdbd7624365ee326bb8b1e60b999f513715b30f37ef6116eabf53b3524b46c33a1fac49205b39e24aa388d823269c1fc43c3599a06b69433a0a47a03bd871321afb7846a6dbfd5891bd84f89c556231745c929d08445f66f332857bfda1c4f86ae58a01007b7303f870ac24e0ba72d84c0ef4903ac2ff777e2c2dcb4d8e303c74e0c8a559686b4d4c25024ee97601787d4e5a97224af41e5d35d91744292f5a41f64d4e1cae77bebebd77a473f3b54e86f7221aac230942f0468",
@@ -421,7 +666,7 @@ pub trait ForeignRpc: Sync + Send {
 			{
 				"block_height": 376153,
 				"commit": "0948cb346b7affe004a6f84fa4b5b44995830f1c332b03537df4c258d51d1afb50",
-				"merkle_proof": "00000000003eadc4000000000000000dfe3614ebe6e52657870df225d132179fa1ea0fdc2105f0e51d03bc3765a9cd059c60d434a7cae0a3d669b37588c25410f57405c841312cfa50cf514678877a3f4ce8bd3e57723ba75a2b7d61027b2088fbabebdb7336b97ea88b00a7e809a6245def980eba18d987601f4cbd6c3cc9f12a5684fe7a1bc2565a9f8ab63c2db1afa8304f5e23d4754cd97f29c8b06dcb3de4f6d3a83079676b6e9941afe5553a7195384b564ecd6d37522cb5e452cc930d2b549af22698a8fd9bf6cad05a06b09e3f6e672b94e82c0255394b5c187ab76fda653a2491378997ba3d49f9d9c34ca93bc627fe5d98b327c03d429b5473f62672e9d73c4eafd9cb8f62e5158a1ec7eb56653696b10fb9ec205f5e4d1c7a1f3e2dd2994b12eeed93e84776d8dcd8a5d78aecd4f96ae95c0b090d104adf2aa84f0a1fbd8d319fea5476d1a306b2800716e60b00115a5cca678617361c5a89660b4536c56254bc8dd7035d96f05de62b042d16acaeff57c111fdf243b859984063e3fcfdf40c4c4a52889706857a7c3e90e264f30f40cc87bd20e74689f14284bc5ea0a540950dfcc8d33c503477eb1c60",
+				"merkle_proof": null,
 				"mmr_index": 4107716,
 				"output_type": "Coinbase",
 				"proof": "72950da23ad7f0d0381e2f788bf0ac6b6bcb17aaccf0373534122a95714d2d0dbf6a24822b4aab0711a595c80bc36122957111c39292f2a36a973252fb88cbda0b1d61ea8ea84f5171a61f751cac97332637b7cf74cc73144b912ba700dedaa60895f06e947f1e42a8c79d70f924f45fdcb6df5d30289f36ff77d0ae368df5775a739b7a25cbfb63f0cdbdc167b046067c2a021fe0950c7b67515b185b9e4a00ce63b795d49ae184fe5cc726d72fc05d717c4fb55dd5f65967dc282d3c47cb6f8a92cb696e5a1d8cca21214bc766e3de6271791cebf646cda97ae77035da16606f3397f71e103137358c97b9943c3e15403184f61230bd0e3954c7681a0891aa7a0cc32e82d830fb7d8759a04d1da7058630a853508df095142f22158c28bd5e3f2477ad6c8990e63d0377a0fa3d588b6584453778eb38cbaec8a33c1d3772c97a826d4a2f6953c35342993b04567e9fea6fc64fb714653f934faa1a8f635d39eb2903de4bed960a3df07dce7c2e3ff517bbc15f467d0190a579bc07b0f1a910b23269d794835bbb34e8318dcc4fd4159f8f03faa77842d445cf61af9e33caf46aa5fae0812a6476a09c0757e929271a96a245701ab14c1fdd836b92b7e763afa623017f68f1bc4eb716ce735820a1311b743dd8d5c6bb275a2e4e7d2eff8f45417b60cc937086c3e7fd3b612ae064d7237eb6a7bd1a39d8575fac312068fa060bc1ceac4df0754601edaf04ecb1b89c0661ea01a593c3763e456bebbd8487edc0ff3bc6f203965cd92b1706070c59a3795f9dee23087cea0aaec015f1b7bfe4df81818d7a37af781ca7b757ace2fa489f85215ecb85976b1c74c7f1df6d834a8bc63e887407ef6e233c55ea040bc5f2471e99ebc92f2283ff592ff751d9226bd105e68e187c91ecb236c9fa4fb060ae4d706c571ac2123da1debd12737d98be118578",
@@ -442,7 +687,7 @@ pub trait ForeignRpc: Sync + Send {
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
-	) -> Result<Vec<OutputPrintable>, ErrorKind>;
+	) -> Result<Vec<OutputPrintable>, Error>;
 
 	/**
 	Networked version of [Foreign::get_unspent_outputs](struct.Foreign.html#method.get_unspent_outputs).
@@ -503,7 +748,7 @@ pub trait ForeignRpc: Sync + Send {
 		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
-	) -> Result<OutputListing, ErrorKind>;
+	) -> Result<OutputListing, Error>;
 
 	/**
 	Networked version of [Foreign::get_pmmr_indices](struct.Foreign.html#method.get_pmmr_indices).
@@ -540,7 +785,7 @@ pub trait ForeignRpc: Sync + Send {
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-	) -> Result<OutputListing, ErrorKind>;
+	) -> Result<OutputListing, Error>;
 
 	/**
 	Networked version of [Foreign::get_pool_size](struct.Foreign.html#method.get_pool_size).
@@ -570,7 +815,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_pool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_pool_size(&self) -> Result<usize, Error>;
 
 	/**
 	Networked version of [Foreign::get_stempool_size](struct.Foreign.html#method.get_stempool_size).
@@ -600,7 +845,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_stempool_size(&self) -> Result<usize, ErrorKind>;
+	fn get_stempool_size(&self) -> Result<usize, Error>;
 
 	/**
 	Networked version of [Foreign::get_unconfirmed_transactions](struct.Foreign.html#method.get_unconfirmed_transactions).
@@ -673,7 +918,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind>;
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error>;
 
 	/**
 	Networked version of [Foreign::push_transaction](struct.Foreign.html#method.push_transaction).
@@ -738,7 +983,7 @@ pub trait ForeignRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind>;
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error>;
 }
 
 impl<B, P> ForeignRpc for Foreign<B, P>
@@ -751,36 +996,47 @@ where
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockHeaderPrintable, ErrorKind> {
+	) -> Result<BlockHeaderPrintable, Error> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Foreign::get_header(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+		Foreign::get_header(self, height, parsed_hash, commit)
 	}
+
 	fn get_block(
 		&self,
 		height: Option<u64>,
 		hash: Option<String>,
 		commit: Option<String>,
-	) -> Result<BlockPrintable, ErrorKind> {
+	) -> Result<BlockPrintable, Error> {
 		let mut parsed_hash: Option<Hash> = None;
 		if let Some(hash) = hash {
 			let vec = util::from_hex(&hash)
-				.map_err(|e| ErrorKind::Argument(format!("invalid block hash: {}", e)))?;
+				.map_err(|e| Error::Argument(format!("invalid block hash: {}", e)))?;
 			parsed_hash = Some(Hash::from_vec(&vec));
 		}
-		Foreign::get_block(self, height, parsed_hash, commit).map_err(|e| e.kind().clone())
+		Foreign::get_block(self, height, parsed_hash, commit)
 	}
 
-	fn get_version(&self) -> Result<Version, ErrorKind> {
-		Foreign::get_version(self).map_err(|e| e.kind().clone())
+	fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<BlockListing, Error> {
+		Foreign::get_blocks(self, start_height, end_height, max, include_proof)
 	}
 
-	fn get_tip(&self) -> Result<Tip, ErrorKind> {
-		Foreign::get_tip(self).map_err(|e| e.kind().clone())
+	fn get_version(&self) -> Result<Version, Error> {
+		Foreign::get_version(self)
+	}
+
+	fn get_tip(&self) -> Result<Tip, Error> {
+		Foreign::get_tip(self)
 	}
 
 	fn get_kernel(
@@ -788,8 +1044,8 @@ where
 		excess: String,
 		min_height: Option<u64>,
 		max_height: Option<u64>,
-	) -> Result<LocatedTxKernel, ErrorKind> {
-		Foreign::get_kernel(self, excess, min_height, max_height).map_err(|e| e.kind().clone())
+	) -> Result<LocatedTxKernel, Error> {
+		Foreign::get_kernel(self, excess, min_height, max_height)
 	}
 
 	fn get_outputs(
@@ -799,7 +1055,7 @@ where
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
 		include_merkle_proof: Option<bool>,
-	) -> Result<Vec<OutputPrintable>, ErrorKind> {
+	) -> Result<Vec<OutputPrintable>, Error> {
 		Foreign::get_outputs(
 			self,
 			commits,
@@ -808,7 +1064,6 @@ where
 			include_proof,
 			include_merkle_proof,
 		)
-		.map_err(|e| e.kind().clone())
 	}
 
 	fn get_unspent_outputs(
@@ -817,33 +1072,31 @@ where
 		end_index: Option<u64>,
 		max: u64,
 		include_proof: Option<bool>,
-	) -> Result<OutputListing, ErrorKind> {
+	) -> Result<OutputListing, Error> {
 		Foreign::get_unspent_outputs(self, start_index, end_index, max, include_proof)
-			.map_err(|e| e.kind().clone())
 	}
 
 	fn get_pmmr_indices(
 		&self,
 		start_block_height: u64,
 		end_block_height: Option<u64>,
-	) -> Result<OutputListing, ErrorKind> {
+	) -> Result<OutputListing, Error> {
 		Foreign::get_pmmr_indices(self, start_block_height, end_block_height)
-			.map_err(|e| e.kind().clone())
 	}
 
-	fn get_pool_size(&self) -> Result<usize, ErrorKind> {
-		Foreign::get_pool_size(self).map_err(|e| e.kind().clone())
+	fn get_pool_size(&self) -> Result<usize, Error> {
+		Foreign::get_pool_size(self)
 	}
 
-	fn get_stempool_size(&self) -> Result<usize, ErrorKind> {
-		Foreign::get_stempool_size(self).map_err(|e| e.kind().clone())
+	fn get_stempool_size(&self) -> Result<usize, Error> {
+		Foreign::get_stempool_size(self)
 	}
 
-	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, ErrorKind> {
-		Foreign::get_unconfirmed_transactions(self).map_err(|e| e.kind().clone())
+	fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error> {
+		Foreign::get_unconfirmed_transactions(self)
 	}
-	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), ErrorKind> {
-		Foreign::push_transaction(self, tx, fluff).map_err(|e| e.kind().clone())
+	fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error> {
+		Foreign::push_transaction(self, tx, fluff)
 	}
 }
 
@@ -854,7 +1107,7 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 		// create temporary grin server, run jsonrpc request on node api, delete server, return
 		// json response.
 
-			{
+		{
 			/*use grin_servers::test_framework::framework::run_doctest;
 			use grin_util as util;
 			use serde_json;
@@ -888,6 +1141,6 @@ macro_rules! doctest_helper_json_rpc_foreign_assert_response {
 					serde_json::to_string_pretty(&expected_response).unwrap()
 				);
 				}*/
-			}
+		}
 	};
 }

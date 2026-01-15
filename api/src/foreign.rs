@@ -23,12 +23,12 @@ use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
-use crate::rest::*;
 use crate::types::{
 	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
 	Version,
 };
 use crate::util::RwLock;
+use crate::{rest::*, BlockListing};
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
@@ -59,7 +59,6 @@ where
 	/// # Arguments
 	/// * `chain` - A non-owning reference of the chain.
 	/// * `tx_pool` - A non-owning reference of the transaction pool.
-	/// * `peers` - A non-owning reference of the peers.
 	/// * `sync_state` - A non-owning reference of the `sync_state`.
 	///
 	/// # Returns
@@ -140,6 +139,36 @@ where
 		block_handler.get_block(&hash, include_proof, include_merkle_proof)
 	}
 
+	/// Returns a [`BlockListing`](types/struct.BlockListing.html) of available blocks
+	/// between `min_height` and `max_height`
+	/// The method will query the database for blocks starting at the block height `min_height`
+	/// and continue until `max_height`, skipping any blocks that aren't available.
+	///
+	/// # Arguments
+	/// * `start_height` - starting height to lookup.
+	/// * `end_height` - ending height to to lookup.
+	/// * 'max` - The max number of blocks to return.
+	///   Note this is overriden with BLOCK_TRANSFER_LIMIT if BLOCK_TRANSFER_LIMIT is exceeded
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`BlockListing`](types/struct.BlockListing.html)
+	/// * or [`Error`](struct.Error.html) if an error is encountered.
+	///
+
+	pub fn get_blocks(
+		&self,
+		start_height: u64,
+		end_height: u64,
+		max: u64,
+		include_proof: Option<bool>,
+	) -> Result<BlockListing, Error> {
+		let block_handler = BlockHandler {
+			chain: self.chain.clone(),
+		};
+		block_handler.get_blocks(start_height, end_height, max, include_proof)
+	}
+
 	/// Returns the node version and block header version (used by grin-wallet).
 	///
 	/// # Returns
@@ -207,7 +236,9 @@ where
 	/// * `start_height` - start height to start the lookup.
 	/// * `end_height` - end height to stop the lookup.
 	/// * `include_proof` - whether or not to include the range proof in the response.
-	/// * `include_merkle_proof` - whether or not to include the merkle proof in the response.
+	/// * `include_merkle_proof` (currently ignored) - whether or not to include the merkle proof in the response.
+	///    removed as it is not used and expensive to generate for historical blocks. See comments below to
+	///    re-enable this feature at compile-time.
 	///
 	/// # Returns
 	/// * Result Containing:
@@ -221,7 +252,7 @@ where
 		start_height: Option<u64>,
 		end_height: Option<u64>,
 		include_proof: Option<bool>,
-		include_merkle_proof: Option<bool>,
+		_include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, Error> {
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
@@ -231,7 +262,7 @@ where
 			start_height,
 			end_height,
 			include_proof,
-			include_merkle_proof,
+			Some(false), // To re-enable merkle proof generation, change to _include_merkle_proof
 		)
 	}
 

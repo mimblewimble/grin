@@ -31,7 +31,9 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::Writeable;
 use crate::core::{core, global};
 use crate::handshake::Handshake;
-use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Msg, Ping, TxHashSetRequest, Type};
+use crate::msg::{
+	self, BanReason, GetPeerAddrs, Locator, Msg, Ping, SegmentRequest, TxHashSetRequest, Type,
+};
 use crate::protocol::Protocol;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
@@ -371,6 +373,62 @@ impl Peer {
 		)
 	}
 
+	pub fn send_bitmap_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetOutputBitmapSegment,
+		)
+	}
+
+	pub fn send_output_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetOutputSegment,
+		)
+	}
+
+	pub fn send_rangeproof_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetRangeProofSegment,
+		)
+	}
+
+	pub fn send_kernel_segment_request(
+		&self,
+		h: Hash,
+		identifier: SegmentIdentifier,
+	) -> Result<(), Error> {
+		self.send(
+			&SegmentRequest {
+				block_hash: h,
+				identifier,
+			},
+			msg::Type::GetKernelSegment,
+		)
+	}
+
 	/// Stops the peer
 	pub fn stop(&self) {
 		debug!("Stopping peer {:?}", self.info.addr);
@@ -585,6 +643,42 @@ impl ChainAdapter for TrackingAdapter {
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		self.adapter.get_rangeproof_segment(hash, id)
+	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment)
+	}
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_output_segment(block_hash, bitmap_root, segment)
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_rangeproof_segment(block_hash, segment)
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_kernel_segment(block_hash, segment)
 	}
 }
 

@@ -18,7 +18,7 @@
 //! list of DNS records (the default).
 
 use chrono::prelude::{DateTime, Utc};
-use chrono::{Duration, MIN_DATE};
+use chrono::Duration;
 use p2p::{msg::PeerAddrs, P2PConfig};
 use rand::prelude::*;
 use std::collections::HashMap;
@@ -35,19 +35,20 @@ use crate::util::StopState;
 
 /// DNS Seeds with contact email associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
-	"mainnet.seed.grin.icu",           // gary.peverell@protonmail.com
-	"mainnet.seed.713.mw",             // jasper@713.mw
 	"mainnet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"mainnet.seed.grin.prokapi.com",   // hendi@prokapi.com
-	"grinseed.yeastplume.org",         // yeastplume@protonmail.com
+	"grinseed.revcore.net",            // yeastplume@gmail.com
 	"mainnet-seed.grinnode.live",      // info@grinnode.live
+	"mainnet.grin.punksec.de",         // grin@punksec.de
+	"grinnode.30-r.com",               // trinitron@30-r.com
 ];
 /// DNS Seeds with contact email associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
-	"floonet.seed.grin.icu",           // gary.peverell@protonmail.com
-	"floonet.seed.713.mw",             // jasper@713.mw
 	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
 	"floonet.seed.grin.prokapi.com",   // hendi@prokapi.com
+	"grintestseed.revcore.net",        // yeastplume@gmail.com
+	"testnet.grin.punksec.de",         // grin@punksec.de
+	"testnet.grinnode.30-r.com",       // trinitron@30-r.com
 ];
 
 pub fn connect_and_monitor(
@@ -68,8 +69,9 @@ pub fn connect_and_monitor(
 			// check seeds first
 			connect_to_seeds_and_peers(peers.clone(), tx.clone(), seed_list, config);
 
-			let mut prev = MIN_DATE.and_hms(0, 0, 0);
-			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev = DateTime::<Utc>::MIN_UTC;
+			let mut prev_expire_check = DateTime::<Utc>::MIN_UTC;
+
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 			let mut connecting_history: HashMap<PeerAddr, DateTime<Utc>> = HashMap::new();

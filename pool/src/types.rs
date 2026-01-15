@@ -23,7 +23,6 @@ use self::core::core::transaction::{self, Transaction};
 use self::core::core::{BlockHeader, BlockSums, Inputs, OutputIdentifier};
 use self::core::global::DEFAULT_ACCEPT_FEE_BASE;
 use chrono::prelude::*;
-use failure::Fail;
 use grin_core as core;
 use grin_keychain as keychain;
 
@@ -205,53 +204,53 @@ impl TxSource {
 }
 
 /// Possible errors when interacting with the transaction pool.
-#[derive(Debug, Fail, PartialEq)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
-	#[fail(display = "Invalid Tx {}", _0)]
+	#[error("Invalid Tx {0}")]
 	InvalidTx(transaction::Error),
 	/// An invalid pool entry caused by underlying block validation error
-	#[fail(display = "Invalid Block {}", _0)]
+	#[error("Invalid Block {0}")]
 	InvalidBlock(block::Error),
 	/// Underlying keychain error.
-	#[fail(display = "Keychain error {}", _0)]
+	#[error("Keychain error {0}")]
 	Keychain(keychain::Error),
 	/// Underlying "committed" error.
-	#[fail(display = "Committed error {}", _0)]
+	#[error("Committed error {0}")]
 	Committed(committed::Error),
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
-	#[fail(display = "Immature transaction")]
+	#[error("Immature transaction")]
 	ImmatureTransaction,
 	/// Attempt to spend a coinbase output before it has sufficiently matured.
-	#[fail(display = "Immature coinbase")]
+	#[error("Immature coinbase")]
 	ImmatureCoinbase,
 	/// Problem propagating a stem tx to the next Dandelion relay node.
-	#[fail(display = "Dandelion error")]
+	#[error("Dandelion error")]
 	DandelionError,
 	/// Transaction pool is over capacity, can't accept more transactions
-	#[fail(display = "Over capacity")]
+	#[error("Over capacity")]
 	OverCapacity,
 	/// Transaction fee is too low given its weight
-	#[fail(display = "Low fee transaction {}", _0)]
+	#[error("Low fee transaction {0}")]
 	LowFeeTransaction(u64),
 	/// Attempt to add a duplicate output to the pool.
-	#[fail(display = "Duplicate commitment")]
+	#[error("Duplicate commitment")]
 	DuplicateCommitment,
 	/// Attempt to add a duplicate tx to the pool.
-	#[fail(display = "Duplicate tx")]
+	#[error("Duplicate tx")]
 	DuplicateTx,
 	/// NRD kernels will not be accepted by the txpool/stempool pre-HF3.
-	#[fail(display = "NRD kernel pre-HF3")]
+	#[error("NRD kernel pre-HF3")]
 	NRDKernelPreHF3,
 	/// NRD kernels are not valid if disabled locally via "feature flag".
-	#[fail(display = "NRD kernel not enabled")]
+	#[error("NRD kernel not enabled")]
 	NRDKernelNotEnabled,
 	/// NRD kernels are not valid if relative_height rule not met.
-	#[fail(display = "NRD kernel relative height")]
+	#[error("NRD kernel relative height")]
 	NRDKernelRelativeHeight,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
-	#[fail(display = "General pool error {}", _0)]
+	#[error("General pool error {0}")]
 	Other(String),
 }
 

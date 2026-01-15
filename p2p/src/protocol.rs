@@ -371,11 +371,55 @@ impl MessageHandler for Protocol {
 					Consumed::None
 				}
 			}
-			Message::OutputBitmapSegment(_)
-			| Message::OutputSegment(_)
-			| Message::RangeProofSegment(_)
-			| Message::KernelSegment(_) => Consumed::None,
-
+			Message::OutputBitmapSegment(req) => {
+				let OutputBitmapSegmentResponse {
+					block_hash,
+					segment,
+					output_root,
+				} = req;
+				trace!(
+					"Received Output Bitmap Segment: bh, output_root: {}, {}",
+					block_hash,
+					output_root
+				);
+				adapter.receive_bitmap_segment(block_hash, output_root, segment.into())?;
+				Consumed::None
+			}
+			Message::OutputSegment(req) => {
+				let OutputSegmentResponse {
+					response,
+					output_bitmap_root,
+				} = req;
+				trace!(
+					"Received Output Segment: bh, bitmap_root: {}, {}",
+					response.block_hash,
+					output_bitmap_root
+				);
+				adapter.receive_output_segment(
+					response.block_hash,
+					output_bitmap_root,
+					response.segment.into(),
+				)?;
+				Consumed::None
+			}
+			Message::RangeProofSegment(req) => {
+				let SegmentResponse {
+					block_hash,
+					segment,
+				} = req;
+				trace!("Received Rangeproof Segment: bh: {}", block_hash);
+				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
+				Consumed::None
+			}
+			Message::KernelSegment(req) => {
+				let SegmentResponse {
+					block_hash,
+					segment,
+				} = req;
+				trace!("Received Kernel Segment: bh: {}", block_hash);
+				adapter.receive_kernel_segment(block_hash, segment.into())?;
+				Consumed::None
+			}
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)

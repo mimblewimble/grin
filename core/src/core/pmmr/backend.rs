@@ -33,6 +33,9 @@ pub trait Backend<T: PMMRable> {
 	/// This allows us to append an existing pruned subtree directly without the underlying leaf nodes.
 	fn append_pruned_subtree(&mut self, hash: Hash, pos0: u64) -> Result<(), String>;
 
+	/// Append a single hash to the pmmr
+	fn append_hash(&mut self, hash: Hash) -> Result<(), String>;
+
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
 	/// to rewind to as well as bitmaps representing the positions added and
@@ -65,6 +68,9 @@ pub trait Backend<T: PMMRable> {
 	/// Number of leaves
 	fn n_unpruned_leaves(&self) -> u64;
 
+	/// Number of leaves up to the given leaf index
+	fn n_unpruned_leaves_to_index(&self, to_index: u64) -> u64;
+
 	/// Iterator over current (unpruned, unremoved) leaf insertion index.
 	/// Note: This differs from underlying MMR pos - [0, 1, 2, 3, 4] vs. [1, 2, 4, 5, 8].
 	fn leaf_idx_iter(&self, from_idx: u64) -> Box<dyn Iterator<Item = u64> + '_>;
@@ -75,8 +81,14 @@ pub trait Backend<T: PMMRable> {
 	/// triggered removal).
 	fn remove(&mut self, position: u64) -> Result<(), String>;
 
+	/// Remove a leaf from the leaf set
+	fn remove_from_leaf_set(&mut self, pos0: u64);
+
 	/// Release underlying datafiles and locks
 	fn release_files(&mut self);
+
+	/// Reset prune list, used when PIBD is reset
+	fn reset_prune_list(&mut self);
 
 	/// Saves a snapshot of the rewound utxo file with the block hash as
 	/// filename suffix. We need this when sending a txhashset zip file to a

@@ -50,7 +50,7 @@ impl StatusHandler {
 	pub fn get_status(&self) -> Result<Status, Error> {
 		let head = w(&self.chain)?
 			.head()
-			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+			.map_err(|e| Error::Internal(format!("can't get head: {}", e)))?;
 		let sync_status = w(&self.sync_state)?.status();
 		let (api_sync_status, api_sync_info) = sync_status_to_api(sync_status);
 		Ok(Status::from_tip_and_peers(
@@ -76,6 +76,7 @@ impl Handler for StatusHandler {
 /// Convert a SyncStatus in a readable API representation
 fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Value>) {
 	match sync_status {
+		SyncStatus::Initial => ("initial".to_string(), None),
 		SyncStatus::NoSync => ("no_sync".to_string(), None),
 		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),
 		SyncStatus::HeaderSync {
@@ -86,11 +87,41 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			"header_sync".to_string(),
 			Some(json!({ "current_height": sync_head.height, "highest_height": highest_height })),
 		),
+		SyncStatus::TxHashsetPibd {
+			aborted,
+			errored,
+			completed_leaves,
+			leaves_required,
+			completed_to_height,
+			required_height,
+		} => (
+			"txhashsetpibd_download".to_string(),
+			Some(json!({ 
+					"aborted": aborted, 
+					"errored": errored, 
+					"completed_leaves":completed_leaves, 
+					"leaves_required":leaves_required, 
+					"completed_to_height": completed_to_height,
+					"required_height":required_height})),
+		),
 		SyncStatus::TxHashsetDownload(stats) => (
 			"txhashset_download".to_string(),
 			Some(
 				json!({ "downloaded_size": stats.downloaded_size, "total_size": stats.total_size }),
 			),
+		),
+		SyncStatus::TxHashsetSetup {
+			headers,
+			headers_total,
+			kernel_pos,
+			kernel_pos_total,
+		} => (
+			"txhashset_setup".to_string(),
+			Some(json!({ 
+					"headers": headers, 
+					"headers_total": headers_total, 
+					"kernel_pos":kernel_pos, 
+					"kernel_pos_total":kernel_pos_total})),
 		),
 		SyncStatus::TxHashsetRangeProofsValidation {
 			rproofs,
@@ -106,6 +137,10 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			"txhashset_kernels_validation".to_string(),
 			Some(json!({ "kernels": kernels, "kernels_total": kernels_total })),
 		),
+		SyncStatus::TxHashsetSave => ("txhashset_save".to_string(), None),
+
+		SyncStatus::TxHashsetDone => ("txhashset_done".to_string(), None),
+
 		SyncStatus::BodySync {
 			current_height,
 			highest_height,

@@ -17,7 +17,7 @@
 use crate::owner::Owner;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
-use crate::rest::ErrorKind;
+use crate::rest::Error;
 use crate::types::Status;
 use std::net::SocketAddr;
 
@@ -49,6 +49,7 @@ pub trait OwnerRpc: Sync + Send {
 		"jsonrpc": "2.0",
 		"result": {
 			"Ok": {
+			"chain": "main",
 			"protocol_version": "2",
 			"user_agent": "MW/Grin 2.x.x",
 			"connections": "8",
@@ -70,7 +71,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_status(&self) -> Result<Status, ErrorKind>;
+	fn get_status(&self) -> Result<Status, Error>;
 
 	/**
 	Networked version of [Owner::validate_chain](struct.Owner.html#method.validate_chain).
@@ -100,7 +101,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), ErrorKind>;
+	fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), Error>;
 
 	/**
 	Networked version of [Owner::compact_chain](struct.Owner.html#method.compact_chain).
@@ -130,11 +131,11 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn compact_chain(&self) -> Result<(), ErrorKind>;
+	fn compact_chain(&self) -> Result<(), Error>;
 
-	fn reset_chain_head(&self, hash: String) -> Result<(), ErrorKind>;
+	fn reset_chain_head(&self, hash: String) -> Result<(), Error>;
 
-	fn invalidate_header(&self, hash: String) -> Result<(), ErrorKind>;
+	fn invalidate_header(&self, hash: String) -> Result<(), Error>;
 
 	/**
 	Networked version of [Owner::get_peers](struct.Owner.html#method.get_peers).
@@ -176,7 +177,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind>;
+	fn get_peers(&self, peer_addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error>;
 
 	/**
 	Networked version of [Owner::get_connected_peers](struct.Owner.html#method.get_connected_peers).
@@ -295,7 +296,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind>;
+	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error>;
 
 	/**
 	Networked version of [Owner::ban_peer](struct.Owner.html#method.ban_peer).
@@ -325,7 +326,7 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
+	fn ban_peer(&self, peer_addr: SocketAddr) -> Result<(), Error>;
 
 	/**
 	Networked version of [Owner::unban_peer](struct.Owner.html#method.unban_peer).
@@ -355,44 +356,44 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn unban_peer(&self, peer_addr: SocketAddr) -> Result<(), ErrorKind>;
+	fn unban_peer(&self, peer_addr: SocketAddr) -> Result<(), Error>;
 }
 
 impl OwnerRpc for Owner {
-	fn get_status(&self) -> Result<Status, ErrorKind> {
-		Owner::get_status(self).map_err(|e| e.kind().clone())
+	fn get_status(&self) -> Result<Status, Error> {
+		Owner::get_status(self)
 	}
 
-	fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), ErrorKind> {
-		Owner::validate_chain(self, assume_valid_rangeproofs_kernels).map_err(|e| e.kind().clone())
+	fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), Error> {
+		Owner::validate_chain(self, assume_valid_rangeproofs_kernels)
 	}
 
-	fn reset_chain_head(&self, hash: String) -> Result<(), ErrorKind> {
-		Owner::reset_chain_head(self, hash).map_err(|e| e.kind().clone())
+	fn reset_chain_head(&self, hash: String) -> Result<(), Error> {
+		Owner::reset_chain_head(self, hash)
 	}
 
-	fn invalidate_header(&self, hash: String) -> Result<(), ErrorKind> {
-		Owner::invalidate_header(self, hash).map_err(|e| e.kind().clone())
+	fn invalidate_header(&self, hash: String) -> Result<(), Error> {
+		Owner::invalidate_header(self, hash)
 	}
 
-	fn compact_chain(&self) -> Result<(), ErrorKind> {
-		Owner::compact_chain(self).map_err(|e| e.kind().clone())
+	fn compact_chain(&self) -> Result<(), Error> {
+		Owner::compact_chain(self)
 	}
 
-	fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, ErrorKind> {
-		Owner::get_peers(self, addr).map_err(|e| e.kind().clone())
+	fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error> {
+		Owner::get_peers(self, addr)
 	}
 
-	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, ErrorKind> {
-		Owner::get_connected_peers(self).map_err(|e| e.kind().clone())
+	fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
+		Owner::get_connected_peers(self)
 	}
 
-	fn ban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
-		Owner::ban_peer(self, addr).map_err(|e| e.kind().clone())
+	fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		Owner::ban_peer(self, addr)
 	}
 
-	fn unban_peer(&self, addr: SocketAddr) -> Result<(), ErrorKind> {
-		Owner::unban_peer(self, addr).map_err(|e| e.kind().clone())
+	fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
+		Owner::unban_peer(self, addr)
 	}
 }
 

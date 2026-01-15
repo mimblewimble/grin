@@ -16,7 +16,7 @@
 //! This module interfaces into the underlying
 //! [Rust Aggsig library](https://github.com/mimblewimble/rust-secp256k1-zkp/blob/master/src/aggsig.rs)
 
-use crate::libtx::error::{Error, ErrorKind};
+use crate::libtx::error::Error;
 use keychain::{BlindingFactor, Identifier, Keychain, SwitchCommitmentType};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
@@ -192,7 +192,7 @@ pub fn verify_partial_sig(
 		pubkey_sum,
 		true,
 	) {
-		return Err(ErrorKind::Signature("Signature validation error".to_string()).into());
+		return Err(Error::Signature("Signature validation error".to_string()));
 	}
 	Ok(())
 }
@@ -324,7 +324,7 @@ pub fn verify_single_from_commit(
 ) -> Result<(), Error> {
 	let pubkey = commit.to_pubkey(secp)?;
 	if !verify_single(secp, sig, msg, None, &pubkey, Some(&pubkey), false) {
-		return Err(ErrorKind::Signature("Signature validation error".to_string()).into());
+		return Err(Error::Signature("Signature validation error".to_string()));
 	}
 	Ok(())
 }
@@ -392,7 +392,7 @@ pub fn verify_completed_sig(
 	msg: &secp::Message,
 ) -> Result<(), Error> {
 	if !verify_single(secp, sig, msg, None, pubkey, pubkey_sum, true) {
-		return Err(ErrorKind::Signature("Signature validation error".to_string()).into());
+		return Err(Error::Signature("Signature validation error".to_string()));
 	}
 	Ok(())
 }
@@ -408,6 +408,16 @@ pub fn add_signatures(
 	Ok(sig)
 }
 
+/// Subtract a partial signature from a completed signature
+/// see https://github.com/mimblewimble/rust-secp256k1-zkp/blob/e9e4f09bd0c85da914774a52219457ba10ac3e57/src/aggsig.rs#L267
+pub fn subtract_signature(
+	secp: &Secp256k1,
+	sig: &Signature,
+	partial_sig: &Signature,
+) -> Result<(Signature, Option<Signature>), Error> {
+	let sig = aggsig::subtract_partial_signature(secp, sig, partial_sig)?;
+	Ok(sig)
+}
 /// Just a simple sig, creates its own nonce if not provided
 pub fn sign_single(
 	secp: &Secp256k1,

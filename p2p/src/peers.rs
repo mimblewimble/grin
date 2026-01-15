@@ -15,6 +15,7 @@
 use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -437,7 +438,7 @@ impl Peers {
 
 		// Delete defunct peers from storage
 		let _ = self.store.delete_peers(|peer| {
-			let diff = now - Utc.timestamp(peer.last_connected, 0);
+			let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
 
 			let should_remove = peer.flags == State::Defunct
 				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
@@ -501,11 +502,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr,
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlock)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -526,11 +523,7 @@ impl ChainAdapter for Peers {
 				hash, peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadCompactBlock)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -546,11 +539,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -566,11 +555,7 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(false)
 		} else {
 			Ok(true)
@@ -609,11 +594,7 @@ impl ChainAdapter for Peers {
 				peer_info.addr
 			);
 			self.ban_peer(peer_info.addr, ReasonForBan::BadTxHashSet)
-				.map_err(|e| {
-					let err: chain::Error =
-						chain::ErrorKind::Other(format!("ban peer error :{:?}", e)).into();
-					err
-				})?;
+				.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
 			Ok(true)
 		} else {
 			Ok(false)
@@ -668,6 +649,42 @@ impl ChainAdapter for Peers {
 		id: SegmentIdentifier,
 	) -> Result<Segment<RangeProof>, chain::Error> {
 		self.adapter.get_rangeproof_segment(hash, id)
+	}
+
+	fn receive_bitmap_segment(
+		&self,
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment)
+	}
+
+	fn receive_output_segment(
+		&self,
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	) -> Result<bool, chain::Error> {
+		self.adapter
+			.receive_output_segment(block_hash, bitmap_root, segment)
+	}
+
+	fn receive_rangeproof_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_rangeproof_segment(block_hash, segment)
+	}
+
+	fn receive_kernel_segment(
+		&self,
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	) -> Result<bool, chain::Error> {
+		self.adapter.receive_kernel_segment(block_hash, segment)
 	}
 }
 
@@ -755,6 +772,13 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	pub fn outbound(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(|p| p.info.is_outbound()),
+		}
+	}
+
+	/// Filter to exclude peer by address.
+	pub fn exclude(self, addr: Option<SocketAddr>) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| Some(p.info.addr.0) != addr),
 		}
 	}
 

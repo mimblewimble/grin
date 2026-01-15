@@ -19,30 +19,56 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
-use std::fmt::{self, Debug};
+use std::fmt::Debug;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Possible segment types, according to this desegmenter
+pub enum SegmentType {
+	/// Output Bitmap
+	Bitmap,
+	/// Output
+	Output,
+	/// RangeProof
+	RangeProof,
+	/// Kernel
+	Kernel,
+}
+
+/// Lumps possible types with segment ids to enable a unique identifier
+/// for a segment with respect to a particular archive header
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SegmentTypeIdentifier {
+	/// The type of this segment
+	pub segment_type: SegmentType,
+	/// The identfier itself
+	pub identifier: SegmentIdentifier,
+}
+
+impl SegmentTypeIdentifier {
+	/// Create
+	pub fn new(segment_type: SegmentType, identifier: SegmentIdentifier) -> Self {
+		Self {
+			segment_type,
+			identifier,
+		}
+	}
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 /// Error related to segment creation or validation
 pub enum SegmentError {
 	/// An expected leaf was missing
+	#[error("Missing leaf at pos {0}")]
 	MissingLeaf(u64),
 	/// An expected hash was missing
+	#[error("Missing hash at pos {0}")]
 	MissingHash(u64),
 	/// The segment does not exist
+	#[error("Segment does not exist")]
 	NonExistent,
 	/// Mismatch between expected and actual root hash
+	#[error("Root hash mismatch")]
 	Mismatch,
-}
-
-impl fmt::Display for SegmentError {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			SegmentError::MissingLeaf(idx) => write!(f, "Missing leaf at pos {}", idx),
-			SegmentError::MissingHash(idx) => write!(f, "Missing hash at pos {}", idx),
-			SegmentError::NonExistent => write!(f, "Segment does not exist"),
-			SegmentError::Mismatch => write!(f, "Root hash mismatch"),
-		}
-	}
 }
 
 /// Tuple that defines a segment of a given PMMR
@@ -90,6 +116,48 @@ impl SegmentIdentifier {
 		let d = 1 << segment_height;
 		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
 	}
+
+	/// Return pmmr size of number of segments of the given height
+	pub fn pmmr_size(num_segments: usize, height: u8) -> u64 {
+		pmmr::insertion_to_pmmr_index(num_segments as u64 * (1 << height))
+	}
+
+	/// Maximum number of leaves in a segment, given by `2**height`
+	pub fn segment_capacity(&self) -> u64 {
+		1 << self.height
+	}
+
+	/// Offset (in leaf idx) of first leaf in the segment
+	fn leaf_offset(&self) -> u64 {
+		self.idx * self.segment_capacity()
+	}
+
+	// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
+	fn segment_unpruned_size(&self, mmr_size: u64) -> u64 {
+		min(
+			self.segment_capacity(),
+			pmmr::n_leaves(mmr_size).saturating_sub(self.leaf_offset()),
+		)
+	}
+
+	/// Inclusive (full) range of MMR positions for the segment that would be produced
+	/// by this Identifier
+	pub fn segment_pos_range(&self, mmr_size: u64) -> (u64, u64) {
+		let segment_size = self.segment_unpruned_size(mmr_size);
+		let leaf_offset = self.leaf_offset();
+		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
+		let last = if self.full_segment(mmr_size) {
+			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1) + (self.height as u64)
+		} else {
+			mmr_size - 1
+		};
+		(first, last)
+	}
+
+	/// Whether the segment is full (segment size == capacity)
+	fn full_segment(&self, mmr_size: u64) -> bool {
+		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
+	}
 }
 
 /// Segment of a PMMR: unpruned leaves and the necessary data to verify
@@ -118,40 +186,28 @@ impl<T> Segment<T> {
 	}
 
 	/// Maximum number of leaves in a segment, given by `2**height`
-	fn segment_capacity(&self) -> u64 {
-		1 << self.identifier.height
+	fn _segment_capacity(&self) -> u64 {
+		self.identifier.segment_capacity()
 	}
 
 	/// Offset (in leaf idx) of first leaf in the segment
-	fn leaf_offset(&self) -> u64 {
-		self.identifier.idx * self.segment_capacity()
+	fn _leaf_offset(&self) -> u64 {
+		self.identifier.leaf_offset()
 	}
 
 	// Number of leaves in this segment. Equal to capacity except for the final segment, which can be smaller
 	fn segment_unpruned_size(&self, mmr_size: u64) -> u64 {
-		min(
-			self.segment_capacity(),
-			pmmr::n_leaves(mmr_size).saturating_sub(self.leaf_offset()),
-		)
+		self.identifier.segment_unpruned_size(mmr_size)
 	}
 
 	/// Whether the segment is full (segment size == capacity)
 	fn full_segment(&self, mmr_size: u64) -> bool {
-		self.segment_unpruned_size(mmr_size) == self.segment_capacity()
+		self.identifier.full_segment(mmr_size)
 	}
 
 	/// Inclusive range of MMR positions for this segment
 	pub fn segment_pos_range(&self, mmr_size: u64) -> (u64, u64) {
-		let segment_size = self.segment_unpruned_size(mmr_size);
-		let leaf_offset = self.leaf_offset();
-		let first = pmmr::insertion_to_pmmr_index(leaf_offset);
-		let last = if self.full_segment(mmr_size) {
-			pmmr::insertion_to_pmmr_index(leaf_offset + segment_size - 1)
-				+ (self.identifier.height as u64)
-		} else {
-			mmr_size - 1
-		};
-		(first, last)
+		self.identifier.segment_pos_range(mmr_size)
 	}
 
 	/// TODO - binary_search_by_key() here (can we assume these are sorted by pos?)
@@ -452,8 +508,8 @@ where
 
 			if let Some((p0, _)) = family_branch.next() {
 				pos0 = p0;
-				let range = (pmmr::n_leaves(1 + pmmr::bintree_leftmost(p0)) - 1)
-					..min(pmmr::n_leaves(1 + pmmr::bintree_rightmost(p0)), n_leaves);
+				let range = (pmmr::n_leaves(1 + pmmr::bintree_leftmost(p0)) - 1) as u32
+					..min(pmmr::n_leaves(1 + pmmr::bintree_rightmost(p0)), n_leaves) as u32;
 				cardinality = bitmap.range_cardinality(range);
 			} else {
 				break;

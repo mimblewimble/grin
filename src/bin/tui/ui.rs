@@ -23,8 +23,7 @@ use cursive::theme::PaletteColor::{
 	Background, Highlight, HighlightInactive, Primary, Shadow, View,
 };
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
-use cursive::traits::Boxable;
-use cursive::traits::Identifiable;
+use cursive::traits::{Nameable, Resizable};
 use cursive::utils::markup::StyledString;
 use cursive::views::{
 	CircularFocus, Dialog, LinearLayout, Panel, SelectView, StackView, TextView, ViewRef,
@@ -124,9 +123,7 @@ impl UI {
 		let controller_tx_clone = grin_ui.controller_tx.clone();
 		grin_ui.cursive.add_global_callback('q', move |c| {
 			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
-			c.add_layer(CircularFocus::wrap_tab(Dialog::around(TextView::new(
-				content,
-			))));
+			c.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
 			controller_tx_clone
 				.send(ControllerMessage::Shutdown)
 				.unwrap();

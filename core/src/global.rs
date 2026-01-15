@@ -22,7 +22,8 @@ use crate::consensus::{
 	DMA_WINDOW, GRIN_BASE, INITIAL_DIFFICULTY, KERNEL_WEIGHT, MAX_BLOCK_WEIGHT, OUTPUT_WEIGHT,
 	PROOFSIZE, SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD,
 };
-use crate::core::block::HeaderVersion;
+use crate::core::block::{Block, HeaderVersion};
+use crate::genesis;
 use crate::pow::{
 	self, new_cuckaroo_ctx, new_cuckarood_ctx, new_cuckaroom_ctx, new_cuckarooz_ctx,
 	new_cuckatoo_ctx, no_cuckaroo_ctx, PoWContext, Proof,
@@ -181,6 +182,11 @@ pub fn init_global_chain_type(new_type: ChainTypes) {
 	GLOBAL_CHAIN_TYPE.init(new_type)
 }
 
+/// Set the global chain_type using an override
+pub fn set_global_chain_type(new_type: ChainTypes) {
+	GLOBAL_CHAIN_TYPE.set(new_type, true);
+}
+
 /// Set the chain type on a per-thread basis via thread_local storage.
 pub fn set_local_chain_type(new_type: ChainTypes) {
 	CHAIN_TYPE.with(|chain_type| chain_type.set(Some(new_type)))
@@ -201,16 +207,35 @@ pub fn get_chain_type() -> ChainTypes {
 	})
 }
 
+/// Return genesis block for the active chain type
+pub fn get_genesis_block() -> Block {
+	match get_chain_type() {
+		ChainTypes::Mainnet => genesis::genesis_main(),
+		ChainTypes::Testnet => genesis::genesis_test(),
+		_ => genesis::genesis_dev(),
+	}
+}
+
 /// One time initialization of the global future time limit
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_future_time_limit(new_ftl: u64) {
 	GLOBAL_FUTURE_TIME_LIMIT.init(new_ftl)
 }
 
+/// The global future time limit may be reset again using the override
+pub fn set_global_future_time_limit(new_ftl: u64) {
+	GLOBAL_FUTURE_TIME_LIMIT.set(new_ftl, true)
+}
+
 /// One time initialization of the global accept fee base
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_accept_fee_base(new_base: u64) {
 	GLOBAL_ACCEPT_FEE_BASE.init(new_base)
+}
+
+/// The global accept fee base may be reset using override.
+pub fn set_global_accept_fee_base(new_base: u64) {
+	GLOBAL_ACCEPT_FEE_BASE.set(new_base, true)
 }
 
 /// Set the accept fee base on a per-thread basis via thread_local storage.
@@ -263,6 +288,11 @@ pub fn get_future_time_limit() -> u64 {
 /// Will panic if we attempt to re-initialize this (via OneTime).
 pub fn init_global_nrd_enabled(enabled: bool) {
 	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+}
+
+/// Set the global NRD feature flag using override.
+pub fn set_global_nrd_enabled(enabled: bool) {
+	GLOBAL_NRD_FEATURE_ENABLED.set(enabled, true)
 }
 
 /// Explicitly enable the local NRD feature flag.
