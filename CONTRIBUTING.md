@@ -38,7 +38,7 @@ In case of problems with trying out grin, before starting to contribute, there's
   If you explain what you're looking at and what you want to do, we'll try to help you along the way.
 * See `docs/*.md` and the folder structure explanations, [the wiki](https://github.com/mimblewimble/docs/wiki) and the official [Grin documentation](https://docs.grin.mw/).
 * Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [Reddit/grincoin](https://www.reddit.com/r/grincoin/)
-* Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [Reddit/grincoin](https://www.reddit.com/r/grincoin/) and a (mostly unfiltered!) Twitter bot that collects headlines, mailing list posts, and reddit posts related to Mimblewimble/Grin: [@grinmw](https://twitter.com/grinmw)
+
 
   
 ## Testing
