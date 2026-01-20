@@ -22,6 +22,7 @@ extern crate log;
 use crate::config::config::SERVER_CONFIG_FILE_NAME;
 use crate::core::global;
 use crate::tools::check_seeds;
+use crate::tools::openapi;
 use crate::util::init_logger;
 use clap::App;
 use futures::channel::oneshot;
@@ -239,6 +240,25 @@ fn real_main() -> i32 {
 				println!("{}", output);
 			}
 			0
+		}
+
+		// openapi command
+		("openapi", Some(args)) => {
+			let output = args.value_of("output").unwrap();
+			let format = args.value_of("format").unwrap();
+			match openapi::generate_openapi_spec(output, format) {
+				Ok(_) => {
+					println!(
+						"Successfully generated OpenAPI documentation at: {}",
+						output
+					);
+					0
+				}
+				Err(e) => {
+					error!("Failed to generate OpenAPI documentation: {}", e);
+					1
+				}
+			}
 		}
 
 		// If nothing is specified, try to just use the config file instead
