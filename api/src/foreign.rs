@@ -32,7 +32,7 @@ use crate::{rest::*, BlockListing};
 use std::sync::Weak;
 
 /// Main interface into all node API functions.
-/// Node APIs are split into two seperate blocks of functionality
+/// Node APIs are split into two separate blocks of functionality
 /// called the ['Owner'](struct.Owner.html) and ['Foreign'](struct.Foreign.html) APIs
 ///
 /// Methods in this API are intended to be 'single use'.

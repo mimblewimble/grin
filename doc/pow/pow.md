@@ -113,10 +113,10 @@ Now, (hopefully) armed with a basic understanding of what the Cuckoo Cycle algor
 
 ## Mining in Grin
 
-The Cuckoo Cycle outlined above forms the basis of Grin's mining process, however Grin uses two variantion of Cuckoo Cycle in tandem with several other systems to create a Proof-of-Work.
+The Cuckoo Cycle outlined above forms the basis of Grin's mining process, however Grin uses two variations of Cuckoo Cycle in tandem with several other systems to create a Proof-of-Work.
 
 1. for GPUs: Cuckaroo on 2^29 edges
-    * Tweaked every 6 months to maitain ASIC resistance.
+    * Tweaked every 6 months to maintain ASIC resistance.
     * 90% of rewards at launch, linearly decreasing to 0% in 2 years.
     * Variant of Cuckoo that enforces so-called ``mean'' mining.
     * Takes 5.5GB of memory (perhaps 4GB with slowdown).
