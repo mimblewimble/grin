@@ -14,7 +14,8 @@ FROM debian:trixie-slim
 COPY --from=builder /usr/src/grin/target/release/grin /usr/local/bin/grin
 
 RUN apt update && \
-    apt install -y libncursesw5-dev
+    apt install -y libncursesw5-dev && \
+    apt-get install -y ca-certificates && update-ca-certificates
 
 # Create mainnet config
 WORKDIR /root/.grin/main
