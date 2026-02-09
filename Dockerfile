@@ -21,11 +21,15 @@ RUN apt update && \
 WORKDIR /root/.grin/main
 RUN grin server config
 RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
+RUN sed -i '/^api_http_addr /s/=.*$/= "0.0.0.0:3413"/' grin-server.toml
 
 # Create testnet config
 WORKDIR /root/.grin/test
 RUN grin --testnet server config
 RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
+RUN sed -i '/^api_http_addr /s/=.*$/= "0.0.0.0:13413"/' grin-server.toml
+
+VOLUME ["/root/.grin"]
 
 # Mainnet ports
 EXPOSE 3413 3414
