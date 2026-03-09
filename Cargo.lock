@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "grin"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "blake2-rfc",
  "built",
@@ -962,7 +962,7 @@ dependencies = [
 
 [[package]]
 name = "grin_api"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "async-stream",
  "bytes 1.7.1",
@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "grin_chain"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "bit-vec",
  "bitflags 1.3.2",
@@ -1019,7 +1019,7 @@ dependencies = [
 
 [[package]]
 name = "grin_config"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "dirs",
  "grin_core",
@@ -1035,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "grin_core"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "grin_keychain"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "blake2-rfc",
  "byteorder",
@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "grin_p2p"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "bitflags 1.3.2",
  "bytes 0.5.6",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "grin_pool"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "blake2-rfc",
  "chrono",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "grin_servers"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "async-stream",
  "chrono",
@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "grin_store"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "byteorder",
  "chrono",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "grin_util"
-version = "5.4.0-alpha.0"
+version = "5.4.0"
 dependencies = [
  "anyhow",
  "backtrace",
