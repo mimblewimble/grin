@@ -34,6 +34,7 @@ use crate::types::{
 };
 use crate::util::secp::pedersen::RangeProof;
 use bytes::Bytes;
+use log::{info, warn};
 use num::FromPrimitive;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -97,7 +98,7 @@ fn default_max_msg_size() -> u64 {
 }
 
 // Max msg size for each msg type.
-fn max_msg_size(msg_type: Type) -> u64 {
+pub fn max_msg_size(msg_type: Type) -> u64 {
 	match msg_type {
 		Type::Error => 0,
 		Type::Hand => 128,
@@ -172,7 +173,7 @@ impl Msg {
 ///
 /// Note: We return a MsgHeaderWrapper here as we may encounter an unknown msg type.
 ///
-pub fn read_header<R: Read>(
+pub fn read_header<R: std::io::Read>(
 	stream: &mut R,
 	version: ProtocolVersion,
 ) -> Result<MsgHeaderWrapper, Error> {
@@ -186,7 +187,7 @@ pub fn read_header<R: Read>(
 /// Read a single item from the provided stream, always blocking until we
 /// have a result (or timeout).
 /// Returns the item and the total bytes read.
-pub fn read_item<T: Readable, R: Read>(
+pub fn read_item<T: Readable, R: std::io::Read>(
 	stream: &mut R,
 	version: ProtocolVersion,
 ) -> Result<(T, u64), Error> {
@@ -197,7 +198,7 @@ pub fn read_item<T: Readable, R: Read>(
 
 /// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T: Readable, R: Read>(
+pub fn read_body<T: Readable, R: std::io::Read>(
 	h: &MsgHeader,
 	stream: &mut R,
 	version: ProtocolVersion,
@@ -208,14 +209,14 @@ pub fn read_body<T: Readable, R: Read>(
 }
 
 /// Read (an unknown) message from the provided stream and discard it.
-pub fn read_discard<R: Read>(msg_len: u64, stream: &mut R) -> Result<(), Error> {
+pub fn read_discard<R: std::io::Read>(msg_len: u64, stream: &mut R) -> Result<(), Error> {
 	let mut buffer = vec![0u8; msg_len as usize];
 	stream.read_exact(&mut buffer)?;
 	Ok(())
 }
 
 /// Reads a full message from the underlying stream.
-pub fn read_message<T: Readable, R: Read>(
+pub fn read_message<T: Readable, R: std::io::Read>(
 	stream: &mut R,
 	version: ProtocolVersion,
 	msg_type: Type,
@@ -319,6 +320,24 @@ impl Writeable for MsgHeader {
 			[write_u64, self.msg_len]
 		);
 		Ok(())
+	}
+}
+
+impl MsgHeader {
+	/// Read a message header from the provided reader
+	pub fn read<R: std::io::Read>(reader: &mut R) -> Result<MsgHeader, Error> {
+		let mut head = vec![0u8; MsgHeader::LEN];
+		reader.read_exact(&mut head)?;
+		let header: MsgHeaderWrapper = ser::deserialize(
+			&mut &head[..],
+			ProtocolVersion::local(),
+			DeserializationMode::default(),
+		)?;
+
+		match header {
+			MsgHeaderWrapper::Known(header) => Ok(header),
+			MsgHeaderWrapper::Unknown(_, _) => Err(Error::BadMessage),
+		}
 	}
 }
 
@@ -984,5 +1003,43 @@ impl fmt::Debug for Consumed {
 			Consumed::None => write!(f, "Consumed::None"),
 			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
 		}
+	}
+}
+
+impl Message {
+	pub fn read<R: std::io::Read>(
+		reader: &mut R,
+		msg_type: Option<Type>,
+	) -> Result<Vec<u8>, Error> {
+		use log::{info, warn};
+		let header = MsgHeader::read(reader)?;
+		let msg_len = header.msg_len;
+
+		match msg_type {
+			Some(msg_type) => {
+				let max_len = max_msg_size(msg_type);
+				let current_max_len = max_len * 4; // Current 4x limit
+				if msg_len > current_max_len {
+					return Err(Error::MsgTooLarge(msg_len as usize, current_max_len));
+				}
+				info!(
+					"Received {:?} message: size={} bytes, 1x limit={} bytes, 4x limit={} bytes",
+					msg_type, msg_len, max_len, current_max_len
+				);
+				if msg_len > max_len {
+					warn!(
+						"Message size ({} bytes) exceeds 1x limit ({} bytes) for type {:?}",
+						msg_len, max_len, msg_type
+					);
+				}
+			}
+			None => {
+				info!("Received unknown message type: size={} bytes", msg_len);
+			}
+		}
+
+		let mut payload = vec![0u8; msg_len as usize];
+		reader.read_exact(&mut payload)?;
+		std::result::Result::Ok(payload)
 	}
 }
