@@ -15,14 +15,25 @@
 //! Segment of a PMMR.
 
 use crate::core::hash::Hash;
-use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
-use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::core::pmmr;
+use crate::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR};
+use crate::ser::{
+	Error as SerError, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use croaring::Bitmap;
+use log::error;
 use std::cmp::min;
 use std::fmt::Debug;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+// Temporary limits based on MAX_SEGMENT_HEIGHT = 11 in chain/src/pibd_params.rs
+// Max leaves in a segment of height 11 = 2^11 = 2048
+// Max hashes in a segment of height 11 = 2^11 - 1 = 2047
+// We use 2048 for both as a safe upper bound.
+const MAX_HASHES_PER_SEGMENT: usize = 2048;
+const MAX_LEAVES_PER_SEGMENT: usize = 2048;
+
 /// Possible segment types, according to this desegmenter
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SegmentType {
 	/// Output Bitmap
 	Bitmap,
@@ -81,7 +92,7 @@ pub struct SegmentIdentifier {
 }
 
 impl Readable for SegmentIdentifier {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, SerError> {
 		let height = reader.read_u8()?;
 		let idx = reader.read_u64()?;
 		Ok(Self { height, idx })
@@ -89,7 +100,7 @@ impl Readable for SegmentIdentifier {
 }
 
 impl Writeable for SegmentIdentifier {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), SerError> {
 		writer.write_u8(self.height)?;
 		writer.write_u64(self.idx)
 	}
@@ -458,7 +469,7 @@ where
 			// Not full (only final segment): peaks in segment, bag them together
 			let peaks = pmmr::peaks(mmr_size)
 				.into_iter()
-				.filter(|&pos0| pos0 >= segment_first_pos && pos0 <= segment_last_pos)
+				.filter(|&x| x >= segment_first_pos && x <= segment_last_pos)
 				.rev();
 			let mut hash = None;
 			for pos0 in peaks {
@@ -565,16 +576,27 @@ where
 }
 
 impl<T: Readable> Readable for Segment<T> {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let identifier = Readable::read(reader)?;
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, SerError> {
+		let identifier: SegmentIdentifier = Readable::read(reader)?;
 
 		let n_hashes = reader.read_u64()? as usize;
+
+		// Check against the maximum allowed size before allocating
+		if n_hashes > MAX_HASHES_PER_SEGMENT {
+			let err_msg = format!(
+				"Segment {:?} hash count {} exceeds limit {}", // Use {:?}
+				identifier, n_hashes, MAX_HASHES_PER_SEGMENT
+			);
+			error!("PMMR Segment read error: {}", err_msg);
+			return Err(SerError::PMMRSegmentTooLarge(err_msg));
+		}
+
 		let mut hash_pos = Vec::with_capacity(n_hashes);
 		let mut last_pos = 0;
 		for _ in 0..n_hashes {
 			let pos = reader.read_u64()?;
 			if pos <= last_pos {
-				return Err(Error::SortError);
+				return Err(SerError::SortError);
 			}
 			last_pos = pos;
 			hash_pos.push(pos - 1);
@@ -582,16 +604,26 @@ impl<T: Readable> Readable for Segment<T> {
 
 		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
 		for _ in 0..n_hashes {
-			hashes.push(Readable::read(reader)?);
+			let hash: Hash = Readable::read(reader)?;
+			hashes.push(hash);
 		}
 
 		let n_leaves = reader.read_u64()? as usize;
+		// Also check leaves count for safety
+		if n_leaves > MAX_LEAVES_PER_SEGMENT {
+			let err_msg = format!(
+				"Segment {:?} leaf count {} exceeds limit {}", // Use {:?}
+				identifier, n_leaves, MAX_LEAVES_PER_SEGMENT
+			);
+			error!("PMMR Segment read error: {}", err_msg);
+			return Err(SerError::PMMRSegmentTooLarge(err_msg));
+		}
 		let mut leaf_pos = Vec::with_capacity(n_leaves);
 		last_pos = 0;
 		for _ in 0..n_leaves {
 			let pos = reader.read_u64()?;
 			if pos <= last_pos {
-				return Err(Error::SortError);
+				return Err(SerError::SortError);
 			}
 			last_pos = pos;
 			leaf_pos.push(pos - 1);
@@ -616,7 +648,7 @@ impl<T: Readable> Readable for Segment<T> {
 }
 
 impl<T: Writeable> Writeable for Segment<T> {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), SerError> {
 		Writeable::write(&self.identifier, writer)?;
 		writer.write_u64(self.hashes.len() as u64)?;
 		for &pos in &self.hash_pos {
@@ -822,7 +854,7 @@ impl SegmentProof {
 }
 
 impl Readable for SegmentProof {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, SerError> {
 		let n_hashes = reader.read_u64()? as usize;
 		let mut hashes = Vec::with_capacity(n_hashes);
 		for _ in 0..n_hashes {
@@ -834,7 +866,7 @@ impl Readable for SegmentProof {
 }
 
 impl Writeable for SegmentProof {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), SerError> {
 		writer.write_u64(self.hashes.len() as u64)?;
 		for hash in &self.hashes {
 			Writeable::write(hash, writer)?;
