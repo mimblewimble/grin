@@ -1069,17 +1069,24 @@ impl Desegmenter {
 			)
 		};
 
-		// When resuming, we need to ensure we're getting the previous segment if needed
-		let theoretical_pmmr_size =
-			SegmentIdentifier::pmmr_size(cur_segment_count, self.default_kernel_segment_height);
-		if local_kernel_mmr_size < theoretical_pmmr_size {
-			cur_segment_count -= 1;
-		}
-
 		let total_segment_count = SegmentIdentifier::count_segments_required(
 			self.archive_header.kernel_mmr_size,
 			self.default_kernel_segment_height,
 		);
+
+		// When resuming, we need to ensure we're getting the previous segment if needed
+		if total_segment_count != cur_segment_count {
+			let theoretical_pmmr_size =
+				SegmentIdentifier::pmmr_size(cur_segment_count, self.default_kernel_segment_height);
+			if local_kernel_mmr_size < theoretical_pmmr_size {
+				debug!(
+					"theoretical_pmmr_size {} is bigger than the current mmr size {}",
+					theoretical_pmmr_size, local_kernel_mmr_size
+				);
+				cur_segment_count -= 1;
+			}
+		}
+
 		trace!(
 			"Next required kernel segment is {} of {}",
 			cur_segment_count,
