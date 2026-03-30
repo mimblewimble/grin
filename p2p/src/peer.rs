@@ -204,6 +204,9 @@ impl Peer {
 
 	/// Set this peer status to blocked.
 	pub fn set_blocked(&self) {
+		if self.is_blocked() {
+			return;
+		}
 		let times = {
 			match *self.state.read() {
 				State::Blocked(_, times) => times + 1,
