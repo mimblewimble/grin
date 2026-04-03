@@ -27,13 +27,14 @@ const STORE_SUBPATH: &str = "peers";
 
 const PEER_PREFIX: u8 = b'P';
 
-// Types of messages
+// Types of peers
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {
 		Healthy = 0,
 		Banned = 1,
 		Defunct = 2,
+		Unknown = 3,
 	}
 }
 

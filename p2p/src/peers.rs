@@ -142,6 +142,7 @@ impl Peers {
 		}
 		false
 	}
+
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
 		// Update the peer in peers db
@@ -176,6 +177,13 @@ impl Peers {
 		} else {
 			Err(Error::PeerNotBanned)
 		}
+	}
+
+	pub fn is_healthy(&self, peer_addr: PeerAddr) -> bool {
+		if let Ok(peer) = self.store.get_peer(peer_addr) {
+			return peer.flags == State::Healthy;
+		}
+		false
 	}
 
 	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
@@ -261,6 +269,8 @@ impl Peers {
 						break;
 					}
 				};
+				// Mark peer as defunct after ping failure.
+				let _ = self.update_state(p.info.addr, State::Defunct);
 				p.stop();
 				peers.remove(&p.info.addr);
 			}
@@ -702,21 +712,24 @@ impl NetAdapter for Peers {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		let mut to_save: Vec<PeerData> = Vec::new();
 		for pa in peer_addrs {
-			if let Ok(e) = self.exists_peer(pa) {
-				if e {
+			if let Ok(mut p) = self.get_peer(pa) {
+				if self.is_healthy(pa) || self.is_banned(pa) {
 					continue;
 				}
+				p.flags = State::Unknown;
+				to_save.push(p);
+			} else {
+				let peer = PeerData {
+					addr: pa,
+					capabilities: Capabilities::UNKNOWN,
+					user_agent: "".to_string(),
+					flags: State::Unknown,
+					last_banned: 0,
+					ban_reason: ReasonForBan::None,
+					last_connected: 0,
+				};
+				to_save.push(peer);
 			}
-			let peer = PeerData {
-				addr: pa,
-				capabilities: Capabilities::UNKNOWN,
-				user_agent: "".to_string(),
-				flags: State::Healthy,
-				last_banned: 0,
-				ban_reason: ReasonForBan::None,
-				last_connected: Utc::now().timestamp(),
-			};
-			to_save.push(peer);
 		}
 		if let Err(e) = self.save_peers(to_save) {
 			error!("Could not save received peer addresses: {:?}", e);

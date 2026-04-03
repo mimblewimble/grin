@@ -133,9 +133,10 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// regularly check if we need to acquire more peers and if so, gets
 	// them from db
 	let mut total_count = 0;
-	let mut healthy_count = 0;
 	let mut banned_count = 0;
+	let mut healthy = vec![];
 	let mut defuncts = vec![];
+	let mut unknown = vec![];
 
 	for x in peers.all_peer_data().into_iter() {
 		match x.flags {
@@ -154,8 +155,9 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 					banned_count += 1;
 				}
 			}
-			p2p::State::Healthy => healthy_count += 1,
-			p2p::State::Defunct => defuncts.push(x),
+			p2p::State::Healthy => healthy.push(x.addr),
+			p2p::State::Defunct => defuncts.push(x.addr),
+			p2p::State::Unknown => unknown.push(x.addr),
 		}
 		total_count += 1;
 	}
@@ -167,15 +169,16 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 
 	debug!(
 		"monitor_peers: on {}:{}, {} connected ({} most_work). \
-		 all {} = {} healthy + {} banned + {} defunct",
+		 all {} = {} healthy + {} banned + {} defunct + {} unknown",
 		config.host,
 		config.port,
 		peers_count,
 		most_work_count,
 		total_count,
-		healthy_count,
+		healthy.len(),
 		banned_count,
 		defuncts.len(),
+		unknown.len()
 	);
 
 	// maintenance step first, clean up p2p server peers
@@ -185,64 +188,74 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		config.clone(),
 	);
 
-	if peers.enough_outbound_peers() {
-		return;
-	}
+	if !peers.enough_outbound_peers() {
+		// loop over connected peers that can provide peer lists
+		// ask them for their list of peers
+		let mut connected_peers: Vec<PeerAddr> = vec![];
+		for p in peers
+			.iter()
+			.with_capabilities(p2p::Capabilities::PEER_LIST)
+			.connected()
+		{
+			trace!(
+				"monitor_peers: {}:{} ask {} for more peers",
+				config.host,
+				config.port,
+				p.info.addr,
+			);
+			let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
+			connected_peers.push(p.info.addr)
+		}
 
-	// loop over connected peers that can provide peer lists
-	// ask them for their list of peers
-	let mut connected_peers: Vec<PeerAddr> = vec![];
-	for p in peers
-		.iter()
-		.with_capabilities(p2p::Capabilities::PEER_LIST)
-		.connected()
-	{
-		trace!(
-			"monitor_peers: {}:{} ask {} for more peers",
-			config.host,
-			config.port,
-			p.info.addr,
-		);
-		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
-		connected_peers.push(p.info.addr)
-	}
-
-	// Attempt to connect to any preferred peers.
-	let peers_preferred = config.peers_preferred.unwrap_or(PeerAddrs::default());
-	for p in peers_preferred {
-		if !connected_peers.is_empty() {
-			if !connected_peers.contains(&p) {
+		// Attempt to connect to any preferred peers.
+		let peers_preferred = config.peers_preferred.unwrap_or(PeerAddrs::default());
+		for p in peers_preferred {
+			if !connected_peers.is_empty() {
+				if !connected_peers.contains(&p) {
+					let _ = tx.send(p);
+				}
+			} else {
 				let _ = tx.send(p);
 			}
-		} else {
-			let _ = tx.send(p);
 		}
-	}
-
-	// take a random defunct peer and mark it healthy: over a long enough period any
-	// peer will see another as defunct eventually, gives us a chance to retry
-	if let Some(peer) = defuncts.into_iter().choose(&mut thread_rng()) {
-		let _ = peers.update_state(peer.addr, p2p::State::Healthy);
 	}
 
 	// find some peers from our db
 	// and queue them up for a connection attempt
 	// intentionally make too many attempts (2x) as some (most?) will fail
 	// as many nodes in our db are not publicly accessible
+	let mut new_peers = vec![];
 	let max_peer_attempts = 128;
-	let new_peers = peers.find_peers(
-		p2p::State::Healthy,
-		p2p::Capabilities::UNKNOWN,
-		max_peer_attempts as usize,
-	);
+	// check random disconnected healthy peers.
+	for hpa in healthy
+		.iter()
+		.filter(|p| peers.get_connected_peer(**p).is_none())
+		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+	{
+		new_peers.push(hpa);
+	}
+	// check random unknown peers received from peer list request.
+	for upa in unknown
+		.iter()
+		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+	{
+		new_peers.push(upa);
+	}
+	// always check random defunct peers.
+	for dpa in defuncts
+		.iter()
+		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+	{
+		new_peers.push(dpa);
+	}
 
 	// Only queue up connection attempts for candidate peers where we
 	// are confident we do not yet know about this peer.
 	// The call to is_known() may fail due to contention on the peers map.
 	// Do not attempt any connection where is_known() fails for any reason.
-	for p in new_peers {
-		if let Ok(false) = peers.is_known(p.addr) {
-			tx.send(p.addr).unwrap();
+	for pa in new_peers {
+		if let Ok(false) = peers.is_known(*pa) {
+			tx.send(*pa).unwrap();
 		}
 	}
 }
@@ -275,7 +288,7 @@ fn connect_to_seeds_and_peers(
 
 	// check if we have some peers in db
 	// look for peers that are able to give us other peers (via PEER_LIST capability)
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 100);
+	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 128);
 
 	// if so, get their addresses, otherwise use our seeds
 	let peer_addrs = if peers.len() > 3 {
@@ -307,19 +320,14 @@ fn listen_for_addrs(
 ) {
 	// Pull everything currently on the queue off the queue.
 	// Does not block so addrs may be empty.
-	// We will take(max_peers) from this later but we want to drain the rx queue
+	// We will take(max_peers) from this later, but we want to drain the rx queue
 	// here to prevent it backing up.
 	let addrs: Vec<PeerAddr> = rx.try_iter().collect();
-
-	// If we have a healthy number of outbound peers then we are done here.
-	if peers.enough_outbound_peers() {
-		return;
-	}
 
 	// Note: We drained the rx queue earlier to keep it under control.
 	// Even if there are many addresses to try we will only try a bounded number of them for safety.
 	let connect_min_interval = 30;
-	let max_outbound_attempts = 128;
+	let max_outbound_attempts = 128 * 3;
 	for addr in addrs.into_iter().take(max_outbound_attempts) {
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
@@ -349,7 +357,6 @@ fn listen_for_addrs(
 					if p.info.capabilities.contains(p2p::Capabilities::PEER_LIST) {
 						let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
 					}
-					let _ = peers_c.update_state(addr, p2p::State::Healthy);
 				}
 				Err(_) => {
 					let _ = peers_c.update_state(addr, p2p::State::Defunct);
