@@ -61,6 +61,7 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
+		let enough_outbound = self.enough_outbound_peers();
 		let peer_data: PeerData;
 		{
 			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
@@ -77,8 +78,10 @@ impl Peers {
 				ban_reason: ReasonForBan::None,
 				last_connected: Utc::now().timestamp(),
 			};
-			debug!("Adding newly connected peer {}.", peer_data.addr);
-			peers.insert(peer_data.addr, peer);
+			if !enough_outbound || !peer.info.is_outbound() {
+				debug!("Adding newly connected peer {}.", peer_data.addr);
+				peers.insert(peer_data.addr, peer);
+			}
 		}
 		debug!("Saving newly connected peer {}.", peer_data.addr);
 		if let Err(e) = self.save_peer(&peer_data) {
@@ -177,13 +180,6 @@ impl Peers {
 		} else {
 			Err(Error::PeerNotBanned)
 		}
-	}
-
-	pub fn is_healthy(&self, peer_addr: PeerAddr) -> bool {
-		if let Ok(peer) = self.store.get_peer(peer_addr) {
-			return peer.flags == State::Healthy;
-		}
-		false
 	}
 
 	fn broadcast<F>(&self, obj_name: &str, inner: F) -> u32
@@ -713,7 +709,7 @@ impl NetAdapter for Peers {
 		let mut to_save: Vec<PeerData> = Vec::new();
 		for pa in peer_addrs {
 			if let Ok(mut p) = self.get_peer(pa) {
-				if self.is_healthy(pa) || self.is_banned(pa) {
+				if p.flags != State::Defunct {
 					continue;
 				}
 				p.flags = State::Unknown;
