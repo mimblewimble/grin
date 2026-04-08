@@ -233,25 +233,25 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// as many nodes in our db are not publicly accessible
 	let mut new_peers = vec![];
 	let max_peer_attempts = 128;
-	// check random disconnected healthy peers.
+	// check random 64 disconnected healthy peers.
 	for hpa in healthy
 		.iter()
 		.filter(|p| peers.get_connected_peer(**p).is_none())
-		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
 		new_peers.push(hpa);
 	}
-	// check random unknown peers received from peer list request.
+	// check random 32 unknown peers received from peer list request.
 	for upa in unknown
 		.iter()
-		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+		.choose_multiple(&mut thread_rng(), max_peer_attempts / 4)
 	{
 		new_peers.push(upa);
 	}
-	// always check random defunct peers.
+	// always check 32 random defunct peers.
 	for dpa in defuncts
 		.iter()
-		.choose_multiple(&mut thread_rng(), max_peer_attempts)
+		.choose_multiple(&mut thread_rng(), max_peer_attempts / 4)
 	{
 		new_peers.push(dpa);
 	}
@@ -334,7 +334,7 @@ fn listen_for_addrs(
 	// Note: We drained the rx queue earlier to keep it under control.
 	// Even if there are many addresses to try we will only try a bounded number of them for safety.
 	let connect_min_interval = 30;
-	let max_outbound_attempts = 128 * 3;
+	let max_outbound_attempts = 128;
 	for addr in addrs.into_iter().take(max_outbound_attempts) {
 		// ignore the duplicate connecting to same peer within 30 seconds
 		let now = Utc::now();
