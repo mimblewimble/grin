@@ -201,7 +201,7 @@ impl PeerStore {
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();
-		} else if new_state == State::Defunct {
+		} else {
 			peer.last_attempt = Utc::now().timestamp();
 		}
 
