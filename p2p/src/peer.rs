@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use crate::util::{Mutex, RwLock};
+use chrono::Duration;
+use lru_cache::LruCache;
 use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use lru_cache::LruCache;
 
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
@@ -52,6 +52,7 @@ const MAX_PEER_MSG_PER_MIN: u64 = 500;
 enum State {
 	Connected,
 	Banned,
+	Blocked(DateTime<Utc>, u32),
 }
 
 pub struct Peer {
@@ -191,6 +192,45 @@ impl Peer {
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
 		State::Banned == *self.state.read()
+	}
+
+	/// Whether this peer has been blocked.
+	pub fn is_blocked(&self) -> bool {
+		match *self.state.read() {
+			State::Blocked(expiry, _) => expiry > Utc::now(),
+			_ => false,
+		}
+	}
+
+	/// Set this peer status to blocked.
+	pub fn set_blocked(&self) {
+		if self.is_blocked() {
+			return;
+		}
+		let times = {
+			match *self.state.read() {
+				State::Blocked(_, times) => times + 1,
+				_ => 1,
+			}
+		};
+		let duration = match times {
+			1 => 60,  // 1m
+			2 => 180, // 3m
+			_ => 600, // 10m
+		};
+		let expiry = Utc::now() + Duration::seconds(duration);
+		*self.state.write() = State::Blocked(expiry, times);
+		debug!(
+			"state_sync: block peer {} for {} times: {}",
+			self.info.addr, duration, times
+		);
+	}
+
+	/// Unblock blocked peer.
+	pub fn unblock(&self) {
+		if self.is_blocked() {
+			*self.state.write() = State::Connected;
+		}
 	}
 
 	/// Whether this peer is stuck on sync.

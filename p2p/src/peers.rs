@@ -434,6 +434,51 @@ impl Peers {
 		}
 	}
 
+	/// Disconnect a peer without banning it.
+	pub fn disconnect_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("disconnect_peer: failed to get peers lock");
+			Error::PeerException
+		})?;
+		match peers.remove(&peer_addr) {
+			Some(peer) => {
+				warn!("disconnecting peer {} ({})", peer_addr, reason);
+				peer.stop();
+				Ok(())
+			}
+			None => Err(Error::PeerNotFound),
+		}
+	}
+
+	/// Temporary block a peer without banning it.
+	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("block_peer: failed to get peers lock");
+			Error::PeerException
+		})?;
+		match peers.get(&peer_addr) {
+			None => Err(Error::PeerNotFound),
+			Some(peer) => {
+				warn!("blocking peer {} ({})", peer_addr, reason);
+				peer.set_blocked();
+				Ok(())
+			}
+		}
+	}
+
+	/// Unblock blocked peers.
+	pub fn unblock_peers(&self) -> Result<(), Error> {
+		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("unblock_peers: failed to get peers lock");
+			Error::PeerException
+		})?;
+		let peers = peers.iter().into_iter();
+		let _ = peers
+			.filter(|(_, peer)| peer.is_blocked())
+			.map(|(_, peer)| peer.unblock());
+		Ok(())
+	}
+
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
 		self.iter().outbound().connected().count()
@@ -794,6 +839,13 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 		}
 	}
 
+	/// Filter non-blocked peers.
+	pub fn non_blocked(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(|p| !p.is_blocked()),
+		}
+	}
+
 	/// Filter peers with the provided difficulty comparison fn.
 	///
 	/// with_difficulty(|x| x > diff)
@@ -816,6 +868,16 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(move |p| p.info.capabilities.contains(cap)),
+		}
+	}
+
+	/// Custom filter.
+	pub fn with_filter(
+		self,
+		f: impl Fn(&Arc<Peer>) -> bool,
+	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| f(p)),
 		}
 	}
 
