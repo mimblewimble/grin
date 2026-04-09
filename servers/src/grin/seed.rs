@@ -235,7 +235,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	let max_peer_attempts = 128;
 	let max_attempt_delay = Duration::hours(1).num_seconds();
 	// check maximum 64 random disconnected healthy peers no more often than 1 hour per peer.
-	for hpa in healthy
+	for hp in healthy
 		.iter()
 		.filter(|p| {
 			peers.get_connected_peer(p.addr).is_none()
@@ -243,7 +243,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
-		new_peers.push(&hpa.addr);
+		new_peers.push(&hp.addr);
 	}
 	// always check min 32 (max 96, if there are no healthy) random unknown peers received from peer list request.
 	let req_unk_count = cmp::max(
@@ -258,17 +258,20 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	}
 	debug!(
 		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
-		new_peers.len() - req_unk_count,
-		req_unk_count,
+		cmp::min(
+			new_peers.len() as i32,
+			((new_peers.len() - req_unk_count) as i32).abs()
+		),
+		cmp::min(new_peers.len(), req_unk_count),
 		max_peer_attempts - new_peers.len()
 	);
 	// check min 32 (max 128, if there are no healthy and unknown) random defunct peers no more often than 1 hour per peer.
-	for dpa in defuncts
+	for dp in defuncts
 		.iter()
 		.filter(|p| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
-		new_peers.push(&dpa.addr);
+		new_peers.push(&dp.addr);
 	}
 
 	// Only queue up connection attempts for candidate peers where we
