@@ -61,6 +61,7 @@ impl Peers {
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
 	pub fn add_connected(&self, peer: Arc<Peer>) -> Result<(), Error> {
+		let enough_outbound = self.enough_outbound_peers();
 		let peer_data: PeerData;
 		{
 			// Scope for peers vector lock - dont hold the peers lock while adding to lmdb
@@ -76,9 +77,12 @@ impl Peers {
 				last_banned: 0,
 				ban_reason: ReasonForBan::None,
 				last_connected: Utc::now().timestamp(),
+				last_attempt: Utc::now().timestamp(),
 			};
-			debug!("Adding newly connected peer {}.", peer_data.addr);
-			peers.insert(peer_data.addr, peer);
+			if !enough_outbound || !peer.info.is_outbound() {
+				debug!("Adding newly connected peer {}.", peer_data.addr);
+				peers.insert(peer_data.addr, peer);
+			}
 		}
 		debug!("Saving newly connected peer {}.", peer_data.addr);
 		if let Err(e) = self.save_peer(&peer_data) {
@@ -98,6 +102,7 @@ impl Peers {
 			last_banned: Utc::now().timestamp(),
 			ban_reason,
 			last_connected: Utc::now().timestamp(),
+			last_attempt: Utc::now().timestamp(),
 		};
 		debug!("Banning peer {}.", addr);
 		self.save_peer(&peer_data)
@@ -142,6 +147,7 @@ impl Peers {
 		}
 		false
 	}
+
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
 		// Update the peer in peers db
@@ -261,6 +267,8 @@ impl Peers {
 						break;
 					}
 				};
+				// Mark peer as defunct after ping failure.
+				let _ = self.update_state(p.info.addr, State::Defunct);
 				p.stop();
 				peers.remove(&p.info.addr);
 			}
@@ -702,21 +710,25 @@ impl NetAdapter for Peers {
 		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		let mut to_save: Vec<PeerData> = Vec::new();
 		for pa in peer_addrs {
-			if let Ok(e) = self.exists_peer(pa) {
-				if e {
+			if let Ok(mut p) = self.get_peer(pa) {
+				if p.flags != State::Defunct {
 					continue;
 				}
+				p.flags = State::Unknown;
+				to_save.push(p);
+			} else {
+				let peer = PeerData {
+					addr: pa,
+					capabilities: Capabilities::UNKNOWN,
+					user_agent: "".to_string(),
+					flags: State::Unknown,
+					last_banned: 0,
+					ban_reason: ReasonForBan::None,
+					last_connected: 0,
+					last_attempt: 0,
+				};
+				to_save.push(peer);
 			}
-			let peer = PeerData {
-				addr: pa,
-				capabilities: Capabilities::UNKNOWN,
-				user_agent: "".to_string(),
-				flags: State::Healthy,
-				last_banned: 0,
-				ban_reason: ReasonForBan::None,
-				last_connected: Utc::now().timestamp(),
-			};
-			to_save.push(peer);
 		}
 		if let Err(e) = self.save_peers(to_save) {
 			error!("Could not save received peer addresses: {:?}", e);
