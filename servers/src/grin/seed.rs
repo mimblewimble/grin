@@ -161,8 +161,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 					banned_count += 1;
 				}
 			}
-			p2p::State::Healthy => healthy.push(x.addr),
-			p2p::State::Defunct => defuncts.push(x.addr),
+			p2p::State::Healthy => healthy.push(x),
+			p2p::State::Defunct => defuncts.push(x),
 			p2p::State::Unknown => unknown.push(x.addr),
 		}
 		total_count += 1;
@@ -233,27 +233,42 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// as many nodes in our db are not publicly accessible
 	let mut new_peers = vec![];
 	let max_peer_attempts = 128;
-	// check random 64 disconnected healthy peers.
+	let max_attempt_delay = Duration::hours(1).num_seconds();
+	// check maximum 64 random disconnected healthy peers no more often than 1 hour per peer.
 	for hpa in healthy
 		.iter()
-		.filter(|p| peers.get_connected_peer(**p).is_none())
+		.filter(|p| {
+			peers.get_connected_peer(p.addr).is_none()
+				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
-		new_peers.push(hpa);
+		new_peers.push(&hpa.addr);
 	}
-	// check random 32 unknown peers received from peer list request.
+	// always check min 32 (max 96, if there are no healthy) random unknown peers received from peer list request.
+	let req_unk_count = cmp::max(
+		max_peer_attempts / 2 - new_peers.len() + max_peer_attempts / 4,
+		max_peer_attempts / 4,
+	);
 	for upa in unknown
 		.iter()
-		.choose_multiple(&mut thread_rng(), max_peer_attempts / 4)
+		.choose_multiple(&mut thread_rng(), req_unk_count)
 	{
 		new_peers.push(upa);
 	}
-	// always check 32 random defunct peers.
+	debug!(
+		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
+		new_peers.len() - req_unk_count,
+		req_unk_count,
+		max_peer_attempts - new_peers.len()
+	);
+	// check min 32 (max 128, if there are no healthy and unknown) random defunct peers no more often than 1 hour per peer.
 	for dpa in defuncts
 		.iter()
-		.choose_multiple(&mut thread_rng(), max_peer_attempts / 4)
+		.filter(|p| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
+		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
-		new_peers.push(dpa);
+		new_peers.push(&dpa.addr);
 	}
 
 	// Only queue up connection attempts for candidate peers where we
@@ -358,6 +373,9 @@ fn listen_for_addrs(
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
 				Ok(p) => {
+					if peers_c.enough_outbound_peers() {
+						return;
+					}
 					// If peer advertizes PEER_LIST then ask it for more peers that support PEER_LIST.
 					// We want to build a local db of possible peers to connect to.
 					// We do not necessarily care (at this point in time) what other capabilities these peers support.

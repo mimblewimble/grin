@@ -56,6 +56,8 @@ pub struct PeerData {
 	pub ban_reason: ReasonForBan,
 	/// Time when we last connected to this peer.
 	pub last_connected: i64,
+	/// Time when last connection attempt happened to this peer.
+	pub last_attempt: i64,
 }
 
 impl Writeable for PeerData {
@@ -68,7 +70,8 @@ impl Writeable for PeerData {
 			[write_u8, self.flags as u8],
 			[write_i64, self.last_banned],
 			[write_i32, self.ban_reason as i32],
-			[write_i64, self.last_connected]
+			[write_i64, self.last_connected],
+			[write_i64, self.last_attempt]
 		);
 		Ok(())
 	}
@@ -82,12 +85,10 @@ impl Readable for PeerData {
 		let (fl, lb, br) = ser_multiread!(reader, read_u8, read_i64, read_i32);
 
 		let lc = reader.read_i64();
-		// this only works because each PeerData is read in its own vector and this
-		// is the last data element
-		let last_connected = match lc {
-			Err(_) => Utc::now().timestamp(),
-			Ok(lc) => lc,
-		};
+		let last_connected = lc.unwrap_or_else(|_| Utc::now().timestamp());
+
+		let la = reader.read_i64();
+		let last_attempt = la.unwrap_or_else(|_| 0);
 
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits_truncate(capab);
@@ -98,10 +99,11 @@ impl Readable for PeerData {
 				addr,
 				capabilities,
 				user_agent,
-				flags: flags,
+				flags,
 				last_banned: lb,
 				ban_reason,
 				last_connected,
+				last_attempt,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
@@ -188,6 +190,7 @@ impl PeerStore {
 
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
+	/// If new state is Defunct last connection attempt will be updated too.
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
 		let batch = self.db.batch()?;
 
@@ -198,6 +201,8 @@ impl PeerStore {
 		peer.flags = new_state;
 		if new_state == State::Banned {
 			peer.last_banned = Utc::now().timestamp();
+		} else if new_state == State::Defunct {
+			peer.last_attempt = Utc::now().timestamp();
 		}
 
 		batch.put_ser(&peer_key(peer_addr)[..], &peer)?;

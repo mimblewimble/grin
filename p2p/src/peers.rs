@@ -77,6 +77,7 @@ impl Peers {
 				last_banned: 0,
 				ban_reason: ReasonForBan::None,
 				last_connected: Utc::now().timestamp(),
+				last_attempt: Utc::now().timestamp(),
 			};
 			if !enough_outbound || !peer.info.is_outbound() {
 				debug!("Adding newly connected peer {}.", peer_data.addr);
@@ -101,6 +102,7 @@ impl Peers {
 			last_banned: Utc::now().timestamp(),
 			ban_reason,
 			last_connected: Utc::now().timestamp(),
+			last_attempt: Utc::now().timestamp(),
 		};
 		debug!("Banning peer {}.", addr);
 		self.save_peer(&peer_data)
@@ -723,6 +725,7 @@ impl NetAdapter for Peers {
 					last_banned: 0,
 					ban_reason: ReasonForBan::None,
 					last_connected: 0,
+					last_attempt: 0,
 				};
 				to_save.push(peer);
 			}
