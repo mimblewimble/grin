@@ -16,6 +16,8 @@
 
 use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use lazy_static::lazy_static;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,6 +35,11 @@ const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
 const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
+
+lazy_static! {
+	/// Shared environment.
+	static ref ENV: Arc<RwLock<Option<Env<WithoutTls>>>> = Arc::new(RwLock::new(None));
+}
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, thiserror::Error)]
@@ -80,11 +87,13 @@ where
 
 const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
+const ENV_NAME: &'static str = "lmdb";
+
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
-	env: Arc<Env<WithoutTls>>,
 	db: Arc<RwLock<Option<Arc<Database<Bytes, Bytes>>>>>,
+	env: Arc<Env<WithoutTls>>,
 	name: String,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
@@ -96,25 +105,26 @@ impl Store {
 	/// By default creates an environment named "lmdb".
 	/// Be aware of transactional semantics in lmdb
 	/// (transactions are per environment, not per database).
+	/// db with non-default `env_name` will be migrated into default environment.
 	pub fn new(
 		root_path: &str,
 		env_name: Option<&str>,
 		db_name: Option<&str>,
 		max_readers: Option<u32>,
 	) -> Result<Store, Error> {
-		let name = match env_name {
-			Some(n) => n.to_owned(),
-			None => "lmdb".to_owned(),
-		};
-		let db_name = match db_name {
-			Some(n) => n.to_owned(),
-			None => "lmdb".to_owned(),
-		};
-		let full_path = [root_path.to_owned(), name].join("/");
+		let name = env_name.unwrap_or_else(|| ENV_NAME);
+		let db_name = db_name.unwrap_or_else(|| ENV_NAME);
+		let mut full_path = Path::new(root_path).join(name);
+
+		// Fix path to use default environment.
+		if name != ENV_NAME {
+			full_path = Path::new(root_path).join(ENV_NAME);
+		}
+
 		fs::create_dir_all(&full_path).map_err(|e| {
 			Error::FileErr(format!(
-				"Unable to create directory 'db_root' to store chain_data: {:?}",
-				e
+				"Unable to create {:?} to store data: {:?}",
+				full_path, e
 			))
 		})?;
 
@@ -123,24 +133,42 @@ impl Store {
 			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
 		};
 
-		let env = unsafe {
-			let mut options = EnvOpenOptions::new().read_txn_without_tls();
-			let mut env_options = options.map_size(alloc_chunk_size).max_dbs(8);
-			if let Some(max_readers) = max_readers {
-				env_options = env_options.max_readers(max_readers);
-			}
-			env_options.open(&full_path)?
+		// Environment setup.
+		let has_env = {
+			let r_env = ENV.read();
+			r_env.is_some()
 		};
-		let (resize, new_size) = Self::needs_resize(Arc::new(env.clone()), alloc_chunk_size);
-		if resize {
-			unsafe {
-				env.resize(new_size)?;
+		let env = if !has_env {
+			let env = unsafe {
+				let mut options = EnvOpenOptions::new().read_txn_without_tls();
+				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(8);
+				if let Some(max_readers) = max_readers {
+					env_options = env_options.max_readers(max_readers);
+				}
+				env_options.open(&full_path)?
 			};
-		}
+			let (resize, new_size) = Self::needs_resize(Arc::new(env.clone()), alloc_chunk_size);
+			if resize {
+				unsafe {
+					env.resize(new_size)?;
+				};
+			}
+			{
+				let mut w_env = ENV.write();
+				*w_env = Some(env.clone());
+			}
+			debug!("DB Mapsize for {:?} is {}", full_path, env.info().map_size);
+			env
+		} else {
+			let r_env = ENV.read();
+			r_env.clone().unwrap()
+		};
+
+		// Database setup.
 		let s = Store {
 			env: Arc::new(env),
 			db: Arc::new(RwLock::new(None)),
-			name: db_name,
+			name: db_name.to_string(),
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
 			resizing: Default::default(),
@@ -152,9 +180,46 @@ impl Store {
 			let mut w_db = s.db.write();
 			*w_db = Some(Arc::new(db));
 		}
-		Ok(s)
 
-		// debug!("DB Mapsize for {} is {}", full_path, env.info().map_size);
+		// Migrate to default environment if needed.
+		let migrate_from = Path::new(root_path).join(name);
+		if name != ENV_NAME && migrate_from.exists() {
+			debug!("Migrating {} to {:?}", name, full_path);
+			if Self::migrate_to_default_env(&s, &migrate_from, db_name).is_ok() {
+				let _ = fs::remove_dir_all(&migrate_from);
+			} else {
+				error!("Migrating {} failed", name);
+			}
+		}
+		Ok(s)
+	}
+
+	/// Migrate db from provided path to default environment.
+	fn migrate_to_default_env(s: &Store, path: &Path, db_name: &str) -> Result<(), Error> {
+		let env = unsafe {
+			let mut options = EnvOpenOptions::new().read_txn_without_tls();
+			let env_options = options.map_size(s.alloc_chunk_size).max_dbs(1);
+			env_options.open(path)?
+		};
+		let db_from = {
+			let mut write = env.write_txn()?;
+			let db: Database<Bytes, Bytes> = env.create_database(&mut write, Some(db_name))?;
+			write.commit()?;
+			db
+		};
+		let db_to = s.db.read();
+		let mut write_to = s.env.write_txn()?;
+		let read_from = env.read_txn()?;
+		let mut count = 0;
+		for kv in db_from.iter(&read_from)? {
+			count += 1;
+			if let Ok((k, v)) = kv {
+				db_to.as_ref().unwrap().put(&mut write_to, &k, &v)?;
+			}
+		}
+		write_to.commit()?;
+		debug!("Migrated {} records of {}", count, db_name);
+		Ok(())
 	}
 
 	/// Construct a new store using a specific protocol version.

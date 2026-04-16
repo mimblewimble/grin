@@ -1201,6 +1201,7 @@ dependencies = [
  "grin_core",
  "grin_util",
  "heed",
+ "lazy_static",
  "libc",
  "log",
  "memmap",
