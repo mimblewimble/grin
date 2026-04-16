@@ -14,18 +14,19 @@
 
 //! Storage of core types using LMDB.
 
-use std::fs;
-use std::sync::Arc;
-
 use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{fs, thread};
 
 use crate::grin_core::global;
 use crate::grin_core::ser::{self, DeserializationMode, ProtocolVersion};
 use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
+pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728 / 32; //128 MB
 /// And for test mode, to avoid too much disk allocation on windows
 pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
 const RESIZE_PERCENT: f32 = 0.9;
@@ -87,6 +88,7 @@ pub struct Store {
 	name: String,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
+	resizing: Arc<AtomicBool>,
 }
 
 impl Store {
@@ -141,6 +143,7 @@ impl Store {
 			name: db_name,
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
+			resizing: Default::default(),
 		};
 		{
 			let mut write = s.env.write_txn()?;
@@ -163,6 +166,7 @@ impl Store {
 			name: self.name.clone(),
 			version,
 			alloc_chunk_size: self.alloc_chunk_size,
+			resizing: self.resizing.clone(),
 		}
 	}
 
@@ -187,6 +191,7 @@ impl Store {
 			4,
 			resize_percent
 		);
+
 		let resize = if size_used as f32 / env_info.map_size as f32 > resize_percent
 			|| env_info.map_size < alloc_chunk_size
 		{
@@ -197,13 +202,20 @@ impl Store {
 			false
 		};
 
-		let new_size = {
-			let mut tot = env_info.map_size;
-			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
-				tot += alloc_chunk_size;
+		let new_size = if resize {
+			if env_info.map_size < alloc_chunk_size {
+				alloc_chunk_size
+			} else {
+				let mut tot = env_info.map_size;
+				while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
+					tot += alloc_chunk_size;
+				}
+				tot
 			}
-			tot
+		} else {
+			env_info.map_size
 		};
+
 		(resize, new_size)
 	}
 
@@ -262,11 +274,20 @@ impl Store {
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+		while self.resizing.load(Ordering::SeqCst) {
+			debug!("Wait resizing {} DB", self.name);
+			thread::sleep(Duration::from_millis(100));
+		}
 		let (resize, new_size) = Self::needs_resize(self.env.clone(), self.alloc_chunk_size);
 		if resize {
+			self.resizing.store(true, Ordering::SeqCst);
+			debug!("Start resizing {} DB", self.name);
 			unsafe {
+				thread::sleep(Duration::from_millis(3000));
 				self.env.resize(new_size)?;
 			}
+			self.resizing.store(false, Ordering::SeqCst);
+			debug!("End resizing {} DB", self.name);
 		}
 		Ok(Batch::new(self)?)
 	}
@@ -331,7 +352,10 @@ impl<'a> Batch<'a> {
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		Ok(self.store.exists(key)?)
+		let db = self.store.db.read();
+		let read = self.write.nested_read_txn()?;
+		let res = db.as_ref().unwrap().get(&read, key)?;
+		Ok(res.is_some())
 	}
 
 	/// Produces an iterator from the provided key prefix.
