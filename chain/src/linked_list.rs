@@ -108,7 +108,7 @@ pub trait ListIndex {
 	/// Push a pos onto the list for the specified commitment.
 	fn push_pos(
 		&self,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 		commit: Commitment,
 		new_pos: <Self::Entry as ListIndexEntry>::Pos,
 	) -> Result<(), Error>;
@@ -116,7 +116,7 @@ pub trait ListIndex {
 	/// Pop a pos off the list for the specified commitment.
 	fn pop_pos(
 		&self,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
@@ -124,7 +124,12 @@ pub trait ListIndex {
 /// Supports "rewind" given the provided commit and a pos to rewind back to.
 pub trait RewindableListIndex {
 	/// Rewind the index for the given commitment to the specified position.
-	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error>;
+	fn rewind(
+		&self,
+		batch: &mut Batch<'_>,
+		commit: Commitment,
+		rewind_pos: u64,
+	) -> Result<(), Error>;
 }
 
 /// A pruneable list index supports pruning of old data from the index lists.
@@ -133,15 +138,20 @@ pub trait RewindableListIndex {
 pub trait PruneableListIndex: ListIndex {
 	/// Clear all data from the index.
 	/// Used when rebuilding the index.
-	fn clear(&self, batch: &Batch<'_>) -> Result<(), Error>;
+	fn clear(&self, batch: &mut Batch<'_>) -> Result<(), Error>;
 
 	/// Prune old data.
-	fn prune(&self, batch: &Batch<'_>, commit: Commitment, cutoff_pos: u64) -> Result<(), Error>;
+	fn prune(
+		&self,
+		batch: &mut Batch<'_>,
+		commit: Commitment,
+		cutoff_pos: u64,
+	) -> Result<(), Error>;
 
 	/// Pop a pos off the back of the list (used for pruning old data).
 	fn pop_pos_back(
 		&self,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 		commit: Commitment,
 	) -> Result<Option<<Self::Entry as ListIndexEntry>::Pos>, Error>;
 }
@@ -255,7 +265,7 @@ where
 		}
 	}
 
-	fn push_pos(&self, batch: &Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
+	fn push_pos(&self, batch: &mut Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
 		match self.get_list(batch, commit)? {
 			None => {
 				let list = ListWrapper::Single { pos: new_pos };
@@ -327,7 +337,7 @@ where
 	/// Pop the head of the list.
 	/// Returns the output_pos.
 	/// Returns None if list was empty.
-	fn pop_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+	fn pop_pos(&self, batch: &mut Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => {
@@ -373,7 +383,12 @@ where
 
 /// List index that supports rewind.
 impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
-	fn rewind(&self, batch: &Batch<'_>, commit: Commitment, rewind_pos: u64) -> Result<(), Error> {
+	fn rewind(
+		&self,
+		batch: &mut Batch<'_>,
+		commit: Commitment,
+		rewind_pos: u64,
+	) -> Result<(), Error> {
 		while self
 			.peek_pos(batch, commit)?
 			.map(|x| x.pos() > rewind_pos)
@@ -386,7 +401,7 @@ impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
 }
 
 impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
-	fn clear(&self, batch: &Batch<'_>) -> Result<(), Error> {
+	fn clear(&self, batch: &mut Batch<'_>) -> Result<(), Error> {
 		let mut list_count = 0;
 		let mut entry_count = 0;
 		let prefix = to_key(self.list_prefix, "");
@@ -409,7 +424,7 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 	/// Pruning will be more performant than full rebuild but not yet necessary.
 	fn prune(
 		&self,
-		_batch: &Batch<'_>,
+		_batch: &mut Batch<'_>,
 		_commit: Commitment,
 		_cutoff_pos: u64,
 	) -> Result<(), Error> {
@@ -420,7 +435,7 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 
 	/// Pop off the back/tail of the linked list.
 	/// Used when pruning old data.
-	fn pop_pos_back(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+	fn pop_pos_back(&self, batch: &mut Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => {

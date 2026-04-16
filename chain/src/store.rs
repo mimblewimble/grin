@@ -201,22 +201,22 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save body head to db.
-	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
+	pub fn save_body_head(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[HEAD_PREFIX], t)
 	}
 
 	/// Save body "tail" to db.
-	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
+	pub fn save_body_tail(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[TAIL_PREFIX], t)
 	}
 
 	/// Save header head to db.
-	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
+	pub fn save_header_head(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[HEADER_HEAD_PREFIX], t)
 	}
 
 	/// Save PIBD head to db.
-	pub fn save_pibd_head(&self, t: &Tip) -> Result<(), Error> {
+	pub fn save_pibd_head(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&[PIBD_HEAD_PREFIX], t)
 	}
 
@@ -234,7 +234,7 @@ impl<'a> Batch<'a> {
 
 	/// Save the block to the db.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
-	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
+	pub fn save_block(&mut self, b: &Block) -> Result<(), Error> {
 		debug!(
 			"save_block: {} at {} ({} -> v{})",
 			b.header.hash(),
@@ -248,20 +248,20 @@ impl<'a> Batch<'a> {
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
+	pub fn save_spent_index(&mut self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], &spent.to_vec())?;
 		Ok(())
 	}
 
 	/// Low level function to delete directly by raw key.
-	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
+	pub fn delete(&mut self, key: &[u8]) -> Result<(), Error> {
 		self.db.delete(key)
 	}
 
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
-	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
+	pub fn delete_block(&mut self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_PREFIX, bh)[..])?;
 
 		// Best effort at deleting associated data for this block.
@@ -275,7 +275,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save block header to db.
-	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn save_block_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
 		// Store the header itself indexed by hash.
@@ -286,13 +286,17 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save output_pos and block height to index.
-	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
+	pub fn save_output_pos_height(
+		&mut self,
+		commit: &Commitment,
+		pos: CommitPos,
+	) -> Result<(), Error> {
 		self.db
 			.put_ser(&to_key(OUTPUT_POS_PREFIX, commit)[..], &pos)
 	}
 
 	/// Delete the output_pos index entry for a spent output.
-	pub fn delete_output_pos_height(&self, commit: &Commitment) -> Result<(), Error> {
+	pub fn delete_output_pos_height(&mut self, commit: &Commitment) -> Result<(), Error> {
 		self.db.delete(&to_key(OUTPUT_POS_PREFIX, commit))
 	}
 
@@ -305,7 +309,9 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)>, Error> {
+	pub fn output_pos_iter(
+		&self,
+	) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)> + 'a, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |k, mut v| {
@@ -366,12 +372,12 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Delete the block spent index.
-	fn delete_spent_index(&self, bh: &Hash) -> Result<(), Error> {
+	fn delete_spent_index(&mut self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SPENT_PREFIX, bh))
 	}
 
 	/// Save block_sums for the block.
-	pub fn save_block_sums(&self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
+	pub fn save_block_sums(&mut self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
 		self.db.put_ser(&to_key(BLOCK_SUMS_PREFIX, h)[..], &sums)
 	}
 
@@ -383,7 +389,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Delete the block_sums for the block.
-	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
+	fn delete_block_sums(&mut self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, bh))
 	}
 
@@ -423,7 +429,7 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over all full blocks in the db.
 	/// Uses default db serialization strategy via db protocol version.
-	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Block>, Error> {
+	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Block> + 'a, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |_, mut v| {
@@ -434,7 +440,7 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over raw data for full blocks in the db.
 	/// Used during block migration (we need flexibility around deserialization).
-	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)>, Error> {
+	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)> + 'a, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
 		self.db.iter(&key, |k, v| Ok((k.to_vec(), v.to_vec())))
 	}

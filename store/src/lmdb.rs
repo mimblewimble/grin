@@ -17,9 +17,8 @@
 use std::fs;
 use std::sync::Arc;
 
-use lmdb_zero as lmdb;
-use lmdb_zero::traits::CreateCursor;
-use lmdb_zero::LmdbResultExt;
+use heed::types::Bytes;
+use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
 
 use crate::grin_core::global;
 use crate::grin_core::ser::{self, DeserializationMode, ProtocolVersion};
@@ -42,7 +41,7 @@ pub enum Error {
 	NotFoundErr(String),
 	/// Wraps an error originating from LMDB
 	#[error("LMDB error: {0}")]
-	LmdbErr(lmdb::error::Error),
+	LmdbErr(String),
 	/// Wraps a serialization error for Writeable or Readable
 	#[error("Serialization Error: {0}")]
 	SerErr(ser::Error),
@@ -54,9 +53,9 @@ pub enum Error {
 	OtherErr(String),
 }
 
-impl From<lmdb::error::Error> for Error {
-	fn from(e: lmdb::error::Error) -> Error {
-		Error::LmdbErr(e)
+impl From<heed::Error> for Error {
+	fn from(e: heed::Error) -> Error {
+		Error::LmdbErr(e.to_string())
 	}
 }
 
@@ -83,8 +82,8 @@ const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
-	env: Arc<lmdb::Environment>,
-	db: Arc<RwLock<Option<Arc<lmdb::Database<'static>>>>>,
+	env: Arc<Env<WithoutTls>>,
+	db: Arc<RwLock<Option<Arc<Database<Bytes, Bytes>>>>>,
 	name: String,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
@@ -117,53 +116,53 @@ impl Store {
 			))
 		})?;
 
-		let mut env_builder = lmdb::EnvBuilder::new()?;
-		env_builder.set_maxdbs(8)?;
-
-		if let Some(max_readers) = max_readers {
-			env_builder.set_maxreaders(max_readers)?;
-		}
-
 		let alloc_chunk_size = match global::is_production_mode() {
 			true => ALLOC_CHUNK_SIZE_DEFAULT,
 			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
 		};
 
-		let env = unsafe { env_builder.open(&full_path, lmdb::open::NOTLS, 0o600)? };
-
-		debug!("DB Mapsize for {} is {}", full_path, env.info()?.mapsize);
-		let res = Store {
+		let env = unsafe {
+			let mut options = EnvOpenOptions::new().read_txn_without_tls();
+			let mut env_options = options.map_size(alloc_chunk_size).max_dbs(8);
+			if let Some(max_readers) = max_readers {
+				env_options = env_options.max_readers(max_readers);
+			}
+			env_options.open(&full_path)?
+		};
+		let (resize, new_size) = Self::needs_resize(Arc::new(env.clone()), alloc_chunk_size);
+		if resize {
+			unsafe {
+				env.resize(new_size)?;
+			};
+		}
+		let s = Store {
 			env: Arc::new(env),
 			db: Arc::new(RwLock::new(None)),
 			name: db_name,
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
 		};
-
 		{
-			let mut w = res.db.write();
-			*w = Some(Arc::new(lmdb::Database::open(
-				res.env.clone(),
-				Some(&res.name),
-				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-			)?));
+			let mut write = s.env.write_txn()?;
+			let db = s.env.create_database(&mut write, Some(&s.name))?;
+			write.commit()?;
+			let mut w_db = s.db.write();
+			*w_db = Some(Arc::new(db));
 		}
-		Ok(res)
+		Ok(s)
+
+		// debug!("DB Mapsize for {} is {}", full_path, env.info().map_size);
 	}
 
 	/// Construct a new store using a specific protocol version.
 	/// Permits access to the db with legacy protocol versions for db migrations.
 	pub fn with_version(&self, version: ProtocolVersion) -> Store {
-		let alloc_chunk_size = match global::is_production_mode() {
-			true => ALLOC_CHUNK_SIZE_DEFAULT,
-			false => ALLOC_CHUNK_SIZE_DEFAULT_TEST,
-		};
 		Store {
 			env: self.env.clone(),
 			db: self.db.clone(),
 			name: self.name.clone(),
 			version,
-			alloc_chunk_size,
+			alloc_chunk_size: self.alloc_chunk_size,
 		}
 	}
 
@@ -172,97 +171,50 @@ impl Store {
 		self.version
 	}
 
-	/// Opens the database environment
-	pub fn open(&self) -> Result<(), Error> {
-		let mut w = self.db.write();
-		*w = Some(Arc::new(lmdb::Database::open(
-			self.env.clone(),
-			Some(&self.name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-		)?));
-		Ok(())
-	}
-
-	/// Determines whether the environment needs a resize based on a simple percentage threshold
-	pub fn needs_resize(&self) -> Result<bool, Error> {
-		let env_info = self.env.info()?;
-		let stat = self.env.stat()?;
-
-		let size_used = stat.psize as usize * env_info.last_pgno;
-		trace!("DB map size: {}", env_info.mapsize);
+	/// Determines whether the environment needs a resize based on a simple percentage threshold.
+	pub fn needs_resize(env: Arc<Env<WithoutTls>>, alloc_chunk_size: usize) -> (bool, usize) {
+		let env_info = env.info();
+		let stat = env.stat();
+		let size_used = stat.page_size as usize * env_info.last_page_number;
+		trace!("DB map size: {}", env_info.map_size);
 		trace!("Space used: {}", size_used);
-		trace!("Space remaining: {}", env_info.mapsize - size_used);
+		trace!("Space remaining: {}", env_info.map_size - size_used);
 		let resize_percent = RESIZE_PERCENT;
 		trace!(
 			"Percent used: {:.*}  Percent threshold: {:.*}",
 			4,
-			size_used as f64 / env_info.mapsize as f64,
+			size_used as f64 / env_info.map_size as f64,
 			4,
 			resize_percent
 		);
-
-		if size_used as f32 / env_info.mapsize as f32 > resize_percent
-			|| env_info.mapsize < self.alloc_chunk_size
+		let resize = if size_used as f32 / env_info.map_size as f32 > resize_percent
+			|| env_info.map_size < alloc_chunk_size
 		{
 			trace!("Resize threshold met (percent-based)");
-			Ok(true)
+			true
 		} else {
 			trace!("Resize threshold not met (percent-based)");
-			Ok(false)
-		}
-	}
+			false
+		};
 
-	/// Increments the database size by as many ALLOC_CHUNK_SIZES
-	/// to give a minimum threshold of free space
-	pub fn do_resize(&self) -> Result<(), Error> {
-		let env_info = self.env.info()?;
-		let stat = self.env.stat()?;
-		let size_used = stat.psize as usize * env_info.last_pgno;
-
-		let new_mapsize = if env_info.mapsize < self.alloc_chunk_size {
-			self.alloc_chunk_size
-		} else {
-			let mut tot = env_info.mapsize;
+		let new_size = {
+			let mut tot = env_info.map_size;
 			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
-				tot += self.alloc_chunk_size;
+				tot += alloc_chunk_size;
 			}
 			tot
 		};
-
-		// close
-		let mut w = self.db.write();
-		*w = None;
-
-		unsafe {
-			self.env.set_mapsize(new_mapsize)?;
-		}
-
-		*w = Some(Arc::new(lmdb::Database::open(
-			self.env.clone(),
-			Some(&self.name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-		)?));
-
-		info!(
-			"Resized database from {} to {}",
-			env_info.mapsize, new_mapsize
-		);
-		Ok(())
+		(resize, new_size)
 	}
 
 	/// Gets a value from the db, provided its key.
 	/// Deserializes the retrieved data using the provided function.
-	pub fn get_with<F, T>(
-		&self,
-		key: &[u8],
-		access: &lmdb::ConstAccessor<'_>,
-		db: &lmdb::Database<'_>,
-		deserialize: F,
-	) -> Result<Option<T>, Error>
+	fn get_with<F, T>(&self, key: &[u8], read: &RoTxn, deserialize: F) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let res: Option<&[u8]> = access.get(db, key).to_opt()?;
+		let db = self.db.read();
+		let res: Option<&[u8]> = db.as_ref().unwrap().get(read, key)?;
 		match res {
 			None => Ok(None),
 			Some(res) => deserialize(key, res).map(Some),
@@ -276,81 +228,73 @@ impl Store {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
-		let access = txn.access();
 		let d = match deser_mode {
 			Some(d) => d,
 			_ => DeserializationMode::default(),
 		};
-		self.get_with(key, &access, &db, |_, mut data| {
+		let read = self.env.read_txn()?;
+		self.get_with(key, &read, |_, mut data| {
 			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
 
-	/// Whether the provided key exists
+	/// Whether the provided key exists.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
-		let access = txn.access();
-
-		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
+		let db = self.db.read();
+		let read = self.env.read_txn()?;
+		let res = db.as_ref().unwrap().get(&read, key)?;
 		Ok(res.is_some())
 	}
 
 	/// Produces an iterator from the provided key prefix.
-	pub fn iter<F, T>(&self, prefix: &[u8], deserialize: F) -> Result<PrefixIterator<F, T>, Error>
+	pub fn iter<F, T>(
+		&'_ self,
+		prefix: &[u8],
+		deserialize: F,
+	) -> Result<PrefixIterator<'_, F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(tx.cursor(db.clone())?);
-		Ok(PrefixIterator::new(tx, cursor, prefix, deserialize))
+		let db = Arc::new(self.db.read().clone());
+		let read = self.env.read_txn()?;
+		Ok(PrefixIterator::new(db.clone(), read, prefix, deserialize))
 	}
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
-		// check if the db needs resizing before returning the batch
-		if self.needs_resize()? {
-			self.do_resize()?;
+		let (resize, new_size) = Self::needs_resize(self.env.clone(), self.alloc_chunk_size);
+		if resize {
+			unsafe {
+				self.env.resize(new_size)?;
+			}
 		}
-		let tx = lmdb::WriteTransaction::new(self.env.clone())?;
-		Ok(Batch { store: self, tx })
+		Ok(Batch::new(self)?)
 	}
 }
 
 /// Batch to write multiple Writeables to db in an atomic manner.
 pub struct Batch<'a> {
 	store: &'a Store,
-	tx: lmdb::WriteTransaction<'a>,
+	write: RwTxn<'a>,
 }
 
 impl<'a> Batch<'a> {
-	/// Writes a single key/value pair to the db
-	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		self.tx
-			.access()
-			.put(db, key, value, lmdb::put::Flags::empty())?;
+	/// Creates a new batch for provided db.
+	pub fn new(store: &'a Store) -> Result<Batch<'a>, Error> {
+		let write = store.env.write_txn()?;
+		Ok(Batch { store, write })
+	}
+
+	/// Writes a single key/value pair to the db.
+	pub fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
+		let db = self.store.db.read();
+		db.as_ref().unwrap().put(&mut self.write, key, value)?;
 		Ok(())
 	}
 
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the (default) version configured on the store instance.
-	pub fn put_ser<W: ser::Writeable>(&self, key: &[u8], value: &W) -> Result<(), Error> {
+	pub fn put_ser<W: ser::Writeable>(&mut self, key: &[u8], value: &W) -> Result<(), Error> {
 		self.put_ser_with_version(key, value, self.store.protocol_version())
 	}
 
@@ -362,7 +306,7 @@ impl<'a> Batch<'a> {
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the specified protocol version.
 	pub fn put_ser_with_version<W: ser::Writeable>(
-		&self,
+		&mut self,
 		key: &[u8],
 		value: &W,
 		version: ProtocolVersion,
@@ -376,33 +320,26 @@ impl<'a> Batch<'a> {
 
 	/// Low-level access for retrieving data by key.
 	/// Takes a function for flexible deserialization.
-	pub fn get_with<F, T>(&self, key: &[u8], deserialize: F) -> Result<Option<T>, Error>
+	fn get_with<F, T>(&self, key: &[u8], deserialize: F) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let access = self.tx.access();
-		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-
-		self.store.get_with(key, &access, &db, deserialize)
+		let read = self.write.nested_read_txn()?;
+		self.store.get_with(key, &read, deserialize)
 	}
 
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let access = self.tx.access();
-		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
-		Ok(res.is_some())
+		Ok(self.store.exists(key)?)
 	}
 
 	/// Produces an iterator from the provided key prefix.
-	pub fn iter<F, T>(&self, prefix: &[u8], deserialize: F) -> Result<PrefixIterator<F, T>, Error>
+	pub fn iter<F, T>(
+		&self,
+		prefix: &[u8],
+		deserialize: F,
+	) -> Result<PrefixIterator<'a, F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
@@ -427,85 +364,90 @@ impl<'a> Batch<'a> {
 		})
 	}
 
-	/// Deletes a key/value pair from the db
-	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
-		self.tx.access().del_key(db, key)?;
+	/// Deletes a key/value pair from the db.
+	pub fn delete(&mut self, key: &[u8]) -> Result<(), Error> {
+		let db = self.store.db.read();
+		db.as_ref().unwrap().delete(&mut self.write, key)?;
 		Ok(())
 	}
 
-	/// Writes the batch to db
+	/// Writes the batch to db.
 	pub fn commit(self) -> Result<(), Error> {
-		self.tx.commit()?;
+		self.write.commit()?;
 		Ok(())
 	}
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
+		let write = self.store.env.nested_write_txn(&mut self.write)?;
 		Ok(Batch {
 			store: self.store,
-			tx: self.tx.child_tx()?,
+			write,
 		})
 	}
 }
 
 /// An iterator based on key prefix.
 /// Caller is responsible for deserialization of the data.
-pub struct PrefixIterator<F, T>
+pub struct PrefixIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
-	tx: Arc<lmdb::ReadTransaction<'static>>,
-	cursor: Arc<lmdb::Cursor<'static, 'static>>,
-	seek: bool,
+	db: Arc<Option<Arc<Database<Bytes, Bytes>>>>,
+	read: Arc<RoTxn<'a, WithoutTls>>,
+	skip: usize,
 	prefix: Vec<u8>,
 	deserialize: F,
 }
 
-impl<F, T> Iterator for PrefixIterator<F, T>
+impl<'a, F, T> Iterator for PrefixIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
 	type Item = T;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let access = self.tx.access();
-		let cursor = Arc::get_mut(&mut self.cursor).expect("failed to get cursor");
-		let kv: Result<(&[u8], &[u8]), _> = if self.seek {
-			cursor.next(&access)
-		} else {
-			self.seek = true;
-			cursor.seek_range_k(&access, &self.prefix[..])
-		};
-		kv.ok()
-			.filter(|(k, _)| k.starts_with(self.prefix.as_slice()))
-			.map(|(k, v)| match (self.deserialize)(k, v) {
-				Ok(v) => Some(v),
-				Err(_) => None,
-			})
-			.flatten()
+		let db = self.db.as_ref();
+		if let Ok(iter) = db.as_ref().unwrap().iter(&self.read) {
+			let kv = iter
+				.filter(|i| {
+					if let Ok(i) = i {
+						return i.0.starts_with(&self.prefix);
+					}
+					false
+				})
+				.skip(self.skip)
+				.next()
+				.transpose()
+				.unwrap_or(None);
+			self.skip += 1;
+			if let Some((k, v)) = kv {
+				return match (self.deserialize)(k, v) {
+					Ok(v) => Some(v),
+					Err(_) => None,
+				};
+			}
+		}
+		None
 	}
 }
 
-impl<F, T> PrefixIterator<F, T>
+impl<'a, F, T> PrefixIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		tx: Arc<lmdb::ReadTransaction<'static>>,
-		cursor: Arc<lmdb::Cursor<'static, 'static>>,
+		db: Arc<Option<Arc<Database<Bytes, Bytes>>>>,
+		read: RoTxn<'a, WithoutTls>,
 		prefix: &[u8],
 		deserialize: F,
-	) -> PrefixIterator<F, T> {
+	) -> PrefixIterator<'a, F, T> {
 		PrefixIterator {
-			tx,
-			cursor,
-			seek: false,
+			db,
+			read: Arc::new(read),
+			skip: 0,
 			prefix: prefix.to_vec(),
 			deserialize,
 		}

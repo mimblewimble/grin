@@ -119,19 +119,19 @@ impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
 	pub fn new(db_root: &str) -> Result<PeerStore, Error> {
 		let db = grin_store::Store::new(db_root, Some(DB_NAME), Some(STORE_SUBPATH), None)?;
-		Ok(PeerStore { db: db })
+		Ok(PeerStore { db })
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
-		let batch = self.db.batch()?;
+		let mut batch = self.db.batch()?;
 		batch.put_ser(&peer_key(p.addr)[..], p)?;
 		batch.commit()
 	}
 
 	pub fn save_peers(&self, p: Vec<PeerData>) -> Result<(), Error> {
-		let batch = self.db.batch()?;
+		let mut batch = self.db.batch()?;
 		for pd in p {
 			debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
 			batch.put_ser(&peer_key(pd.addr)[..], &pd)?;
@@ -149,50 +149,11 @@ impl PeerStore {
 		self.db.exists(&peer_key(peer_addr)[..])
 	}
 
-	/// TODO - allow below added to avoid github issue reports
-	#[allow(dead_code)]
-	pub fn delete_peer(&self, peer_addr: PeerAddr) -> Result<(), Error> {
-		let batch = self.db.batch()?;
-		batch.delete(&peer_key(peer_addr)[..])?;
-		batch.commit()
-	}
-
-	/// Find some peers in our local db.
-	pub fn find_peers(
-		&self,
-		state: State,
-		cap: Capabilities,
-		count: usize,
-	) -> Result<Vec<PeerData>, Error> {
-		let peers = self
-			.peers_iter()?
-			.filter(|p| p.flags == state && p.capabilities.contains(cap))
-			.choose_multiple(&mut thread_rng(), count);
-		Ok(peers)
-	}
-
-	/// Iterator over all known peers.
-	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
-		let key = to_key(PEER_PREFIX, "");
-		let protocol_version = self.db.protocol_version();
-		self.db.iter(&key, move |_, mut v| {
-			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
-				.map_err(From::from)
-		})
-	}
-
-	/// List all known peers
-	/// Used for /v1/peers/all api endpoint
-	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
-		let peers: Vec<PeerData> = self.peers_iter()?.collect();
-		Ok(peers)
-	}
-
 	/// Convenience method to load a peer data, update its status and save it
 	/// back. If new state is Banned its last banned time will be updated too.
 	/// If new state is Defunct last connection attempt will be updated too.
 	pub fn update_state(&self, peer_addr: PeerAddr, new_state: State) -> Result<(), Error> {
-		let batch = self.db.batch()?;
+		let mut batch = self.db.batch()?;
 
 		let mut peer = option_to_not_found(
 			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..], None),
@@ -209,8 +170,52 @@ impl PeerStore {
 		batch.commit()
 	}
 
+	/// Builds a new iterator batch to be used with this store.
+	pub fn iter_batch(&self) -> Result<PeersIterBatch<'_>, Error> {
+		Ok(PeersIterBatch {
+			db: self.db.batch()?,
+		})
+	}
+}
+
+pub struct PeersIterBatch<'a> {
+	db: grin_store::Batch<'a>,
+}
+
+impl<'a> PeersIterBatch<'a> {
+	/// Iterator over all known peers.
+	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData> + 'a, Error> {
+		let key = to_key(PEER_PREFIX, "");
+		let protocol_version = self.db.protocol_version();
+		self.db.iter(&key, move |_, mut v| {
+			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
+				.map_err(From::from)
+		})
+	}
+
+	/// Find some peers in our local db.
+	pub fn find_peers(
+		&self,
+		state: State,
+		cap: Capabilities,
+		count: usize,
+	) -> Result<Vec<PeerData>, Error> {
+		let peers = self
+			.peers_iter()?
+			.filter(|p| p.flags == state && p.capabilities.contains(cap))
+			.choose_multiple(&mut thread_rng(), count);
+		Ok(peers)
+	}
+
+	/// List all known peers
+	/// Used for /v1/peers/all api endpoint
+	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
+		let peers: Vec<PeerData> = self.peers_iter()?.collect();
+		Ok(peers)
+	}
+
 	/// Deletes peers from the storage that satisfy some condition `predicate`
-	pub fn delete_peers<F>(&self, predicate: F) -> Result<(), Error>
+	pub fn delete_peers<F>(mut self, predicate: F) -> Result<(), Error>
 	where
 		F: Fn(&PeerData) -> bool,
 	{
@@ -224,13 +229,10 @@ impl PeerStore {
 
 		// Delete peers in single batch
 		if !to_remove.is_empty() {
-			let batch = self.db.batch()?;
-
 			for peer in to_remove {
-				batch.delete(&peer_key(peer.addr)[..])?;
+				self.db.delete(&peer_key(peer.addr)[..])?;
 			}
-
-			batch.commit()?;
+			self.db.commit()?;
 		}
 
 		Ok(())
