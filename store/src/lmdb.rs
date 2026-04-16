@@ -28,7 +28,7 @@ use crate::grin_core::ser::{self, DeserializationMode, ProtocolVersion};
 use crate::util::RwLock;
 
 /// number of bytes to grow the database by when needed
-pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728 / 32; //128 MB
+pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
 /// And for test mode, to avoid too much disk allocation on windows
 pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
 const RESIZE_PERCENT: f32 = 0.9;
@@ -185,7 +185,7 @@ impl Store {
 		let migrate_from = Path::new(root_path).join(name);
 		if name != ENV_NAME && migrate_from.exists() {
 			debug!("Migrating {} to {:?}", name, full_path);
-			if Self::migrate_to_default_env(&s, &migrate_from, db_name).is_ok() {
+			if s.migrate_to_default_env(&migrate_from, db_name).is_ok() {
 				let _ = fs::remove_dir_all(&migrate_from);
 			} else {
 				error!("Migrating {} failed", name);
@@ -194,11 +194,11 @@ impl Store {
 		Ok(s)
 	}
 
-	/// Migrate db from provided path to default environment.
-	fn migrate_to_default_env(s: &Store, path: &Path, db_name: &str) -> Result<(), Error> {
+	/// Migrate db from provided path to store environment.
+	fn migrate_to_default_env(&self, path: &Path, db_name: &str) -> Result<(), Error> {
 		let env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
-			let env_options = options.map_size(s.alloc_chunk_size).max_dbs(1);
+			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(1);
 			env_options.open(path)?
 		};
 		let db_from = {
@@ -207,8 +207,8 @@ impl Store {
 			write.commit()?;
 			db
 		};
-		let db_to = s.db.read();
-		let mut write_to = s.env.write_txn()?;
+		let db_to = self.db.read();
+		let mut write_to = self.env.write_txn()?;
 		let read_from = env.read_txn()?;
 		let mut count = 0;
 		for kv in db_from.iter(&read_from)? {
