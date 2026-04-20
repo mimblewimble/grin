@@ -16,10 +16,9 @@
 
 use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
-use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{fs, thread};
 
@@ -35,11 +34,6 @@ const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
 const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
-
-lazy_static! {
-	/// Shared environment.
-	static ref ENV: Arc<RwLock<Option<Env<WithoutTls>>>> = Arc::new(RwLock::new(None));
-}
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, thiserror::Error)]
@@ -87,17 +81,22 @@ where
 
 const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
-const ENV_NAME: &'static str = "lmdb";
+const DEFAULT_ENV_NAME: &'static str = "lmdb";
+
+/// Mapping of database path to environment.
+static ENV_MAP: OnceLock<Arc<RwLock<HashMap<String, Env<WithoutTls>>>>> = OnceLock::new();
+/// Mapping of database path to check if database is resizing.
+static ENV_RESIZING: OnceLock<Arc<RwLock<HashMap<String, bool>>>> = OnceLock::new();
 
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
-	db: Arc<RwLock<Option<Arc<Database<Bytes, Bytes>>>>>,
-	env: Arc<Env<WithoutTls>>,
+	env: Env<WithoutTls>,
+	env_path: String,
+	db: Arc<Database<Bytes, Bytes>>,
 	name: String,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
-	resizing: Arc<AtomicBool>,
 }
 
 impl Store {
@@ -112,15 +111,23 @@ impl Store {
 		db_name: Option<&str>,
 		max_readers: Option<u32>,
 	) -> Result<Store, Error> {
-		let name = env_name.unwrap_or_else(|| ENV_NAME);
-		let db_name = db_name.unwrap_or_else(|| ENV_NAME);
-		let mut full_path = Path::new(root_path).join(name);
+		let name = env_name
+			.map(|n| {
+				if n != DEFAULT_ENV_NAME {
+					DEFAULT_ENV_NAME
+				} else {
+					n
+				}
+			})
+			.unwrap_or_else(|| DEFAULT_ENV_NAME);
+		let db_name = db_name.unwrap_or_else(|| DEFAULT_ENV_NAME);
 
-		// Fix path to use default environment.
-		if name != ENV_NAME {
-			full_path = Path::new(root_path).join(ENV_NAME);
-		}
-
+		// Database path setup.
+		let full_path = Path::new(root_path)
+			.join(name)
+			.to_str()
+			.unwrap()
+			.to_string();
 		fs::create_dir_all(&full_path).map_err(|e| {
 			Error::FileErr(format!(
 				"Unable to create {:?} to store data: {:?}",
@@ -134,11 +141,12 @@ impl Store {
 		};
 
 		// Environment setup.
+		let env_map = ENV_MAP.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
 		let has_env = {
-			let r_env = ENV.read();
-			r_env.is_some()
+			let r_env_map = env_map.read();
+			r_env_map.contains_key(&full_path)
 		};
-		let env = if !has_env {
+		if !has_env {
 			let env = unsafe {
 				let mut options = EnvOpenOptions::new().read_txn_without_tls();
 				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(8);
@@ -147,78 +155,77 @@ impl Store {
 				}
 				env_options.open(&full_path)?
 			};
-			let (resize, new_size) = Self::needs_resize(Arc::new(env.clone()), alloc_chunk_size);
+			let (resize, new_size) = Self::needs_resize(&env, alloc_chunk_size);
 			if resize {
 				unsafe {
 					env.resize(new_size)?;
 				};
 			}
-			{
-				let mut w_env = ENV.write();
-				*w_env = Some(env.clone());
-			}
-			debug!("DB Mapsize for {:?} is {}", full_path, env.info().map_size);
-			env
-		} else {
-			let r_env = ENV.read();
-			r_env.clone().unwrap()
-		};
+			debug!("DB Mapsize for {} is {}", db_name, env.info().map_size);
+			let mut w_env_map = env_map.write();
+			w_env_map.insert(full_path.clone(), env);
+		}
 
 		// Database setup.
+		let r_env_map = env_map.read();
+		let env = r_env_map.get(&full_path).unwrap();
+		let mut write = env.write_txn()?;
+		let db = env.create_database(&mut write, Some(db_name))?;
+		write.commit()?;
+
 		let s = Store {
-			env: Arc::new(env),
-			db: Arc::new(RwLock::new(None)),
+			env: env.clone(),
+			env_path: full_path.clone(),
+			db: Arc::new(db),
 			name: db_name.to_string(),
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
-			resizing: Default::default(),
 		};
-		{
-			let mut write = s.env.write_txn()?;
-			let db = s.env.create_database(&mut write, Some(&s.name))?;
-			write.commit()?;
-			let mut w_db = s.db.write();
-			*w_db = Some(Arc::new(db));
-		}
 
 		// Migrate to default environment if needed.
-		let migrate_from = Path::new(root_path).join(name);
-		if name != ENV_NAME && migrate_from.exists() {
-			debug!("Migrating {} to {:?}", name, full_path);
-			if s.migrate_to_default_env(&migrate_from, db_name).is_ok() {
-				let _ = fs::remove_dir_all(&migrate_from);
-			} else {
-				error!("Migrating {} failed", name);
+		if let Some(env_name) = env_name {
+			if env_name != DEFAULT_ENV_NAME {
+				let migrate_from = Path::new(root_path).join(env_name);
+				if s.migrate_to_default_env(&migrate_from).is_ok() {
+					let _ = fs::remove_dir_all(&migrate_from);
+				} else {
+					error!("Migrating {} failed", name);
+				}
 			}
 		}
+
 		Ok(s)
 	}
 
 	/// Migrate db from provided path to store environment.
-	fn migrate_to_default_env(&self, path: &Path, db_name: &str) -> Result<(), Error> {
-		let env = unsafe {
+	fn migrate_to_default_env(&self, from_path: &Path) -> Result<(), Error> {
+		if !from_path.exists() {
+			return Ok(());
+		};
+		debug!("Migrating {} to {:?}", self.name, self.env_path);
+		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
 			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(1);
-			env_options.open(path)?
+			env_options.open(from_path)?
 		};
 		let db_from = {
-			let mut write = env.write_txn()?;
-			let db: Database<Bytes, Bytes> = env.create_database(&mut write, Some(db_name))?;
+			let mut write = from_env.write_txn()?;
+			let db_name = self.name.as_str();
+			let db: Database<Bytes, Bytes> = from_env.create_database(&mut write, Some(db_name))?;
 			write.commit()?;
 			db
 		};
-		let db_to = self.db.read();
 		let mut write_to = self.env.write_txn()?;
-		let read_from = env.read_txn()?;
+		let read_from = from_env.read_txn()?;
 		let mut count = 0;
 		for kv in db_from.iter(&read_from)? {
 			count += 1;
 			if let Ok((k, v)) = kv {
-				db_to.as_ref().unwrap().put(&mut write_to, &k, &v)?;
+				self.db.put(&mut write_to, &k, &v)?;
 			}
 		}
 		write_to.commit()?;
-		debug!("Migrated {} records of {}", count, db_name);
+		debug!("Migrated {} records from {}", count, self.name);
 		Ok(())
 	}
 
@@ -227,11 +234,11 @@ impl Store {
 	pub fn with_version(&self, version: ProtocolVersion) -> Store {
 		Store {
 			env: self.env.clone(),
+			env_path: self.env_path.clone(),
 			db: self.db.clone(),
 			name: self.name.clone(),
 			version,
 			alloc_chunk_size: self.alloc_chunk_size,
-			resizing: self.resizing.clone(),
 		}
 	}
 
@@ -241,7 +248,7 @@ impl Store {
 	}
 
 	/// Determines whether the environment needs a resize based on a simple percentage threshold.
-	pub fn needs_resize(env: Arc<Env<WithoutTls>>, alloc_chunk_size: usize) -> (bool, usize) {
+	pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, usize) {
 		let env_info = env.info();
 		let stat = env.stat();
 		let size_used = stat.page_size as usize * env_info.last_page_number;
@@ -290,8 +297,7 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let db = self.db.read();
-		let res: Option<&[u8]> = db.as_ref().unwrap().get(read, key)?;
+		let res: Option<&[u8]> = self.db.get(read, key)?;
 		match res {
 			None => Ok(None),
 			Some(res) => deserialize(key, res).map(Some),
@@ -317,9 +323,8 @@ impl Store {
 
 	/// Whether the provided key exists.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let db = self.db.read();
 		let read = self.env.read_txn()?;
-		let res = db.as_ref().unwrap().get(&read, key)?;
+		let res = self.db.get(&read, key)?;
 		Ok(res.is_some())
 	}
 
@@ -332,28 +337,53 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let db = Arc::new(self.db.read().clone());
 		let read = self.env.read_txn()?;
-		Ok(PrefixIterator::new(db.clone(), read, prefix, deserialize))
+		Ok(PrefixIterator::new(
+			self.db.clone(),
+			read,
+			prefix,
+			deserialize,
+		))
 	}
 
-	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch<'_>, Error> {
-		while self.resizing.load(Ordering::SeqCst) {
-			debug!("Wait resizing {} DB", self.name);
-			thread::sleep(Duration::from_millis(100));
+	/// Resize database environment if needed.
+	fn maybe_resize(&self) -> Result<(), Error> {
+		loop {
+			let resizing = {
+				let res_map = ENV_RESIZING.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
+				let r_res_map = res_map.read();
+				r_res_map.get(&self.env_path).map(|r| *r).unwrap_or(false)
+			};
+			if !resizing {
+				break;
+			}
+			trace!("Wait resizing DB");
+			thread::sleep(Duration::from_millis(500));
 		}
-		let (resize, new_size) = Self::needs_resize(self.env.clone(), self.alloc_chunk_size);
+		let (resize, new_size) = Self::needs_resize(&self.env, self.alloc_chunk_size);
 		if resize {
-			self.resizing.store(true, Ordering::SeqCst);
-			debug!("Start resizing {} DB", self.name);
+			let res_map = ENV_RESIZING.get().unwrap();
+			{
+				let mut w_res_map = res_map.write();
+				w_res_map.insert(self.env_path.clone(), true);
+			}
+			trace!("Start resizing {} DB", self.name);
 			unsafe {
 				thread::sleep(Duration::from_millis(3000));
 				self.env.resize(new_size)?;
 			}
-			self.resizing.store(false, Ordering::SeqCst);
-			debug!("End resizing {} DB", self.name);
+			{
+				let mut w_res_map = res_map.write();
+				w_res_map.insert(self.env_path.clone(), false);
+			}
+			trace!("End resizing {} DB", self.name);
 		}
+		Ok(())
+	}
+
+	/// Builds a new batch to be used with this store.
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+		self.maybe_resize()?;
 		Ok(Batch::new(self)?)
 	}
 }
@@ -373,8 +403,7 @@ impl<'a> Batch<'a> {
 
 	/// Writes a single key/value pair to the db.
 	pub fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
-		db.as_ref().unwrap().put(&mut self.write, key, value)?;
+		self.store.db.put(&mut self.write, key, value)?;
 		Ok(())
 	}
 
@@ -417,9 +446,8 @@ impl<'a> Batch<'a> {
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let db = self.store.db.read();
 		let read = self.write.nested_read_txn()?;
-		let res = db.as_ref().unwrap().get(&read, key)?;
+		let res = self.store.db.get(&read, key)?;
 		Ok(res.is_some())
 	}
 
@@ -455,8 +483,7 @@ impl<'a> Batch<'a> {
 
 	/// Deletes a key/value pair from the db.
 	pub fn delete(&mut self, key: &[u8]) -> Result<(), Error> {
-		let db = self.store.db.read();
-		db.as_ref().unwrap().delete(&mut self.write, key)?;
+		self.store.db.delete(&mut self.write, key)?;
 		Ok(())
 	}
 
@@ -469,6 +496,7 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
+		self.store.maybe_resize()?;
 		let write = self.store.env.nested_write_txn(&mut self.write)?;
 		Ok(Batch {
 			store: self.store,
@@ -483,7 +511,7 @@ pub struct PrefixIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
-	db: Arc<Option<Arc<Database<Bytes, Bytes>>>>,
+	db: Arc<Database<Bytes, Bytes>>,
 	read: Arc<RoTxn<'a, WithoutTls>>,
 	skip: usize,
 	prefix: Vec<u8>,
@@ -497,8 +525,7 @@ where
 	type Item = T;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let db = self.db.as_ref();
-		if let Ok(iter) = db.as_ref().unwrap().iter(&self.read) {
+		if let Ok(iter) = self.db.iter(&self.read) {
 			let kv = iter
 				.filter(|i| {
 					if let Ok(i) = i {
@@ -528,7 +555,7 @@ where
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		db: Arc<Option<Arc<Database<Bytes, Bytes>>>>,
+		db: Arc<Database<Bytes, Bytes>>,
 		read: RoTxn<'a, WithoutTls>,
 		prefix: &[u8],
 		deserialize: F,
