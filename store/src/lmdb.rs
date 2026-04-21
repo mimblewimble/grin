@@ -278,7 +278,7 @@ impl Store {
 			if env_info.map_size < alloc_chunk_size {
 				alloc_chunk_size
 			} else {
-				let mut tot = env_info.map_size;
+				let mut tot = env_info.map_size - (env_info.map_size % alloc_chunk_size);
 				while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
 					tot += alloc_chunk_size;
 				}
