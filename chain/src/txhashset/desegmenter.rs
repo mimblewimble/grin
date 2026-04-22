@@ -520,9 +520,6 @@ impl Desegmenter {
 		let mut elems_added = 0;
 		if let Some(mut next_output_idx) = self.next_required_output_segment_index() {
 			while (next_output_idx as usize) < total_output_segments {
-				if self.output_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
 				if elems_added == max_elements / 3 {
 					break;
 				}
@@ -547,9 +544,6 @@ impl Desegmenter {
 		elems_added = 0;
 		if let Some(mut next_rp_idx) = self.next_required_rangeproof_segment_index() {
 			while (next_rp_idx as usize) < total_rangeproof_segments {
-				if self.rangeproof_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
 				if elems_added == max_elements / 3 {
 					break;
 				}
@@ -573,9 +567,6 @@ impl Desegmenter {
 		elems_added = 0;
 		if let Some(mut next_kernel_idx) = self.next_required_kernel_segment_index() {
 			while (next_kernel_idx as usize) < total_kernel_segments {
-				if self.kernel_segment_cache.len() >= self.max_cached_segments {
-					break;
-				}
 				if elems_added == max_elements / 3 {
 					break;
 				}
