@@ -111,20 +111,11 @@ impl Store {
 		db_name: Option<&str>,
 		max_readers: Option<u32>,
 	) -> Result<Store, Error> {
-		let name = env_name
-			.map(|n| {
-				if n != DEFAULT_ENV_NAME {
-					DEFAULT_ENV_NAME
-				} else {
-					n
-				}
-			})
-			.unwrap_or_else(|| DEFAULT_ENV_NAME);
 		let db_name = db_name.unwrap_or_else(|| DEFAULT_ENV_NAME);
 
 		// Database path setup.
 		let full_path = Path::new(root_path)
-			.join(name)
+			.join(DEFAULT_ENV_NAME)
 			.to_str()
 			.unwrap()
 			.to_string();
@@ -189,7 +180,7 @@ impl Store {
 				if s.migrate_to_default_env(&migrate_from).is_ok() {
 					let _ = fs::remove_dir_all(&migrate_from);
 				} else {
-					error!("Migrating {} failed", name);
+					error!("Migrating DB {} failed", env_name);
 				}
 			}
 		}
@@ -202,7 +193,7 @@ impl Store {
 		if !from_path.exists() {
 			return Ok(());
 		};
-		debug!("Migrating {} to {:?}", self.name, self.env_path);
+		debug!("Migrating DB {} to {}", self.name, DEFAULT_ENV_NAME);
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
 			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(1);
@@ -225,7 +216,7 @@ impl Store {
 			}
 		}
 		write_to.commit()?;
-		debug!("Migrated {} records from {}", count, self.name);
+		debug!("Migrated {} records from DB {}", count, self.name);
 		Ok(())
 	}
 
