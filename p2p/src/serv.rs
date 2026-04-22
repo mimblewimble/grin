@@ -187,6 +187,9 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
+				if self.peers.enough_outbound_peers() {
+					peer.stop();
+				}
 				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
 				Ok(peer)

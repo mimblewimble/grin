@@ -237,26 +237,8 @@ impl Server {
 		let mut connect_thread = None;
 
 		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
-			let seed_list = match config.p2p_config.seeding_type {
-				p2p::Seeding::None => {
-					warn!("No seed configured, will stay solo until connected to");
-					seed::predefined_seeds(vec![])
-				}
-				p2p::Seeding::List => match &config.p2p_config.seeds {
-					Some(seeds) => seed::predefined_seeds(seeds.peers.clone()),
-					None => {
-						return Err(Error::Configuration(
-							"Seeds must be configured for seeding type List".to_owned(),
-						));
-					}
-				},
-				p2p::Seeding::DNSSeed => seed::default_dns_seeds(),
-				_ => unreachable!(),
-			};
-
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				seed_list,
 				config.p2p_config.clone(),
 				stop_state.clone(),
 			)?);
