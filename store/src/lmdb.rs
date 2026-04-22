@@ -513,8 +513,8 @@ where
 {
 	db: Arc<Database<Bytes, Bytes>>,
 	read: Arc<RoTxn<'a, WithoutTls>>,
+	keys: Vec<Vec<u8>>,
 	skip: usize,
-	prefix: Vec<u8>,
 	deserialize: F,
 }
 
@@ -525,22 +525,14 @@ where
 	type Item = T;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if let Ok(iter) = self.db.iter(&self.read) {
-			let kv = iter
-				.filter(|i| {
-					if let Ok(i) = i {
-						return i.0.starts_with(&self.prefix);
-					}
-					false
-				})
-				.skip(self.skip)
-				.next()
-				.transpose()
-				.unwrap_or(None);
-			self.skip += 1;
-			if let Some((k, v)) = kv {
+		if let Some(k) = self.keys.iter().skip(self.skip).next() {
+			let v = self.db.get(&self.read, k).unwrap_or(None);
+			if let Some(v) = v {
 				return match (self.deserialize)(k, v) {
-					Ok(v) => Some(v),
+					Ok(v) => {
+						self.skip += 1;
+						Some(v)
+					}
 					Err(_) => None,
 				};
 			}
@@ -560,11 +552,19 @@ where
 		prefix: &[u8],
 		deserialize: F,
 	) -> PrefixIterator<'a, F, T> {
+		let keys = if let Ok(iter) = db.prefix_iter(&read, &prefix) {
+			iter.move_between_keys()
+				.filter(|kv| kv.is_ok())
+				.map(|kv| kv.unwrap().0.to_vec())
+				.collect::<Vec<Vec<u8>>>()
+		} else {
+			vec![]
+		};
 		PrefixIterator {
 			db,
 			read: Arc::new(read),
+			keys,
 			skip: 0,
-			prefix: prefix.to_vec(),
 			deserialize,
 		}
 	}
