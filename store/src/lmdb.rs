@@ -322,12 +322,15 @@ impl Store {
 			}
 			debug!("Start resizing {} DB", self.name);
 			unsafe {
-				let batches_count =
-					ENV_BATCHES_COUNT.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
-				let batches = batches_count.write();
-				let cur = batches.get(&self.env_path).unwrap_or(&0);
-				debug!("Wait {} batches to complete", cur);
-				while cur != &0 {
+				loop {
+					let batches_count =
+						ENV_BATCHES_COUNT.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
+					let batches = batches_count.read();
+					let cur = batches.get(&self.env_path).unwrap_or(&0);
+					if cur == &0 {
+						break;
+					}
+					debug!("Wait {} batches to complete", cur);
 					thread::sleep(Duration::from_millis(100));
 				}
 				self.env.resize(new_size)?;
