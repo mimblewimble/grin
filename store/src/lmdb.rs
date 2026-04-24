@@ -279,6 +279,10 @@ impl Store {
 			env_info.map_size
 		};
 
+		if resize {
+			debug!("Resizing DB to {} from {}", new_size, env_info.map_size);
+		}
+
 		(resize, new_size)
 	}
 
@@ -306,6 +310,7 @@ impl Store {
 			Some(d) => d,
 			_ => DeserializationMode::default(),
 		};
+		self.wait_for_resize();
 		let read = self.env.read_txn()?;
 		self.get_with(key, &read, |_, mut data| {
 			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
@@ -314,6 +319,7 @@ impl Store {
 
 	/// Whether the provided key exists.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+		self.wait_for_resize();
 		let read = self.env.read_txn()?;
 		let res = self.db.get(&read, key)?;
 		Ok(res.is_some())
@@ -328,6 +334,7 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
+		self.wait_for_resize();
 		let read = self.env.read_txn()?;
 		Ok(PrefixIterator::new(
 			self.db.clone(),
@@ -337,8 +344,8 @@ impl Store {
 		))
 	}
 
-	/// Resize database environment if needed.
-	fn maybe_resize(&self) -> Result<(), Error> {
+	/// Wait while DB is resizing.
+	fn wait_for_resize(&self) {
 		loop {
 			let resizing = {
 				let res_map = ENV_RESIZING.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
@@ -348,9 +355,14 @@ impl Store {
 			if !resizing {
 				break;
 			}
-			trace!("Wait resizing DB");
+			debug!("Wait on {}, resizing DB", self.name);
 			thread::sleep(Duration::from_millis(500));
 		}
+	}
+
+	/// Resize database environment if needed.
+	fn maybe_resize(&self) -> Result<(), Error> {
+		self.wait_for_resize();
 		let (resize, new_size) = Self::needs_resize(&self.env, self.alloc_chunk_size);
 		if resize {
 			let res_map = ENV_RESIZING.get().unwrap();
@@ -358,16 +370,16 @@ impl Store {
 				let mut w_res_map = res_map.write();
 				w_res_map.insert(self.env_path.clone(), true);
 			}
-			trace!("Start resizing {} DB", self.name);
+			debug!("Start resizing {} DB", self.name);
 			unsafe {
-				thread::sleep(Duration::from_millis(3000));
+				thread::sleep(Duration::from_millis(2000));
 				self.env.resize(new_size)?;
 			}
 			{
 				let mut w_res_map = res_map.write();
 				w_res_map.insert(self.env_path.clone(), false);
 			}
-			trace!("End resizing {} DB", self.name);
+			debug!("End resizing {} DB", self.name);
 		}
 		Ok(())
 	}
