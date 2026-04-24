@@ -309,9 +309,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(
-		&self,
-	) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)> + 'a, Error> {
+	pub fn output_pos_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)>, Error> {
 		let key = to_key(OUTPUT_POS_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |k, mut v| {
@@ -440,7 +438,7 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over raw data for full blocks in the db.
 	/// Used during block migration (we need flexibility around deserialization).
-	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)> + 'a, Error> {
+	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)>, Error> {
 		let key = to_key(BLOCK_PREFIX, "");
 		self.db.iter(&key, |k, v| Ok((k.to_vec(), v.to_vec())))
 	}

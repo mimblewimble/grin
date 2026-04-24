@@ -184,7 +184,7 @@ pub struct PeersIterBatch<'a> {
 
 impl<'a> PeersIterBatch<'a> {
 	/// Iterator over all known peers.
-	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData> + 'a, Error> {
+	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
 		let key = to_key(PEER_PREFIX, "");
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(&key, move |_, mut v| {
