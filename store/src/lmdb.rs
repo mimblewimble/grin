@@ -30,6 +30,7 @@ use crate::util::RwLock;
 pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
 /// And for test mode, to avoid too much disk allocation on windows
 pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
+/// Minimal percent of used space when resizing must be performed.
 const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
@@ -81,7 +82,12 @@ where
 
 const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
+/// Default environment.
 const DEFAULT_ENV_NAME: &'static str = "lmdb";
+/// Default multi-database environment without prefixes.
+const DEFAULT_MULTI_DB_ENV_NAME: &'static str = "multi_lmdb";
+/// Prefix key separator.
+pub const PREFIX_KEY_SEPARATOR: u8 = b':';
 
 /// Mapping of database path to environment.
 static ENV_MAP: OnceLock<Arc<RwLock<HashMap<String, Env<WithoutTls>>>>> = OnceLock::new();
@@ -95,29 +101,28 @@ static ENV_RESIZING: OnceLock<Arc<RwLock<HashMap<String, bool>>>> = OnceLock::ne
 pub struct Store {
 	env: Env<WithoutTls>,
 	env_path: String,
-	db: Arc<Database<Bytes, Bytes>>,
-	name: String,
+	pre_dbs: Arc<HashMap<u8, Database<Bytes, Bytes>>>,
+	def_db: Database<Bytes, Bytes>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
 }
 
 impl Store {
 	/// Create a new LMDB env under the provided directory.
-	/// By default creates an environment named "lmdb".
+	/// By default creates an environment named "multi_lmdb".
 	/// Be aware of transactional semantics in lmdb
 	/// (transactions are per environment, not per database).
-	/// db with non-default `env_name` will be migrated into default environment.
+	/// Data from non-default `env_name` and prefixes will be
+	/// migrated into default multi db env file if needed.
 	pub fn new(
 		root_path: &str,
 		env_name: Option<&str>,
 		db_name: Option<&str>,
+		prefixes: Vec<u8>,
 		max_readers: Option<u32>,
 	) -> Result<Store, Error> {
-		let db_name = db_name.unwrap_or_else(|| DEFAULT_ENV_NAME);
-
-		// Database path setup.
 		let full_path = Path::new(root_path)
-			.join(DEFAULT_ENV_NAME)
+			.join(DEFAULT_MULTI_DB_ENV_NAME)
 			.to_str()
 			.unwrap()
 			.to_string();
@@ -142,7 +147,7 @@ impl Store {
 		if !has_env {
 			let env = unsafe {
 				let mut options = EnvOpenOptions::new().read_txn_without_tls();
-				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(8);
+				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(24);
 				if let Some(max_readers) = max_readers {
 					env_options = env_options.max_readers(max_readers);
 				}
@@ -154,7 +159,7 @@ impl Store {
 					env.resize(new_size)?;
 				};
 			}
-			debug!("DB Mapsize for {} is {}", db_name, env.info().map_size);
+			debug!("DB Mapsize is {}", env.info().map_size);
 			let mut w_env_map = env_map.write();
 			w_env_map.insert(full_path.clone(), env);
 		}
@@ -163,26 +168,34 @@ impl Store {
 		let r_env_map = env_map.read();
 		let env = r_env_map.get(&full_path).unwrap();
 		let mut write = env.write_txn()?;
-		let db = env.create_database(&mut write, Some(db_name))?;
+		let def_name = db_name.unwrap_or(DEFAULT_ENV_NAME);
+		let def_db = env.create_database(&mut write, Some(def_name))?;
+		let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes>>::new();
+		for p in prefixes {
+			let db = env.create_database(&mut write, Some(p.to_string().as_str()))?;
+			dbs_map.insert(p, db);
+		}
 		write.commit()?;
 
 		let s = Store {
 			env: env.clone(),
 			env_path: full_path.clone(),
-			db: Arc::new(db),
-			name: db_name.to_string(),
+			pre_dbs: Arc::new(dbs_map),
+			def_db,
 			version: DEFAULT_DB_VERSION,
 			alloc_chunk_size,
 		};
 
 		// Migrate to default environment if needed.
-		if let Some(env_name) = env_name {
-			if env_name != DEFAULT_ENV_NAME {
-				let migrate_from = Path::new(root_path).join(env_name);
-				if s.migrate_to_default_env(&migrate_from).is_ok() {
-					let _ = fs::remove_dir_all(&migrate_from);
-				} else {
-					error!("Migrating DB {} failed", env_name);
+		let env_name = env_name.unwrap_or(DEFAULT_ENV_NAME);
+		if env_name != DEFAULT_MULTI_DB_ENV_NAME {
+			let migrate_from = Path::new(root_path).join(env_name);
+			if migrate_from.exists() {
+				match s.migrate_to_default_env(db_name, &migrate_from) {
+					Ok(_) => {
+						let _ = fs::remove_dir_all(&migrate_from);
+					}
+					Err(e) => error!("DB {} migration error: {:?}", env_name, e),
 				}
 			}
 		}
@@ -191,20 +204,27 @@ impl Store {
 	}
 
 	/// Migrate db from provided path to store environment.
-	fn migrate_to_default_env(&self, from_path: &Path) -> Result<(), Error> {
-		if !from_path.exists() {
-			return Ok(());
-		};
-		debug!("Migrating DB {} to {}", self.name, DEFAULT_ENV_NAME);
+	fn migrate_to_default_env(
+		&self,
+		from_name: Option<&str>,
+		from_path: &Path,
+	) -> Result<(), Error> {
+		debug!("Migrating DB {:?}", from_path);
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
-			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(1);
+			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(24);
 			env_options.open(from_path)?
 		};
+		let (resize, new_size) = needs_resize(&from_env, self.alloc_chunk_size);
+		if resize {
+			unsafe {
+				from_env.resize(new_size)?;
+				self.env.resize(new_size)?;
+			};
+		}
 		let db_from = {
 			let mut write = from_env.write_txn()?;
-			let db_name = self.name.as_str();
-			let db: Database<Bytes, Bytes> = from_env.create_database(&mut write, Some(db_name))?;
+			let db: Database<Bytes, Bytes> = from_env.create_database(&mut write, from_name)?;
 			write.commit()?;
 			db
 		};
@@ -212,27 +232,22 @@ impl Store {
 		let read_from = from_env.read_txn()?;
 		let mut count = 0;
 		for kv in db_from.iter(&read_from)? {
-			count += 1;
 			if let Ok((k, v)) = kv {
-				self.db.put(&mut write_to, &k, &v)?;
+				if k.contains(&PREFIX_KEY_SEPARATOR) {
+					let db_name = k.split_at(1).0;
+					let db = self.pre_dbs.get(&db_name[0]).unwrap();
+					let key = k.split_at(2).1;
+					db.put(&mut write_to, key, &v)?;
+					count += 1;
+				} else {
+					self.def_db.put(&mut write_to, k, &v)?;
+					count += 1;
+				}
 			}
 		}
 		write_to.commit()?;
-		debug!("Migrated {} records from DB {}", count, self.name);
+		debug!("Migrated {} records from DB {:?}", count, from_path);
 		Ok(())
-	}
-
-	/// Construct a new store using a specific protocol version.
-	/// Permits access to the db with legacy protocol versions for db migrations.
-	pub fn with_version(&self, version: ProtocolVersion) -> Store {
-		Store {
-			env: self.env.clone(),
-			env_path: self.env_path.clone(),
-			db: self.db.clone(),
-			name: self.name.clone(),
-			version,
-			alloc_chunk_size: self.alloc_chunk_size,
-		}
 	}
 
 	/// Protocol version for the store.
@@ -240,13 +255,28 @@ impl Store {
 		self.version
 	}
 
+	/// Get database from provided key or return default.
+	fn get_db(&self, db_key: Option<u8>) -> &Database<Bytes, Bytes> {
+		match db_key {
+			Some(db) => self.pre_dbs.get(&db).unwrap(),
+			None => &self.def_db,
+		}
+	}
+
 	/// Gets a value from the db, provided its key.
 	/// Deserializes the retrieved data using the provided function.
-	fn get_with<F, T>(&self, key: &[u8], read: &RoTxn, deserialize: F) -> Result<Option<T>, Error>
+	fn get_with<F, T>(
+		&self,
+		db_key: Option<u8>,
+		key: &[u8],
+		read: &RoTxn,
+		deserialize: F,
+	) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let res: Option<&[u8]> = self.db.get(read, key)?;
+		let db = self.get_db(db_key);
+		let res: Option<&[u8]> = db.get(read, key)?;
 		match res {
 			None => Ok(None),
 			Some(res) => deserialize(key, res).map(Some),
@@ -257,6 +287,7 @@ impl Store {
 	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
 	pub fn get_ser<T: ser::Readable>(
 		&self,
+		db_key: Option<u8>,
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
@@ -266,30 +297,35 @@ impl Store {
 		};
 		self.wait_for_resize();
 		let read = self.env.read_txn()?;
-		self.get_with(key, &read, |_, mut data| {
+		self.get_with(db_key, key, &read, |_, mut data| {
 			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
 		})
 	}
 
 	/// Whether the provided key exists.
-	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
 		self.wait_for_resize();
 		let read = self.env.read_txn()?;
-		let res = self.db.get(&read, key)?;
+		let db = self.get_db(db_key);
+		let res = db.get(&read, key)?;
 		Ok(res.is_some())
 	}
 
-	/// Produces an iterator from the provided key prefix.
-	pub fn iter<F, T>(&self, prefix: &[u8], deserialize: F) -> Result<PrefixIterator<F, T>, Error>
+	/// Produces an iterator from the provided db name.
+	pub fn iter<F, T>(
+		&self,
+		db_key: Option<u8>,
+		deserialize: F,
+	) -> Result<DatabaseIterator<F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
 		self.wait_for_resize();
 		let read = self.env.clone().static_read_txn()?;
-		Ok(PrefixIterator::new(
-			self.db.clone(),
+		let db = self.get_db(db_key);
+		Ok(DatabaseIterator::new(
+			Arc::new(db.clone()),
 			read,
-			prefix,
 			deserialize,
 		))
 	}
@@ -305,7 +341,7 @@ impl Store {
 			if !resizing {
 				break;
 			}
-			debug!("Wait on {}, resizing DB", self.name);
+			trace!("Wait on resizing DB {}", self.env_path);
 			thread::sleep(Duration::from_millis(100));
 		}
 	}
@@ -320,7 +356,7 @@ impl Store {
 				let mut w_res_map = res_map.write();
 				w_res_map.insert(self.env_path.clone(), true);
 			}
-			debug!("Start resizing {} DB", self.name);
+			debug!("Start resizing DB {}", self.env_path);
 			unsafe {
 				loop {
 					let batches_count =
@@ -330,7 +366,10 @@ impl Store {
 					if cur == &0 {
 						break;
 					}
-					debug!("Wait {} batches to complete", cur);
+					debug!(
+						"Wait {} batches to complete to resize DB {}",
+						cur, self.env_path
+					);
 					thread::sleep(Duration::from_millis(100));
 				}
 				self.env.resize(new_size)?;
@@ -339,7 +378,7 @@ impl Store {
 				let mut w_res_map = res_map.write();
 				w_res_map.insert(self.env_path.clone(), false);
 			}
-			debug!("End resizing {} DB", self.name);
+			debug!("End resizing DB {}", self.env_path);
 		}
 		Ok(())
 	}
@@ -385,15 +424,21 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Writes a single key/value pair to the db.
-	pub fn put(&mut self, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		self.store.db.put(&mut self.write, key, value)?;
+	pub fn put(&mut self, db_key: Option<u8>, key: &[u8], value: &[u8]) -> Result<(), Error> {
+		let db = self.store.get_db(db_key);
+		db.put(&mut self.write, key, value)?;
 		Ok(())
 	}
 
 	/// Writes a single key and its `Writeable` value to the db.
 	/// Encapsulates serialization using the (default) version configured on the store instance.
-	pub fn put_ser<W: ser::Writeable>(&mut self, key: &[u8], value: &W) -> Result<(), Error> {
-		self.put_ser_with_version(key, value, self.store.protocol_version())
+	pub fn put_ser<W: ser::Writeable>(
+		&mut self,
+		db_key: Option<u8>,
+		key: &[u8],
+		value: &W,
+	) -> Result<(), Error> {
+		self.put_ser_with_version(db_key, key, value, self.store.protocol_version())
 	}
 
 	/// Protocol version used by this batch.
@@ -405,46 +450,58 @@ impl<'a> Batch<'a> {
 	/// Encapsulates serialization using the specified protocol version.
 	pub fn put_ser_with_version<W: ser::Writeable>(
 		&mut self,
+		db_key: Option<u8>,
 		key: &[u8],
 		value: &W,
 		version: ProtocolVersion,
 	) -> Result<(), Error> {
 		let ser_value = ser::ser_vec(value, version);
 		match ser_value {
-			Ok(data) => self.put(key, &data),
+			Ok(data) => self.put(db_key, key, &data),
 			Err(err) => Err(err.into()),
 		}
 	}
 
 	/// Low-level access for retrieving data by key.
 	/// Takes a function for flexible deserialization.
-	fn get_with<F, T>(&self, key: &[u8], deserialize: F) -> Result<Option<T>, Error>
+	fn get_with<F, T>(
+		&self,
+		db_key: Option<u8>,
+		key: &[u8],
+		deserialize: F,
+	) -> Result<Option<T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
 		let read = self.write.nested_read_txn()?;
-		self.store.get_with(key, &read, deserialize)
+		self.store.get_with(db_key, key, &read, deserialize)
 	}
 
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
-	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
 		let read = self.write.nested_read_txn()?;
-		let res = self.store.db.get(&read, key)?;
+		let db = self.store.get_db(db_key);
+		let res = db.get(&read, key)?;
 		Ok(res.is_some())
 	}
 
-	/// Produces an iterator from the provided key prefix.
-	pub fn iter<F, T>(&self, prefix: &[u8], deserialize: F) -> Result<PrefixIterator<F, T>, Error>
+	/// Produces an iterator from the provided db key.
+	pub fn iter<F, T>(
+		&self,
+		db_key: Option<u8>,
+		deserialize: F,
+	) -> Result<DatabaseIterator<F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.store.iter(prefix, deserialize)
+		self.store.iter(db_key, deserialize)
 	}
 
 	/// Gets a `Readable` value from the db by provided key and provided deserialization strategy.
 	pub fn get_ser<T: ser::Readable>(
 		&self,
+		db_key: Option<u8>,
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
@@ -452,7 +509,7 @@ impl<'a> Batch<'a> {
 			Some(d) => d,
 			_ => DeserializationMode::default(),
 		};
-		self.get_with(key, |_, mut data| {
+		self.get_with(db_key, key, |_, mut data| {
 			match ser::deserialize(&mut data, self.protocol_version(), d) {
 				Ok(res) => Ok(res),
 				Err(e) => Err(From::from(e)),
@@ -461,8 +518,9 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Deletes a key/value pair from the db.
-	pub fn delete(&mut self, key: &[u8]) -> Result<(), Error> {
-		self.store.db.delete(&mut self.write, key)?;
+	pub fn delete(&mut self, db_key: Option<u8>, key: &[u8]) -> Result<(), Error> {
+		let db = self.store.get_db(db_key);
+		db.delete(&mut self.write, key)?;
 		Ok(())
 	}
 
@@ -488,9 +546,9 @@ impl<'a> Batch<'a> {
 	}
 }
 
-/// An iterator based on key prefix.
+/// An iterator based on db key.
 /// Caller is responsible for deserialization of the data.
-pub struct PrefixIterator<F, T>
+pub struct DatabaseIterator<F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -501,7 +559,7 @@ where
 	deserialize: F,
 }
 
-impl<F, T> Iterator for PrefixIterator<F, T>
+impl<F, T> Iterator for DatabaseIterator<F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -524,7 +582,7 @@ where
 	}
 }
 
-impl<F, T> PrefixIterator<F, T>
+impl<F, T> DatabaseIterator<F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -532,10 +590,9 @@ where
 	pub fn new(
 		db: Arc<Database<Bytes, Bytes>>,
 		read: RoTxn<'static, WithoutTls>,
-		prefix: &[u8],
 		deserialize: F,
-	) -> PrefixIterator<F, T> {
-		let keys = if let Ok(iter) = db.prefix_iter(&read, &prefix) {
+	) -> DatabaseIterator<F, T> {
+		let keys = if let Ok(iter) = db.iter(&read) {
 			iter.move_between_keys()
 				.filter(|kv| kv.is_ok())
 				.map(|kv| kv.unwrap().0.to_vec())
@@ -543,7 +600,7 @@ where
 		} else {
 			vec![]
 		};
-		PrefixIterator {
+		DatabaseIterator {
 			db,
 			read: Arc::new(read),
 			keys,

@@ -18,10 +18,11 @@ use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
 use crate::store::Batch;
 use crate::types::CommitPos;
 use crate::util::secp::pedersen::Commitment;
+use byteorder::{BigEndian, WriteBytesExt};
 use enum_primitive::FromPrimitive;
 use grin_store as store;
 use std::marker::PhantomData;
-use store::{to_key, to_key_u64, Error};
+use store::Error;
 
 enum_from_primitive! {
 	#[derive(Copy, Clone, Debug, PartialEq)]
@@ -74,28 +75,24 @@ pub trait ListIndex {
 	/// List entry type
 	type Entry: ListIndexEntry;
 
-	/// Construct a key for the list.
-	fn list_key(&self, commit: Commitment) -> Vec<u8>;
-
 	/// Construct a key for an individual entry in the list.
-	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8>;
+	fn entry_key(&self, commit: Commitment, pos: u64) -> (Option<u8>, Vec<u8>);
 
 	/// Returns either a "Single" with embedded "pos" or a "list" with "head" and "tail".
-	/// Key is "prefix|commit".
-	/// Note the key for an individual entry in the list is "prefix|commit|pos".
-	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
-		batch.db.get_ser(&self.list_key(commit), None)
-	}
+	/// Key is "commit".
+	/// Note the key for an individual entry in the list is "commit|pos".
+	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error>;
 
 	/// Returns one of "head", "tail" or "middle" entry variants.
-	/// Key is "prefix|commit|pos".
+	/// Key is "commit|pos".
 	fn get_entry(
 		&self,
 		batch: &Batch<'_>,
 		commit: Commitment,
 		pos: u64,
 	) -> Result<Option<Self::Entry>, Error> {
-		batch.db.get_ser(&self.entry_key(commit, pos), None)
+		let (db_key, key) = self.entry_key(commit, pos);
+		batch.db.get_ser(db_key, &key, None)
 	}
 
 	/// Peek the head of the list for the specified commitment.
@@ -243,16 +240,24 @@ where
 	type List = ListWrapper<T>;
 	type Entry = ListEntry<T>;
 
-	fn list_key(&self, commit: Commitment) -> Vec<u8> {
-		to_key(self.list_prefix, &mut commit.as_ref().to_vec())
+	fn entry_key(&self, commit: Commitment, pos: u64) -> (Option<u8>, Vec<u8>) {
+		let mut key = commit.as_ref().to_vec();
+		key.write_u64::<BigEndian>(pos).unwrap();
+		(Some(self.entry_prefix), key)
 	}
 
-	fn entry_key(&self, commit: Commitment, pos: u64) -> Vec<u8> {
-		to_key_u64(self.entry_prefix, &mut commit.as_ref().to_vec(), pos)
+	fn get_list(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<Self::List>, Error> {
+		let list_key = (Some(self.list_prefix), commit.as_ref());
+		batch
+			.db
+			.get_ser::<ListWrapper<T>>(list_key.0, list_key.1, None)
 	}
 
 	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
-		match self.get_list(batch, commit)? {
+		match batch
+			.db
+			.get_ser(Some(self.list_prefix), commit.as_ref(), None)?
+		{
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => Ok(Some(pos)),
 			Some(ListWrapper::Multi { head, .. }) => {
@@ -266,10 +271,11 @@ where
 	}
 
 	fn push_pos(&self, batch: &mut Batch<'_>, commit: Commitment, new_pos: T) -> Result<(), Error> {
+		let list_key = (Some(self.list_prefix), commit.as_ref());
 		match self.get_list(batch, commit)? {
 			None => {
 				let list = ListWrapper::Single { pos: new_pos };
-				batch.db.put_ser(&self.list_key(commit), &list)?;
+				batch.db.put_ser(list_key.0, list_key.1, &list)?;
 			}
 			Some(ListWrapper::Single { pos: current_pos }) => {
 				if new_pos.pos() <= current_pos.pos() {
@@ -288,13 +294,11 @@ where
 					head: new_pos.pos(),
 					tail: current_pos.pos(),
 				};
-				batch
-					.db
-					.put_ser(&self.entry_key(commit, new_pos.pos()), &head)?;
-				batch
-					.db
-					.put_ser(&self.entry_key(commit, current_pos.pos()), &tail)?;
-				batch.db.put_ser(&self.list_key(commit), &list)?;
+				let (new_pos_db_key, new_pos_key) = self.entry_key(commit, new_pos.pos());
+				batch.db.put_ser(new_pos_db_key, &new_pos_key, &head)?;
+				let (cur_pos_db_key, cur_pos_key) = self.entry_key(commit, current_pos.pos());
+				batch.db.put_ser(cur_pos_db_key, &cur_pos_key, &tail)?;
+				batch.db.put_ser(list_key.0, list_key.1, &list)?;
 			}
 			Some(ListWrapper::Multi { head, tail }) => {
 				if new_pos.pos() <= head {
@@ -319,13 +323,11 @@ where
 						head: new_pos.pos(),
 						tail,
 					};
-					batch
-						.db
-						.put_ser(&self.entry_key(commit, new_pos.pos()), &head)?;
-					batch
-						.db
-						.put_ser(&self.entry_key(commit, current_pos.pos()), &middle)?;
-					batch.db.put_ser(&self.list_key(commit), &list)?;
+					let (new_pos_db_key, new_pos_key) = self.entry_key(commit, new_pos.pos());
+					batch.db.put_ser(new_pos_db_key, &new_pos_key, &head)?;
+					let (cur_pos_db_key, cur_pos_key) = self.entry_key(commit, current_pos.pos());
+					batch.db.put_ser(cur_pos_db_key, &cur_pos_key, &middle)?;
+					batch.db.put_ser(list_key.0, list_key.1, &list)?;
 				} else {
 					return Err(Error::OtherErr("expected head to be head variant".into()));
 				}
@@ -338,10 +340,11 @@ where
 	/// Returns the output_pos.
 	/// Returns None if list was empty.
 	fn pop_pos(&self, batch: &mut Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+		let list_key = (Some(self.list_prefix), commit.as_ref());
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => {
-				batch.delete(&self.list_key(commit))?;
+				batch.delete(list_key.0, list_key.1)?;
 				Ok(Some(pos))
 			}
 			Some(ListWrapper::Multi { head, tail }) => {
@@ -357,17 +360,20 @@ where
 								head: pos.pos(),
 								tail,
 							};
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch
-								.db
-								.put_ser(&self.entry_key(commit, pos.pos()), &head)?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
+							let (cur_pos_db_key, cur_pos_key) =
+								self.entry_key(commit, current_pos.pos());
+							batch.delete(cur_pos_db_key, &cur_pos_key)?;
+							let (pos_db_key, pos_key) = self.entry_key(commit, current_pos.pos());
+							batch.db.put_ser(pos_db_key, &pos_key, &head)?;
+							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
 						}
 						Some(ListEntry::Tail { pos, .. }) => {
 							let list = ListWrapper::Single { pos };
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
+							let (cur_pos_db_key, cur_pos_key) =
+								self.entry_key(commit, current_pos.pos());
+							batch.delete(cur_pos_db_key, &cur_pos_key)?;
+							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
 						}
 						Some(_) => Err(Error::OtherErr("next was unexpected".into())),
@@ -404,14 +410,14 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 	fn clear(&self, batch: &mut Batch<'_>) -> Result<(), Error> {
 		let mut list_count = 0;
 		let mut entry_count = 0;
-		let prefix = to_key(self.list_prefix, "");
-		for key in batch.db.iter(&prefix, |k, _| Ok(k.to_vec()))? {
-			let _ = batch.delete(&key);
+		let list_db_key = Some(self.list_prefix);
+		for key in batch.db.iter(list_db_key, |k, _| Ok(k.to_vec()))? {
+			let _ = batch.delete(list_db_key, &key);
 			list_count += 1;
 		}
-		let prefix = to_key(self.entry_prefix, "");
-		for key in batch.db.iter(&prefix, |k, _| Ok(k.to_vec()))? {
-			let _ = batch.delete(&key);
+		let entry_db_key = Some(self.entry_prefix);
+		for key in batch.db.iter(entry_db_key, |k, _| Ok(k.to_vec()))? {
+			let _ = batch.delete(entry_db_key, &key);
 			entry_count += 1;
 		}
 		debug!(
@@ -436,10 +442,11 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 	/// Pop off the back/tail of the linked list.
 	/// Used when pruning old data.
 	fn pop_pos_back(&self, batch: &mut Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
+		let list_key = (Some(self.list_prefix), commit.as_ref());
 		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => {
-				batch.delete(&self.list_key(commit))?;
+				batch.delete(list_key.0, list_key.1)?;
 				Ok(Some(pos))
 			}
 			Some(ListWrapper::Multi { head, tail }) => {
@@ -455,17 +462,19 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 								head,
 								tail: pos.pos(),
 							};
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch
-								.db
-								.put_ser(&self.entry_key(commit, pos.pos()), &tail)?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
+							let (cur_pos_db_key, cur_pos_key) =
+								self.entry_key(commit, current_pos.pos());
+							batch.delete(cur_pos_db_key, &cur_pos_key)?;
+							let (pos_db_key, pos_key) = self.entry_key(commit, current_pos.pos());
+							batch.db.put_ser(pos_db_key, &pos_key, &tail)?;
+							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
 						}
 						Some(ListEntry::Head { pos, .. }) => {
 							let list = ListWrapper::Single { pos };
-							batch.delete(&self.entry_key(commit, current_pos.pos()))?;
-							batch.db.put_ser(&self.list_key(commit), &list)?;
+							let (pos_db_key, pos_key) = self.entry_key(commit, current_pos.pos());
+							batch.delete(pos_db_key, &pos_key)?;
+							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
 						}
 						Some(_) => Err(Error::OtherErr("prev was unexpected".into())),

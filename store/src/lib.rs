@@ -26,48 +26,13 @@ extern crate log;
 extern crate grin_core;
 extern crate grin_util as util;
 
-//use grin_core as core;
-
 pub mod leaf_set;
 pub mod lmdb;
 pub mod pmmr;
 pub mod prune_list;
 pub mod types;
 
-const SEP: u8 = b':';
-
-use byteorder::{BigEndian, WriteBytesExt};
-
 pub use crate::lmdb::*;
-
-/// Build a db key from a prefix and a byte vector identifier.
-pub fn to_key<K: AsRef<[u8]>>(prefix: u8, k: K) -> Vec<u8> {
-	let k = k.as_ref();
-	let mut res = Vec::with_capacity(k.len() + 2);
-	res.push(prefix);
-	res.push(SEP);
-	res.extend_from_slice(k);
-	res
-}
-
-/// Build a db key from a prefix and a byte vector identifier and numeric identifier
-pub fn to_key_u64<K: AsRef<[u8]>>(prefix: u8, k: K, val: u64) -> Vec<u8> {
-	let k = k.as_ref();
-	let mut res = Vec::with_capacity(k.len() + 10);
-	res.push(prefix);
-	res.push(SEP);
-	res.extend_from_slice(k);
-	res.write_u64::<BigEndian>(val).unwrap();
-	res
-}
-/// Build a db key from a prefix and a numeric identifier.
-pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
-	let mut res = Vec::with_capacity(10);
-	res.push(prefix);
-	res.push(SEP);
-	res.write_u64::<BigEndian>(val).unwrap();
-	res
-}
 
 use std::ffi::OsStr;
 use std::fs::{remove_file, rename, File};
@@ -75,13 +40,9 @@ use std::path::Path;
 
 /// Creates temporary file with name created by adding `temp_suffix` to `path`.
 /// Applies writer function to it and renames temporary file into original specified by `path`.
-pub fn save_via_temp_file<F, P, E>(
-	path: P,
-	temp_suffix: E,
-	mut writer: F,
-) -> Result<(), std::io::Error>
+pub fn save_via_temp_file<F, P, E>(path: P, temp_suffix: E, mut writer: F) -> Result<(), io::Error>
 where
-	F: FnMut(&mut File) -> Result<(), std::io::Error>,
+	F: FnMut(&mut File) -> Result<(), io::Error>,
 	P: AsRef<Path>,
 	E: AsRef<OsStr>,
 {

@@ -657,7 +657,7 @@ impl TxHashSet {
 					}
 				}
 			}
-			batch.delete(&key)?;
+			batch.delete(Some(store::OUTPUT_POS_PREFIX), &key)?;
 			removed_count += 1;
 		}
 		debug!(

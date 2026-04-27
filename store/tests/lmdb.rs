@@ -70,25 +70,26 @@ fn test_exists() -> Result<(), store::Error> {
 	let test_dir = "target/test_exists";
 	setup(test_dir);
 
-	let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+	let prefix = b'P';
+	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
 
 	// Start new batch and insert a new key/value entry.
 	let mut batch = store.batch()?;
-	batch.put(&key, &value)?;
+	batch.put(Some(prefix), &key, &value)?;
 
 	// Check we can see the new entry in uncommitted batch.
-	assert!(batch.exists(&key)?);
+	assert!(batch.exists(Some(prefix), &key)?);
 
 	// Check we cannot see the new entry yet outside of the uncommitted batch.
-	assert!(!store.exists(&key)?);
+	assert!(!store.exists(Some(prefix), &key)?);
 
 	batch.commit()?;
 
 	// Check we can see the new entry after committing the batch.
-	assert!(store.exists(&key)?);
+	assert!(store.exists(Some(prefix), &key)?);
 
 	clean_output_dir(test_dir);
 	Ok(())
@@ -99,14 +100,15 @@ fn test_iter() -> Result<(), store::Error> {
 	let test_dir = "target/test_iter";
 	setup(test_dir);
 
-	let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+	let prefix = b'P';
+	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
 
 	// Start new batch and insert a new key/value entry.
 	let mut batch = store.batch()?;
-	batch.put(&key, &value)?;
+	batch.put(Some(prefix), &key, &value)?;
 
 	// TODO - This is not currently possible (and we need to be aware of this).
 	// Currently our SerIterator is limited to using a ReadTransaction only.
@@ -117,13 +119,13 @@ fn test_iter() -> Result<(), store::Error> {
 	// assert_eq!(iter.next(), None);
 
 	// Check we can not yet see the new entry via an iterator outside the uncommitted batch.
-	let mut iter = store.iter(&[0], |_, v| Ok(v.to_vec()))?;
+	let mut iter = store.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;
 	assert_eq!(iter.next(), None);
 
 	batch.commit()?;
 
 	// Check we can see the new entry via an iterator after committing the batch.
-	let mut iter = store.iter(&[0], |_, v| Ok(v.to_vec()))?;
+	let mut iter = store.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;
 	assert_eq!(iter.next(), Some(value.to_vec()));
 	assert_eq!(iter.next(), None);
 
@@ -135,18 +137,18 @@ fn test_iter() -> Result<(), store::Error> {
 fn lmdb_allocate() -> Result<(), store::Error> {
 	let test_dir = "target/lmdb_allocate";
 	setup(test_dir);
+	let prefix = b'P';
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
 			let key_val = format!("phat_chunk_set_1_{}", i);
 			let mut batch = store.batch()?;
-			let key = store::to_key(b'P', &key_val);
-			batch.put_ser(&key, &chunk)?;
+			batch.put_ser(Some(prefix), key_val.as_bytes(), &chunk)?;
 			batch.commit()?;
 		}
 	}
@@ -155,14 +157,13 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
 			let key_val = format!("phat_chunk_set_2_{}", i);
 			let mut batch = store.batch()?;
-			let key = store::to_key(b'P', &key_val);
-			batch.put_ser(&key, &chunk)?;
+			batch.put_ser(Some(prefix), key_val.as_bytes(), &chunk)?;
 			batch.commit()?;
 		}
 	}
