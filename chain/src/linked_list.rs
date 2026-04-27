@@ -254,10 +254,7 @@ where
 	}
 
 	fn peek_pos(&self, batch: &Batch<'_>, commit: Commitment) -> Result<Option<T>, Error> {
-		match batch
-			.db
-			.get_ser(Some(self.list_prefix), commit.as_ref(), None)?
-		{
+		match self.get_list(batch, commit)? {
 			None => Ok(None),
 			Some(ListWrapper::Single { pos }) => Ok(Some(pos)),
 			Some(ListWrapper::Multi { head, .. }) => {
@@ -363,7 +360,7 @@ where
 							let (cur_pos_db_key, cur_pos_key) =
 								self.entry_key(commit, current_pos.pos());
 							batch.delete(cur_pos_db_key, &cur_pos_key)?;
-							let (pos_db_key, pos_key) = self.entry_key(commit, current_pos.pos());
+							let (pos_db_key, pos_key) = self.entry_key(commit, pos.pos());
 							batch.db.put_ser(pos_db_key, &pos_key, &head)?;
 							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
@@ -465,7 +462,7 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 							let (cur_pos_db_key, cur_pos_key) =
 								self.entry_key(commit, current_pos.pos());
 							batch.delete(cur_pos_db_key, &cur_pos_key)?;
-							let (pos_db_key, pos_key) = self.entry_key(commit, current_pos.pos());
+							let (pos_db_key, pos_key) = self.entry_key(commit, pos.pos());
 							batch.db.put_ser(pos_db_key, &pos_key, &tail)?;
 							batch.db.put_ser(list_key.0, list_key.1, &list)?;
 							Ok(Some(current_pos))
