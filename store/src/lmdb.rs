@@ -89,12 +89,16 @@ const DEFAULT_MULTI_DB_ENV_NAME: &'static str = "multi_lmdb";
 /// Prefix key separator.
 pub const PREFIX_KEY_SEPARATOR: u8 = b':';
 
-/// Mapping of database path to environment.
-static ENV_MAP: OnceLock<Arc<RwLock<HashMap<String, Env<WithoutTls>>>>> = OnceLock::new();
-/// Mapping of database path to count of active batches to wait before resizing.
-static ENV_BATCHES_COUNT: OnceLock<Arc<RwLock<HashMap<String, u32>>>> = OnceLock::new();
-/// Mapping of database path to check if database is resizing.
-static ENV_RESIZING: OnceLock<Arc<RwLock<HashMap<String, bool>>>> = OnceLock::new();
+/// Mapping of database path to environment state.
+static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
+
+/// State of active database environment.
+struct EnvState {
+	env: Env<WithoutTls>,
+	open_txs_count: u32,
+	resizing: bool,
+	resize_checking: bool,
+}
 
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
@@ -109,7 +113,7 @@ pub struct Store {
 
 impl Store {
 	/// Create a new LMDB env under the provided directory.
-	/// By default creates an environment named "multi_lmdb".
+	/// Creates default environment named "multi_lmdb".
 	/// Be aware of transactional semantics in lmdb
 	/// (transactions are per environment, not per database).
 	/// Data from non-default `env_name` and prefixes will be
@@ -139,7 +143,7 @@ impl Store {
 		};
 
 		// Environment setup.
-		let env_map = ENV_MAP.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
+		let env_map = ENV_MAP.get_or_init(|| RwLock::new(HashMap::new()));
 		let has_env = {
 			let r_env_map = env_map.read();
 			r_env_map.contains_key(&full_path)
@@ -161,12 +165,20 @@ impl Store {
 			}
 			debug!("DB Mapsize is {}", env.info().map_size);
 			let mut w_env_map = env_map.write();
-			w_env_map.insert(full_path.clone(), env);
+			w_env_map.insert(
+				full_path.clone(),
+				EnvState {
+					env,
+					open_txs_count: 0,
+					resizing: false,
+					resize_checking: false,
+				},
+			);
 		}
 
 		// Database setup.
 		let r_env_map = env_map.read();
-		let env = r_env_map.get(&full_path).unwrap();
+		let env = r_env_map.get(&full_path).unwrap().env.clone();
 		let mut write = env.write_txn()?;
 		let def_name = db_name.unwrap_or(DEFAULT_ENV_NAME);
 		let def_db = env.create_database(&mut write, Some(def_name))?;
@@ -203,7 +215,7 @@ impl Store {
 		Ok(s)
 	}
 
-	/// Migrate db from provided path to store environment.
+	/// Migrate database from provided path to default environment.
 	fn migrate_to_default_env(
 		&self,
 		from_name: Option<&str>,
@@ -250,6 +262,111 @@ impl Store {
 		Ok(())
 	}
 
+	/// Wait while database is resizing.
+	fn wait_for_resize(&self) {
+		loop {
+			if !ENV_MAP
+				.get()
+				.unwrap()
+				.read()
+				.get(&self.env_path)
+				.unwrap()
+				.resizing
+			{
+				break;
+			}
+			trace!("Wait on resizing DB {}", self.env_path);
+			thread::sleep(Duration::from_millis(100));
+		}
+	}
+
+	/// Resize database environment if needed.
+	fn maybe_resize(&self) {
+		self.wait_for_resize();
+
+		// Check only one resize per time.
+		if ENV_MAP
+			.get()
+			.unwrap()
+			.read()
+			.get(&self.env_path)
+			.unwrap()
+			.resize_checking
+		{
+			return;
+		} else {
+			ENV_MAP
+				.get()
+				.unwrap()
+				.write()
+				.get_mut(&self.env_path)
+				.unwrap()
+				.resize_checking = true;
+		}
+
+		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
+		if resize {
+			// Resize at another thread to not interrupt any tx waiting all txs to be closed.
+			let env_path = self.env_path.clone();
+			let env = self.env.clone();
+			thread::spawn(move || {
+				loop {
+					let txs_count = ENV_MAP
+						.get()
+						.unwrap()
+						.read()
+						.get(&env_path)
+						.unwrap()
+						.open_txs_count;
+					if txs_count == 0 {
+						debug!("Start resizing DB {}", env_path);
+						ENV_MAP
+							.get()
+							.unwrap()
+							.write()
+							.get_mut(&env_path)
+							.unwrap()
+							.resizing = true;
+						// Wait to make sure there are no more active txs left.
+						thread::sleep(Duration::from_millis(1000));
+						break;
+					}
+				}
+
+				unsafe {
+					match env.resize(new_size) {
+						Ok(_) => debug!("End resizing DB {}", env_path),
+						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
+					}
+				}
+
+				ENV_MAP
+					.get()
+					.unwrap()
+					.write()
+					.get_mut(&env_path)
+					.unwrap()
+					.resizing = false;
+				ENV_MAP
+					.get()
+					.unwrap()
+					.write()
+					.get_mut(&env_path)
+					.unwrap()
+					.resize_checking = false;
+			});
+			return;
+		}
+
+		ENV_MAP
+			.get()
+			.unwrap()
+			.write()
+			.get_mut(&self.env_path)
+			.unwrap()
+			.resize_checking = false;
+	}
+
 	/// Protocol version for the store.
 	pub fn protocol_version(&self) -> ProtocolVersion {
 		self.version
@@ -263,7 +380,7 @@ impl Store {
 		}
 	}
 
-	/// Gets a value from the db, provided its key.
+	/// Gets a value from the database, provided its key.
 	/// Deserializes the retrieved data using the provided function.
 	fn get_with<F, T>(
 		&self,
@@ -283,7 +400,7 @@ impl Store {
 		}
 	}
 
-	/// Gets a `Readable` value from the db, provided its key.
+	/// Gets a `Readable` value from the database, provided its key.
 	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
 	pub fn get_ser<T: ser::Readable>(
 		&self,
@@ -291,27 +408,48 @@ impl Store {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		let d = match deser_mode {
-			Some(d) => d,
-			_ => DeserializationMode::default(),
-		};
 		self.wait_for_resize();
-		let read = self.env.read_txn()?;
-		self.get_with(db_key, key, &read, |_, mut data| {
-			ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
-		})
+
+		TxCounter::on_change_tx_count(&self.env_path, true);
+		let res = {
+			let d = match deser_mode {
+				Some(d) => d,
+				_ => DeserializationMode::default(),
+			};
+			match self.env.read_txn() {
+				Ok(read) => self.get_with(db_key, key, &read, |_, mut data| {
+					ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
+				}),
+				Err(e) => Err(Error::from(e)),
+			}
+		};
+		TxCounter::on_change_tx_count(&self.env_path, false);
+		res
 	}
 
-	/// Whether the provided key exists.
+	/// Whether the key exists at the provided database key.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
 		self.wait_for_resize();
-		let read = self.env.read_txn()?;
-		let db = self.get_db(db_key);
-		let res = db.get(&read, key)?;
-		Ok(res.is_some())
+
+		TxCounter::on_change_tx_count(&self.env_path, true);
+		let res = {
+			match self.env.read_txn() {
+				Ok(read) => {
+					let db = self.get_db(db_key);
+					let res = db.get(&read, key);
+					match res {
+						Ok(r) => Ok(r.is_some()),
+						Err(e) => Err(Error::from(e)),
+					}
+				}
+				Err(e) => Err(Error::from(e)),
+			}
+		};
+		TxCounter::on_change_tx_count(&self.env_path, false);
+		res
 	}
 
-	/// Produces an iterator from the provided db name.
+	/// Produces an iterator from the provided database key.
 	pub fn iter<F, T>(
 		&self,
 		db_key: Option<u8>,
@@ -321,116 +459,93 @@ impl Store {
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
 		self.wait_for_resize();
-		let read = self.env.clone().static_read_txn()?;
-		let db = self.get_db(db_key);
-		Ok(DatabaseIterator::new(
-			Arc::new(db.clone()),
-			read,
-			deserialize,
-		))
-	}
 
-	/// Wait while DB is resizing.
-	fn wait_for_resize(&self) {
-		loop {
-			let resizing = {
-				let res_map = ENV_RESIZING.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
-				let r_res_map = res_map.read();
-				r_res_map.get(&self.env_path).map(|r| *r).unwrap_or(false)
-			};
-			if !resizing {
-				break;
+		TxCounter::on_change_tx_count(&self.env_path, true);
+		match self.env.clone().static_read_txn() {
+			Ok(read) => {
+				let db = self.get_db(db_key);
+				Ok(DatabaseIterator::new(
+					self,
+					Arc::new(db.clone()),
+					read,
+					deserialize,
+				))
 			}
-			trace!("Wait on resizing DB {}", self.env_path);
-			thread::sleep(Duration::from_millis(100));
+			Err(e) => {
+				TxCounter::on_change_tx_count(&self.env_path, false);
+				Err(Error::from(e))
+			}
 		}
-	}
-
-	/// Resize database environment if needed.
-	fn maybe_resize(&self) -> Result<(), Error> {
-		self.wait_for_resize();
-		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
-		if resize {
-			let res_map = ENV_RESIZING.get().unwrap();
-			{
-				let mut w_res_map = res_map.write();
-				w_res_map.insert(self.env_path.clone(), true);
-			}
-			debug!("Start resizing DB {}", self.env_path);
-			unsafe {
-				loop {
-					let batches_count =
-						ENV_BATCHES_COUNT.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
-					let batches = batches_count.read();
-					let cur = batches.get(&self.env_path).unwrap_or(&0);
-					if cur == &0 {
-						break;
-					}
-					debug!(
-						"Wait {} batches to complete to resize DB {}",
-						cur, self.env_path
-					);
-					thread::sleep(Duration::from_millis(100));
-				}
-				self.env.resize(new_size)?;
-			}
-			{
-				let mut w_res_map = res_map.write();
-				w_res_map.insert(self.env_path.clone(), false);
-			}
-			debug!("End resizing DB {}", self.env_path);
-		}
-		Ok(())
 	}
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
-		self.maybe_resize()?;
-		on_change_batches_count(&self.env_path, true);
-		Ok(Batch::new(self)?)
+		self.maybe_resize();
+
+		TxCounter::on_change_tx_count(&self.env_path, true);
+		match Batch::new(self) {
+			Ok(batch) => Ok(batch),
+			Err(e) => {
+				TxCounter::on_change_tx_count(&self.env_path, false);
+				Err(e)
+			}
+		}
 	}
 }
 
-/// Batches counter to decrement value on drop.
-struct BatchesCounter<'a> {
-	env_path: &'a String,
+/// Environment transactions counter, allows to decrement value on drop.
+struct TxCounter {
+	env_path: String,
 }
 
-impl Drop for BatchesCounter<'_> {
+impl Drop for TxCounter {
 	fn drop(&mut self) {
-		on_change_batches_count(&self.env_path, false);
+		Self::on_change_tx_count(&self.env_path, false);
 	}
 }
 
-/// Batch to write multiple Writeables to db in an atomic manner.
+impl TxCounter {
+	/// Increment or decrement active transactions count for current environment.
+	fn on_change_tx_count(env_path: &String, inc: bool) {
+		let mut w_env_map = ENV_MAP.get().unwrap().write();
+		let env_state = w_env_map.get_mut(env_path).unwrap();
+		if inc {
+			env_state.open_txs_count += 1;
+		} else {
+			env_state.open_txs_count -= 1;
+		}
+	}
+}
+
+/// Batch to write multiple Writeables to the database in an atomic manner.
 pub struct Batch<'a> {
 	store: &'a Store,
 	write: RwTxn<'a>,
 	#[allow(dead_code)]
-	counter: BatchesCounter<'a>,
+	tx_counter: TxCounter,
 }
 
 impl<'a> Batch<'a> {
-	/// Creates a new batch for provided db.
+	/// Creates a new batch for provided store.
 	pub fn new(store: &'a Store) -> Result<Batch<'a>, Error> {
 		let write = store.env.write_txn()?;
 		Ok(Batch {
 			store,
 			write,
-			counter: BatchesCounter {
-				env_path: &store.env_path,
+			tx_counter: TxCounter {
+				env_path: store.env_path.clone(),
 			},
 		})
 	}
 
-	/// Writes a single key/value pair to the db.
+	/// Writes a single key/value pair to the provided database key.
 	pub fn put(&mut self, db_key: Option<u8>, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		let db = self.store.get_db(db_key);
 		db.put(&mut self.write, key, value)?;
 		Ok(())
 	}
 
-	/// Writes a single key and its `Writeable` value to the db.
+	/// Writes a single key and its `Writeable` value to the provided database key.
 	/// Encapsulates serialization using the (default) version configured on the store instance.
 	pub fn put_ser<W: ser::Writeable>(
 		&mut self,
@@ -446,7 +561,7 @@ impl<'a> Batch<'a> {
 		self.store.protocol_version()
 	}
 
-	/// Writes a single key and its `Writeable` value to the db.
+	/// Writes a single key and its `Writeable` value to the provided database key.
 	/// Encapsulates serialization using the specified protocol version.
 	pub fn put_ser_with_version<W: ser::Writeable>(
 		&mut self,
@@ -486,7 +601,7 @@ impl<'a> Batch<'a> {
 		Ok(res.is_some())
 	}
 
-	/// Produces an iterator from the provided db key.
+	/// Produces an iterator from the provided database key.
 	pub fn iter<F, T>(
 		&self,
 		db_key: Option<u8>,
@@ -498,7 +613,7 @@ impl<'a> Batch<'a> {
 		self.store.iter(db_key, deserialize)
 	}
 
-	/// Gets a `Readable` value from the db by provided key and provided deserialization strategy.
+	/// Gets a `Readable` value from the database by provided key and deserialization strategy.
 	pub fn get_ser<T: ser::Readable>(
 		&self,
 		db_key: Option<u8>,
@@ -517,14 +632,14 @@ impl<'a> Batch<'a> {
 		})
 	}
 
-	/// Deletes a key/value pair from the db.
+	/// Deletes a key/value pair from the database.
 	pub fn delete(&mut self, db_key: Option<u8>, key: &[u8]) -> Result<(), Error> {
 		let db = self.store.get_db(db_key);
 		db.delete(&mut self.write, key)?;
 		Ok(())
 	}
 
-	/// Writes the batch to db.
+	/// Writes the batch to database.
 	pub fn commit(self) -> Result<(), Error> {
 		self.write.commit()?;
 		Ok(())
@@ -533,20 +648,24 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
-		self.store.maybe_resize()?;
-		on_change_batches_count(&self.store.env_path, true);
-		let write = self.store.env.nested_write_txn(&mut self.write)?;
-		Ok(Batch {
-			store: self.store,
-			write,
-			counter: BatchesCounter {
-				env_path: &self.store.env_path,
-			},
-		})
+		TxCounter::on_change_tx_count(&self.store.env_path, true);
+		match self.store.env.nested_write_txn(&mut self.write) {
+			Ok(write) => Ok(Batch {
+				store: self.store,
+				write,
+				tx_counter: TxCounter {
+					env_path: self.store.env_path.clone(),
+				},
+			}),
+			Err(e) => {
+				TxCounter::on_change_tx_count(&self.store.env_path, false);
+				Err(Error::from(e))
+			}
+		}
 	}
 }
 
-/// An iterator based on db key.
+/// An iterator based on database key.
 /// Caller is responsible for deserialization of the data.
 pub struct DatabaseIterator<F, T>
 where
@@ -557,6 +676,8 @@ where
 	keys: Vec<Vec<u8>>,
 	skip: usize,
 	deserialize: F,
+	#[allow(dead_code)]
+	tx_counter: TxCounter,
 }
 
 impl<F, T> Iterator for DatabaseIterator<F, T>
@@ -588,6 +709,7 @@ where
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
+		store: &Store,
 		db: Arc<Database<Bytes, Bytes>>,
 		read: RoTxn<'static, WithoutTls>,
 		deserialize: F,
@@ -606,6 +728,9 @@ where
 			keys,
 			skip: 0,
 			deserialize,
+			tx_counter: TxCounter {
+				env_path: store.env_path.clone(),
+			},
 		}
 	}
 }
@@ -656,20 +781,4 @@ pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, us
 	}
 
 	(resize, new_size)
-}
-
-/// Increment or decrement active batches count for current environment.
-fn on_change_batches_count(env_path: &String, inc: bool) {
-	let batches_count = ENV_BATCHES_COUNT.get_or_init(|| Arc::new(RwLock::new(HashMap::new())));
-	let mut w_batches = batches_count.write();
-	let batches = w_batches.clone();
-	let count = {
-		let cur = batches.get(env_path).unwrap_or(&0);
-		if inc {
-			cur + 1
-		} else {
-			cur - 1
-		}
-	};
-	w_batches.insert(env_path.clone(), count);
 }
