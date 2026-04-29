@@ -262,6 +262,39 @@ impl Store {
 		Ok(())
 	}
 
+	/// Get number of active environment transactions.
+	fn open_txs_count(&self) -> u32 {
+		ENV_MAP
+			.get()
+			.unwrap()
+			.read()
+			.get(&self.env_path)
+			.unwrap()
+			.open_txs_count
+	}
+
+	/// Check if requirement for environment resize is checking.
+	fn resize_checking(&self) -> bool {
+		ENV_MAP
+			.get()
+			.unwrap()
+			.read()
+			.get(&self.env_path)
+			.unwrap()
+			.resize_checking
+	}
+
+	/// Set flag if requirement for environment resize is checking.
+	fn set_resize_checking(&self, resize_checking: bool) {
+		ENV_MAP
+			.get()
+			.unwrap()
+			.write()
+			.get_mut(&self.env_path)
+			.unwrap()
+			.resize_checking = resize_checking;
+	}
+
 	/// Wait while database is resizing.
 	fn wait_for_resize(&self) {
 		loop {
@@ -284,87 +317,75 @@ impl Store {
 	fn maybe_resize(&self) {
 		self.wait_for_resize();
 
-		// Check only one resize per time.
-		if ENV_MAP
-			.get()
-			.unwrap()
-			.read()
-			.get(&self.env_path)
-			.unwrap()
-			.resize_checking
-		{
+		// Check only one resize requirement per time to avoid multiple resizes.
+		if self.resize_checking() {
 			return;
 		} else {
-			ENV_MAP
-				.get()
-				.unwrap()
-				.write()
-				.get_mut(&self.env_path)
-				.unwrap()
-				.resize_checking = true;
+			self.set_resize_checking(true);
 		}
 
 		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
 		if resize {
-			// Resize at another thread to not interrupt any tx waiting all txs to be closed.
 			let env_path = self.env_path.clone();
 			let env = self.env.clone();
-			thread::spawn(move || {
-				loop {
-					let txs_count = ENV_MAP
-						.get()
-						.unwrap()
-						.read()
-						.get(&env_path)
-						.unwrap()
-						.open_txs_count;
-					if txs_count == 0 {
-						debug!("Start resizing DB {}", env_path);
-						ENV_MAP
+
+			// Resize immediately or at another thread to not interrupt current
+			// transaction waiting all open transactions to be closed.
+			if self.open_txs_count() != 0 {
+				thread::spawn(move || {
+					loop {
+						let txs_count = ENV_MAP
 							.get()
 							.unwrap()
-							.write()
-							.get_mut(&env_path)
+							.read()
+							.get(&env_path)
 							.unwrap()
-							.resizing = true;
-						// Wait to make sure there are no more active txs left.
-						thread::sleep(Duration::from_millis(1000));
-						break;
+							.open_txs_count;
+						if txs_count == 0 {
+							debug!("Start resizing DB {}", env_path);
+							ENV_MAP
+								.get()
+								.unwrap()
+								.write()
+								.get_mut(&env_path)
+								.unwrap()
+								.resizing = true;
+							// Wait to make sure there are no more active txs left.
+							thread::sleep(Duration::from_millis(1000));
+							break;
+						}
 					}
-				}
 
+					unsafe {
+						match env.resize(new_size) {
+							Ok(_) => debug!("End resizing DB {}", env_path),
+							Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
+						}
+					}
+
+					let mut w_env_map = ENV_MAP.get().unwrap().write();
+					let env_state = w_env_map.get_mut(&env_path).unwrap();
+					env_state.resizing = false;
+					env_state.resize_checking = false;
+				});
+				return;
+			} else {
+				let mut w_env_map = ENV_MAP.get().unwrap().write();
+				let env_state = w_env_map.get_mut(&env_path).unwrap();
+
+				debug!("Start immediate resizing DB {}", env_path);
+				env_state.resizing = true;
 				unsafe {
 					match env.resize(new_size) {
 						Ok(_) => debug!("End resizing DB {}", env_path),
 						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
 					}
 				}
-
-				ENV_MAP
-					.get()
-					.unwrap()
-					.write()
-					.get_mut(&env_path)
-					.unwrap()
-					.resizing = false;
-				ENV_MAP
-					.get()
-					.unwrap()
-					.write()
-					.get_mut(&env_path)
-					.unwrap()
-					.resize_checking = false;
-			});
-			return;
+				env_state.resizing = false;
+			}
 		}
 
-		ENV_MAP
-			.get()
-			.unwrap()
-			.write()
-			.get_mut(&self.env_path)
-			.unwrap()
-			.resize_checking = false;
+		self.set_resize_checking(false);
 	}
 
 	/// Protocol version for the store.
