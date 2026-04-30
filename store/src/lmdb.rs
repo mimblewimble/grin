@@ -98,6 +98,7 @@ struct EnvState {
 	open_txs_count: u32,
 	resizing: bool,
 	resize_checking: bool,
+	stores_count: u32,
 }
 
 /// LMDB-backed store facilitating data access and serialization. All writes
@@ -109,6 +110,29 @@ pub struct Store {
 	def_db: Database<Bytes, Bytes>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
+}
+
+impl Drop for Store {
+	fn drop(&mut self) {
+		{
+			let mut w_map = ENV_MAP.get().unwrap().write();
+			w_map.get_mut(&self.env_path).unwrap().stores_count -= 1;
+		}
+		let no_stores = {
+			ENV_MAP
+				.get()
+				.unwrap()
+				.read()
+				.get(&self.env_path)
+				.unwrap()
+				.stores_count
+				== 0
+		};
+		if no_stores {
+			let mut w_map = ENV_MAP.get().unwrap().write();
+			w_map.remove(&self.env_path);
+		}
+	}
 }
 
 impl Store {
@@ -172,8 +196,12 @@ impl Store {
 					open_txs_count: 0,
 					resizing: false,
 					resize_checking: false,
+					stores_count: 1,
 				},
 			);
+		} else {
+			let mut w_env_map = env_map.write();
+			w_env_map.get_mut(&full_path).unwrap().stores_count += 1;
 		}
 
 		// Database setup.
