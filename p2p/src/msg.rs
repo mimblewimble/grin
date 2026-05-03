@@ -40,8 +40,19 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use std::{fmt, thread, time::Duration};
 
+// include build information
+pub mod built_info {
+	include!(concat!(env!("OUT_DIR"), "/built.rs"));
+}
+
 /// Grin's user agent with current version
-pub const USER_AGENT: &str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION"));
+pub fn user_agent() -> String {
+	format!(
+		"MW/Grim {}{}",
+		env!("CARGO_PKG_VERSION"),
+		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "+".to_owned(), |v| ".".to_owned() + v)
+	)
+}
 
 /// Magic numbers expected in the header of every message
 const OTHER_MAGIC: [u8; 2] = [73, 43];
