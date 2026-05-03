@@ -90,7 +90,7 @@ fn peer_handshake() {
 	.unwrap();
 
 	let git_hash =
-		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "+".to_owned(), |v| ".".to_owned() + v);
+		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "".to_owned(), |v| ".".to_owned() + v);
 	assert!(peer
 		.info
 		.user_agent

@@ -50,7 +50,7 @@ pub fn user_agent() -> String {
 	format!(
 		"MW/Grim {}{}",
 		env!("CARGO_PKG_VERSION"),
-		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "+".to_owned(), |v| ".".to_owned() + v)
+		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "".to_owned(), |v| ".".to_owned() + v)
 	)
 }
 
