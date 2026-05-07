@@ -48,7 +48,7 @@ pub mod built_info {
 /// Grin's user agent with current version
 pub fn user_agent() -> String {
 	format!(
-		"MW/Grim {}{}",
+		"MW/Grin {}{}",
 		env!("CARGO_PKG_VERSION"),
 		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "".to_owned(), |v| ".".to_owned() + v)
 	)
