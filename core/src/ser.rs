@@ -72,6 +72,8 @@ pub enum Error {
 	InvalidBlockVersion,
 	/// Unsupported protocol version
 	UnsupportedProtocolVersion,
+	/// PMMR segment size exceeds limits during deserialization
+	PMMRSegmentTooLarge(String),
 }
 
 impl From<io::Error> for Error {
@@ -102,6 +104,7 @@ impl fmt::Display for Error {
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
 			Error::UnsupportedProtocolVersion => f.write_str("unsupported protocol version"),
+			Error::PMMRSegmentTooLarge(ref e) => write!(f, "PMMR segment too large: {}", e),
 		}
 	}
 }
@@ -126,6 +129,7 @@ impl error::Error for Error {
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
 			Error::UnsupportedProtocolVersion => "unsupported protocol version",
+			Error::PMMRSegmentTooLarge(_) => "PMMR segment too large",
 		}
 	}
 }
