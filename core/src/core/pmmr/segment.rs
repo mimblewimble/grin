@@ -307,10 +307,11 @@ where
 	T: Readable + Writeable + Debug,
 {
 	/// Generate a segment from a PMMR
+	/// If bitmap is provided, only hashes at pruning boundaries are included.
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
 		pmmr: &ReadonlyPMMR<'_, U, B>,
-		prunable: bool,
+		bitmap: Option<&Bitmap>,
 	) -> Result<Self, SegmentError>
 	where
 		U: PMMRable<E = T>,
@@ -331,15 +332,40 @@ where
 					segment.leaf_data.push(data);
 					segment.leaf_pos.push(pos0);
 					continue;
-				} else if !prunable {
+				} else if bitmap.is_none() {
 					return Err(SegmentError::MissingLeaf(pos0));
 				}
 			}
-			// TODO: optimize, no need to send every intermediary hash
-			if prunable {
-				if let Some(hash) = pmmr.get_from_file(pos0) {
-					segment.hashes.push(hash);
-					segment.hash_pos.push(pos0);
+			if let Some(bm) = bitmap {
+				// Only include hash if this subtree is fully pruned
+				// AND the sibling subtree is NOT fully pruned (pruning boundary)
+				if subtree_fully_pruned(pos0, bm, mmr_size) {
+					// Find sibling position
+					let height = pmmr::bintree_postorder_height(pos0);
+					let subtree_size = (1u64 << (height + 1)) - 1;
+					let sibling_pos0 = if pmmr::is_left_sibling(pos0) {
+						// Right sibling is at pos0 + size of this subtree
+						Some(pos0 + subtree_size)
+					} else {
+						// Left sibling: go back by sibling's subtree size
+						pos0.checked_sub(subtree_size)
+					};
+					// Need hash if sibling exists in segment and is not fully pruned
+					let need_hash = match sibling_pos0 {
+						Some(sib) if sib >= segment_first_pos && sib <= segment_last_pos => {
+							!subtree_fully_pruned(sib, bm, mmr_size)
+						}
+						_ => {
+							// Sibling outside segment or underflow - may need hash for proof
+							true
+						}
+					};
+					if need_hash {
+						if let Some(hash) = pmmr.get_from_file(pos0) {
+							segment.hashes.push(hash);
+							segment.hash_pos.push(pos0);
+						}
+					}
 				}
 			}
 		}
@@ -841,4 +867,15 @@ impl Writeable for SegmentProof {
 		}
 		Ok(())
 	}
+}
+
+/// Check if a subtree rooted at pos0 is fully pruned (no unspent leaves in bitmap)
+fn subtree_fully_pruned(pos0: u64, bitmap: &Bitmap, mmr_size: u64) -> bool {
+	let leftmost = pmmr::bintree_leftmost(pos0);
+	let rightmost = pmmr::bintree_rightmost(pos0);
+	let n_leaves = pmmr::n_leaves(mmr_size);
+	let start_leaf = pmmr::n_leaves(leftmost + 1).saturating_sub(1);
+	let end_leaf = min(pmmr::n_leaves(rightmost + 1), n_leaves);
+	// If any leaf in range is in bitmap (unspent), subtree is not fully pruned
+	bitmap.range_cardinality(start_leaf as u32..end_leaf as u32) == 0
 }
