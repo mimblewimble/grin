@@ -361,6 +361,11 @@ impl ProtocolVersion {
 		PROTOCOL_VERSION
 	}
 
+	/// Default implementation that returns the current protocol version
+	pub fn default() -> ProtocolVersion {
+		PROTOCOL_VERSION
+	}
+
 	/// We need to specify a protocol version for our local database.
 	/// Regardless of specific version used when sending/receiving data between peers
 	/// we need to take care with serialization/deserialization of data locally in the db.
