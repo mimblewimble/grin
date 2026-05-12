@@ -12,7 +12,18 @@ More documentation or updates/fixes to existing documentation are also very welc
 
 We generally prefer you to PR your work earlier rather than later. This ensures everyone else has a better idea of what's being worked on, and can help reduce wasted effort. If work on your PR has just begun, please feel free to create the PR with [WIP] (work in progress) in the PR title, and let us know when it's ready for review in the comments.
 
-Since mainnet has been released, the bar for having PRs accepted has been raised. Before submitting your PR for approval, please be ensure it:
+All changes should first be submitted against the `staging` branch and follow the PR rules below. The `staging` branch is tested by the community before changes are merged into `master` by an admin when appropriate.
+
+```text
+Contributor branch
++-- Pull request
+    +-- staging branch
+        +-- testing (community)
+            +-- Admin merge
+                +-- master
+```
+
+Since mainnet has been released, the bar for having PRs accepted has been raised. Before submitting your PR for approval, please ensure it:
 * Includes a proper description of what problems the PR addresses, as well as a detailed explanation as to what it changes
 * Explains whether/how the change is consensus breaking or breaks existing client functionality
 * Contains unit tests exercising new/changed functionality
@@ -26,23 +37,20 @@ The development team will be happy to help and guide you with any of these point
 
 # Find Us
 
-When you are starting to contribute to grin, we really would appreciate if you come by the gitter chat channels.
+When you are starting to contribute to grin, we really would appreciate if you come by one of the community channels.
 
-In case of problems with trying out grin, before starting to contribute, there's the [grincoin#support](https://keybase.io/team/grincoin) on Keybase. Write there about what you've done, what you want to do, and maybe paste logs through a text paste webservice.
-
-* Please [join the grincoin#general  on Keybase](https://keybase.io/team/grincoin) to get a feeling for the community.
-* And see the developers chat channel [grincoin#dev  on Keybase](https://keybase.io/team/grincoin) if you have questions about source code files.
-  If you explain what you're looking at and what you want to do, we'll try to help you along the way.
+* Join the development discussion on [Telegram](https://t.me/grindevelopment).
+* Join the [grincoin team on Keybase](https://keybase.io/team/grincoin) for community and support channels.
+* Join the discussion on the [Forum](https://forum.grin.mw).
 * See `docs/*.md` and the folder structure explanations, [the wiki](https://github.com/mimblewimble/docs/wiki) and the official [Grin documentation](https://docs.grin.mw/).
-* Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [Reddit/grincoin](https://www.reddit.com/r/grincoin/) and a (mostly unfiltered!) Twitter bot that collects headlines, mailing list posts, and reddit posts related to Mimblewimble/Grin: [@grinmw](https://twitter.com/grinmw)
 
 ## Testing
 
-Run all tests with `cargo test --all` and please remember to test locally before creating a PR on github.
+Run all tests with `cargo test --all` and please remember to test locally before creating a PR against `staging`.
 
-### Check Travis output
+### Check CI output
 
-After creating a PR on github, the code will be tested automatically by Travis CI, and from the results you'll get a red or green light. The test can take a while, and you'll have a "yellow traffic light" on your PR until Travis CI is done testing.
+After creating a PR, the code will be tested automatically by CI. The test can take a while, and your PR may remain pending until CI is done testing.
 
 ### Building quality
 
