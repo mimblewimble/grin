@@ -2,7 +2,7 @@ name: Build and Push to GHCR
 
 on:
   push:
-    branches: [master]
+    branches: [master, staging]
 
 env:
   GHCR_IMAGE: ghcr.io/${{ secrets.GHCR_USERNAME }}/${{ github.event.repository.name }}
@@ -98,7 +98,15 @@ jobs:
 
       - name: Generate image tag
         id: vars
-        run: echo "tag=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)" >> $GITHUB_OUTPUT
+        run: |
+          version=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)
+          if ${{ github.ref_name == 'master' }}; then
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "version=${version}-staging" >> $GITHUB_OUTPUT
+            echo "tag=staging" >> $GITHUB_OUTPUT
+          fi
 
       - name: Docker meta
         id: meta
@@ -106,8 +114,8 @@ jobs:
         with:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
+            type=raw,value=${{ steps.vars.outputs.version }},enable=true
             type=raw,value=${{ steps.vars.outputs.tag }},enable=true
-            type=raw,value=latest,enable=true
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
