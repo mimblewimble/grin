@@ -23,6 +23,24 @@ Contributor branch
                 +-- master
 ```
 
+## Creating a Pull Request
+
+Create your work on a dedicated branch based on the latest `staging` branch.
+
+```sh
+git checkout staging
+git pull
+git checkout -b my-change
+```
+
+Fork the Grin repository and add your fork as a git remote.
+
+```sh
+git remote add my-fork <your-fork-url>
+```
+
+Push your branch to your fork and open a GitHub pull request from your fork's branch into the Grin repository's `staging` branch. You can do this through the GitHub web interface.
+
 Since mainnet has been released, the bar for having PRs accepted has been raised. Before submitting your PR for approval, please ensure it:
 * Includes a proper description of what problems the PR addresses, as well as a detailed explanation as to what it changes
 * Explains whether/how the change is consensus breaking or breaks existing client functionality
