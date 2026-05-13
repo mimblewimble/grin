@@ -8,6 +8,7 @@ repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
 edition = "2018"
+build = "src/build/build.rs"
 
 [dependencies]
 bitflags = "1"
@@ -29,3 +30,6 @@ grin_chain = { path = "../chain", version = "5.4.1" }
 
 [dev-dependencies]
 grin_pool = { path = "../pool", version = "5.4.1" }
+
+[build-dependencies]
+built = { version = "0.8.0", features = ["git2"]}

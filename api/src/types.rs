@@ -95,7 +95,7 @@ impl Status {
 		Status {
 			chain: global::get_chain_type().shortname(),
 			protocol_version: ser::ProtocolVersion::local().into(),
-			user_agent: p2p::msg::USER_AGENT.to_string(),
+			user_agent: p2p::msg::user_agent().to_string(),
 			connections: connections,
 			tip: Tip::from_tip(current_tip),
 			sync_status,
