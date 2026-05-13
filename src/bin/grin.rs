@@ -55,7 +55,7 @@ pub fn info_strings() -> (String, String) {
 		format!(
 			"This is Grin version {}{}, built for {} by {}.",
 			built_info::PKG_VERSION,
-			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
+			built_info::GIT_COMMIT_HASH.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
 		),
