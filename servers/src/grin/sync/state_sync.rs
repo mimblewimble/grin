@@ -413,13 +413,13 @@ impl StateSync {
 				.and_then(|(_, addr)| *addr);
 			let peer = available_pibd_peers()
 				.outbound()
-				.non_blocked()
+				.with_filter(|p| !peers.is_blocked(p.info.addr))
 				.exclude(excluded_peer)
 				.choose_random()
 				.or_else(|| {
 					available_pibd_peers()
 						.inbound()
-						.non_blocked()
+						.with_filter(|p| !peers.is_blocked(p.info.addr))
 						.exclude(excluded_peer)
 						.choose_random()
 						.or_else(|| {
