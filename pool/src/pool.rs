@@ -402,9 +402,7 @@ where
 					// Otherwise discard and let the next block pick this tx up.
 					let bucket = &tx_buckets[pos];
 
-					if let Ok(new_bucket) =
-						bucket.aggregate_with_tx(entry.tx.clone(), weighting)
-					{
+					if let Ok(new_bucket) = bucket.aggregate_with_tx(entry.tx.clone(), weighting) {
 						if new_bucket.fee_rate >= bucket.fee_rate {
 							// Only aggregate if it would not reduce the fee_rate ratio.
 							tx_buckets[pos] = new_bucket;
