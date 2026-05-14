@@ -29,3 +29,6 @@ grin_chain = { path = "../chain", version = "5.4.0" }
 
 [dev-dependencies]
 grin_pool = { path = "../pool", version = "5.4.0" }
+
+[build-dependencies]
+built = { version = "0.8.0", features = ["git2"]}
