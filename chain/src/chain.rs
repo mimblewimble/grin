@@ -1439,7 +1439,8 @@ impl Chain {
 			0
 		} else {
 			self.get_header_by_height(start_block_height - 1)?
-				.output_mmr_size + 1
+				.output_mmr_size
+				+ 1
 		};
 		let end_mmr_size = self.get_header_by_height(end_block_height)?.output_mmr_size;
 		Ok((start_mmr_size, end_mmr_size))

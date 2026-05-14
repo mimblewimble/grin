@@ -1,7 +1,7 @@
 [package]
 name = "grin_gen_gen"
 version = "0.0.1"
-edition = "2018"
+edition = "2021"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Utility to automate the generation of Grin's genesis block"
 license = "Apache-2.0"
