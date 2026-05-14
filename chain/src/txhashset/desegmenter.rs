@@ -585,7 +585,7 @@ impl Desegmenter {
 
 		// Explicitly add segment identifier to request if not exists.
 		let mut maybe_add_to_request = |seg_id: SegmentTypeIdentifier| {
-			if return_vec.iter().any(|i| i == &seg_id) {
+			if !return_vec.iter().any(|i| i == &seg_id) {
 				if return_vec.len() >= max_elements {
 					return_vec.pop();
 				}
