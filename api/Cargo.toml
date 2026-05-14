@@ -7,7 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 easy-jsonrpc-mw = "0.5.4"

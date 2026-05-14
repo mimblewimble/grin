@@ -3,7 +3,7 @@ name = "grin_core-fuzz"
 version = "0.0.3"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 publish = false
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 libfuzzer-sys = "0.4.0"
