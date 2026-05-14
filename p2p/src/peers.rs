@@ -45,6 +45,7 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
+	blocked: RwLock<HashMap<PeerAddr, (DateTime<Utc>, u32)>>,
 	config: P2PConfig,
 }
 
@@ -55,6 +56,7 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
+			blocked: RwLock::new(HashMap::new()),
 		}
 	}
 
@@ -450,32 +452,55 @@ impl Peers {
 		}
 	}
 
-	/// Temporary block a peer without banning it.
-	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
-		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
-			error!("block_peer: failed to get peers lock");
-			Error::PeerException
-		})?;
-		match peers.get(&peer_addr) {
-			None => Err(Error::PeerNotFound),
-			Some(peer) => {
-				warn!("blocking peer {} ({})", peer_addr, reason);
-				peer.set_blocked();
-				Ok(())
+	/// Whether this peer has been blocked.
+	pub fn is_blocked(&self, peer_addr: PeerAddr) -> bool {
+		match self.blocked.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => match peers.get(&peer_addr) {
+				None => false,
+				Some((expiry, _)) => expiry > &Utc::now(),
+			},
+			None => {
+				error!("is_blocked: failed to get peers lock");
+				false
 			}
 		}
 	}
 
-	/// Unblock blocked peers.
-	pub fn unblock_peers(&self) -> Result<(), Error> {
-		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
-			error!("unblock_peers: failed to get peers lock");
+	/// Temporary block a peer without banning it.
+	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("block_peer: failed to get blocked lock");
 			Error::PeerException
 		})?;
-		let peers = peers.iter().into_iter();
-		let _ = peers
-			.filter(|(_, peer)| peer.is_blocked())
-			.for_each(|(_, peer)| peer.unblock());
+
+		let times = {
+			match blocked.get(&peer_addr) {
+				Some((_, times)) => times + 1,
+				None => 1,
+			}
+		};
+		let duration = match times {
+			1 => 60,  // 1m
+			2 => 180, // 3m
+			_ => 600, // 10m
+		};
+		let expiry = Utc::now() + Duration::seconds(duration);
+		blocked.insert(peer_addr, (expiry, times));
+
+		warn!(
+			"state_sync: block peer {} ({}) for {} times: {}",
+			peer_addr, reason, duration, times
+		);
+		Ok(())
+	}
+
+	/// Unblock all blocked peers.
+	pub fn unblock_peers(&self) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("unblock_peers: failed to get blocked lock");
+			Error::PeerException
+		})?;
+		blocked.clear();
 		Ok(())
 	}
 
@@ -836,13 +861,6 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	pub fn exclude(self, addr: Option<SocketAddr>) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(move |p| Some(p.info.addr.0) != addr),
-		}
-	}
-
-	/// Filter non-blocked peers.
-	pub fn non_blocked(self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
-		PeersIter {
-			iter: self.iter.filter(|p| !p.is_blocked()),
 		}
 	}
 
