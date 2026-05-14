@@ -475,7 +475,7 @@ impl Peers {
 		let peers = peers.iter().into_iter();
 		let _ = peers
 			.filter(|(_, peer)| peer.is_blocked())
-			.map(|(_, peer)| peer.unblock());
+			.for_each(|(_, peer)| peer.unblock());
 		Ok(())
 	}
 
