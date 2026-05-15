@@ -18,6 +18,7 @@ use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use std::{fs, thread};
@@ -96,8 +97,8 @@ static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
 struct EnvState {
 	env: Env<WithoutTls>,
 	open_txs_count: u32,
-	resizing: bool,
-	resize_checking: bool,
+	resizing: AtomicBool,
+	resize_checking: AtomicBool,
 	stores_count: u32,
 }
 
@@ -194,8 +195,8 @@ impl Store {
 				EnvState {
 					env,
 					open_txs_count: 0,
-					resizing: false,
-					resize_checking: false,
+					resizing: AtomicBool::new(false),
+					resize_checking: AtomicBool::new(false),
 					stores_count: 1,
 				},
 			);
@@ -310,6 +311,7 @@ impl Store {
 			.get(&self.env_path)
 			.unwrap()
 			.resize_checking
+			.load(Ordering::Relaxed)
 	}
 
 	/// Set flag if requirement for environment resize is checking.
@@ -320,7 +322,8 @@ impl Store {
 			.write()
 			.get_mut(&self.env_path)
 			.unwrap()
-			.resize_checking = resize_checking;
+			.resize_checking
+			.store(resize_checking, Ordering::Relaxed);
 	}
 
 	/// Wait while database is resizing.
@@ -333,6 +336,7 @@ impl Store {
 				.get(&self.env_path)
 				.unwrap()
 				.resizing
+				.load(Ordering::Relaxed)
 			{
 				break;
 			}
@@ -377,7 +381,8 @@ impl Store {
 								.write()
 								.get_mut(&env_path)
 								.unwrap()
-								.resizing = true;
+								.resizing
+								.store(true, Ordering::Relaxed);
 							// Wait to make sure there are no more active txs left.
 							thread::sleep(Duration::from_millis(1000));
 							break;
@@ -393,8 +398,8 @@ impl Store {
 
 					let mut w_env_map = ENV_MAP.get().unwrap().write();
 					let env_state = w_env_map.get_mut(&env_path).unwrap();
-					env_state.resizing = false;
-					env_state.resize_checking = false;
+					env_state.resizing.store(false, Ordering::Relaxed);
+					env_state.resize_checking.store(false, Ordering::Relaxed);
 				});
 				return;
 			} else {
@@ -402,14 +407,14 @@ impl Store {
 				let env_state = w_env_map.get_mut(&env_path).unwrap();
 
 				debug!("Start immediate resizing DB {}", env_path);
-				env_state.resizing = true;
+				env_state.resizing.store(true, Ordering::Relaxed);
 				unsafe {
 					match env.resize(new_size) {
 						Ok(_) => debug!("End resizing DB {}", env_path),
 						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
 					}
 				}
-				env_state.resizing = false;
+				env_state.resizing.store(false, Ordering::Relaxed);
 			}
 		}
 
