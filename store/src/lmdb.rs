@@ -280,7 +280,7 @@ impl Store {
 			unsafe {
 				from_env.resize(new_size)?;
 				self.env.resize(new_size)?;
-			};
+			}
 		}
 		let db_from = {
 			let mut write = from_env.write_txn()?;
@@ -293,12 +293,15 @@ impl Store {
 		let mut count = 0;
 		for kv in db_from.iter(&read_from)? {
 			if let Ok((k, v)) = kv {
-				if k.contains(&PREFIX_KEY_SEPARATOR) {
+				if k.len() > 1 && k[1] == PREFIX_KEY_SEPARATOR {
 					let db_name = k.split_at(1).0;
-					let db = self.pre_dbs.get(&db_name[0]).unwrap();
-					let key = k.split_at(2).1;
-					db.put(&mut write_to, key, &v)?;
-					count += 1;
+					if let Some(db) = self.pre_dbs.get(&db_name[0]) {
+						let key = k.split_at(2).1;
+						db.put(&mut write_to, key, &v)?;
+						count += 1;
+					} else {
+						error!("Migration: unknown db key: {}", db_name[0]);
+					}
 				} else {
 					self.def_db.put(&mut write_to, k, &v)?;
 					count += 1;
