@@ -815,15 +815,20 @@ where
 		read: RoTxn<'static, WithoutTls>,
 		deserialize: F,
 	) -> DatabaseIterator<F, T> {
-		let total_keys = db.iter(&read).unwrap().count();
-		let keys = if let Ok(iter) = db.iter(&read) {
-			iter.move_between_keys()
-				.take(10000)
-				.filter(|kv| kv.is_ok())
-				.map(|kv| kv.unwrap().0.to_vec())
-				.collect::<Vec<Vec<u8>>>()
+		let (keys, total_keys) = if let Ok(iter) = db.iter(&read) {
+			let total = iter.move_between_keys().count();
+			let keys = if let Ok(iter) = db.iter(&read) {
+				iter.move_between_keys()
+					.take(10000)
+					.filter(|kv| kv.is_ok())
+					.map(|kv| kv.unwrap().0.to_vec())
+					.collect::<Vec<Vec<u8>>>()
+			} else {
+				vec![]
+			};
+			(keys, total)
 		} else {
-			vec![]
+			(vec![], 0)
 		};
 		DatabaseIterator {
 			db,
