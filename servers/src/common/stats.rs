@@ -48,6 +48,8 @@ impl Default for ServerStateInfo {
 /// consumers might be interested in, such as test results or UI
 #[derive(Debug, Clone)]
 pub struct ServerStats {
+	/// Server uptime in seconds
+	pub uptime_seconds: u64,
 	/// Number of peers
 	pub peer_count: u32,
 	/// Chain head

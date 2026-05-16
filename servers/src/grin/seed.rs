@@ -36,14 +36,16 @@ use crate::util::StopState;
 /// DNS Seeds with contacts associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
 	"mainnet-seed.grinnode.live", // info@grinnode.live
-	"grincoin.org",               // xmpp:aglkm@conversations.im
-	"main.gri.mw",                // admin@gri.mw
-	"mainnet.grinffindor.org",    // support@grinffindor.org
-	"main-seed.grin.money",       // support@grinily.com
+	"mainnet.fountainoffairfortune.it",
+	"grincoin.org",            // xmpp:aglkm@conversations.im
+	"main.gri.mw",             // admin@gri.mw
+	"mainnet.grinffindor.org", // support@grinffindor.org
+	"main-seed.grin.money",    // support@grinily.com
 ];
 /// DNS Seeds with contacts associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
-	"testnet.grincoin.org",    // xmpp:aglkm@conversations.im
+	"testnet.grincoin.org", // xmpp:aglkm@conversations.im
+	"testnet.fountainoffairfortune.it",
 	"test.gri.mw",             // admin@gri.mw
 	"testnet.grinffindor.org", // support@grinffindor.org
 	"test-seed.grin.money",    // support@grinily.com

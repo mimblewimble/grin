@@ -40,6 +40,9 @@ use crate::util::RwLock;
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
 
+/// Header segment height used for PIHD header segment requests.
+pub const PIHD_HEADER_SEGMENT_HEIGHT: u8 = 9;
+
 /// Maximum number of block bodies a peer should ever ask for and send
 #[allow(dead_code)]
 pub const MAX_BLOCK_BODIES: u32 = 16;
@@ -396,6 +399,8 @@ bitflags! {
 		const BLOCK_HIST = 0b0010_0000;
 		/// As above, with crucial serialization fix #3705 applied
 		const PIBD_HIST_1 = 0b0100_0000;
+		/// Can provide deterministic historical header segments.
+		const PIHD_HIST = 0b1000_0000;
 	}
 }
 
@@ -408,6 +413,7 @@ impl Default for Capabilities {
 			| Capabilities::TX_KERNEL_HASH
 			| Capabilities::PIBD_HIST
 			| Capabilities::PIBD_HIST_1
+			| Capabilities::PIHD_HIST
 	}
 }
 
@@ -547,6 +553,15 @@ pub struct TxHashSetRead {
 	pub reader: File,
 }
 
+/// Result of processing a PIHD header segment response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeaderSegmentAcceptance {
+	/// Segment was accepted or intentionally ignored.
+	Accepted,
+	/// Segment is malformed or invalid enough to justify banning the sender.
+	Ban,
+}
+
 /// Bridge between the networking layer and the rest of the system. Handles the
 /// forwarding or querying of blocks and transactions from the network among
 /// other things.
@@ -605,6 +620,13 @@ pub trait ChainAdapter: Sync + Send {
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error>;
+
+	/// Finds a deterministic header segment based on the provided segment identifier.
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error>;
 
 	/// Gets a full block by its hash.
 	/// Converts block to v2 compatibility if necessary (based on peer protocol version).
@@ -679,6 +701,7 @@ pub trait ChainAdapter: Sync + Send {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_output_segment(
@@ -686,19 +709,29 @@ pub trait ChainAdapter: Sync + Send {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error>;
 }
 
 /// Additional methods required by the protocol that don't need to be

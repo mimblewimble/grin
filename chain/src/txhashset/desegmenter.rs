@@ -140,6 +140,14 @@ impl Desegmenter {
 		self.bitmap_mmr_size
 	}
 
+	/// Lightweight applied leaf count for progress display.
+	pub fn applied_leaf_count(&self) -> u64 {
+		let txhashset = self.txhashset.read();
+		pmmr::n_leaves(txhashset.output_mmr_size())
+			+ pmmr::n_leaves(txhashset.rangeproof_mmr_size())
+			+ pmmr::n_leaves(txhashset.kernel_mmr_size())
+	}
+
 	/// Whether we have all the segments we need
 	pub fn is_complete(&self) -> bool {
 		self.all_segments_complete
@@ -593,22 +601,54 @@ impl Desegmenter {
 				}
 			}
 		}
-		// Always ensure we explicitly ask for the very next kernel segment we are waiting on.
-		// The regular round-robin above can get saturated with outputs and rangeproofs while
-		// the desegmenter is blocked on a missing kernel, so we force this one in.
-		if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
-			let seg_id = SegmentIdentifier {
-				height: self.default_kernel_segment_height,
-				idx: next_kernel_idx,
-			};
-			let next_kernel_seg_id = SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id);
-			if !self.has_kernel_segment_with_id(seg_id)
-				&& !return_vec.iter().any(|x| x == &next_kernel_seg_id)
-			{
-				if return_vec.len() >= max_elements {
-					return_vec.pop();
+		if self.bitmap_cache.is_some() {
+			// Always ensure we explicitly ask for the very next segment we are waiting on.
+			// The regular round-robin above can get saturated while the desegmenter is
+			// blocked on the next required segment, so we force these in.
+			if let Some(next_output_idx) = self.next_required_output_segment_index() {
+				let seg_id = SegmentIdentifier {
+					height: self.default_output_segment_height,
+					idx: next_output_idx,
+				};
+				let next_output_seg_id = SegmentTypeIdentifier::new(SegmentType::Output, seg_id);
+				if !self.has_output_segment_with_id(seg_id)
+					&& !return_vec.iter().any(|x| x == &next_output_seg_id)
+				{
+					if return_vec.len() >= max_elements {
+						return_vec.pop();
+					}
+					return_vec.push(next_output_seg_id);
 				}
-				return_vec.push(next_kernel_seg_id);
+			}
+			if let Some(next_rp_idx) = self.next_required_rangeproof_segment_index() {
+				let seg_id = SegmentIdentifier {
+					height: self.default_rangeproof_segment_height,
+					idx: next_rp_idx,
+				};
+				let next_rp_seg_id = SegmentTypeIdentifier::new(SegmentType::RangeProof, seg_id);
+				if !self.has_rangeproof_segment_with_id(seg_id)
+					&& !return_vec.iter().any(|x| x == &next_rp_seg_id)
+				{
+					if return_vec.len() >= max_elements {
+						return_vec.pop();
+					}
+					return_vec.push(next_rp_seg_id);
+				}
+			}
+			if let Some(next_kernel_idx) = self.next_required_kernel_segment_index() {
+				let seg_id = SegmentIdentifier {
+					height: self.default_kernel_segment_height,
+					idx: next_kernel_idx,
+				};
+				let next_kernel_seg_id = SegmentTypeIdentifier::new(SegmentType::Kernel, seg_id);
+				if !self.has_kernel_segment_with_id(seg_id)
+					&& !return_vec.iter().any(|x| x == &next_kernel_seg_id)
+				{
+					if return_vec.len() >= max_elements {
+						return_vec.pop();
+					}
+					return_vec.push(next_kernel_seg_id);
+				}
 			}
 		}
 		if return_vec.is_empty() && self.bitmap_cache.is_some() {
@@ -838,17 +878,20 @@ impl Desegmenter {
 			)
 		};
 
-		// When resuming, we need to ensure we're getting the previous segment if needed
-		let theoretical_pmmr_size =
-			SegmentIdentifier::pmmr_size(cur_segment_count, self.default_output_segment_height);
-		if local_output_mmr_size < theoretical_pmmr_size {
-			cur_segment_count -= 1;
-		}
-
 		let total_segment_count = SegmentIdentifier::count_segments_required(
 			self.archive_header.output_mmr_size,
 			self.default_output_segment_height,
 		);
+
+		// When resuming, we need to ensure we're getting the previous segment if needed.
+		// Do not apply this to the final partial segment once the target size is reached.
+		if total_segment_count != cur_segment_count {
+			let theoretical_pmmr_size =
+				SegmentIdentifier::pmmr_size(cur_segment_count, self.default_output_segment_height);
+			if local_output_mmr_size < theoretical_pmmr_size {
+				cur_segment_count -= 1;
+			}
+		}
 		trace!(
 			"Next required output segment is {} of {}",
 			cur_segment_count,
@@ -957,17 +1000,22 @@ impl Desegmenter {
 			)
 		};
 
-		// When resuming, we need to ensure we're getting the previous segment if needed
-		let theoretical_pmmr_size =
-			SegmentIdentifier::pmmr_size(cur_segment_count, self.default_rangeproof_segment_height);
-		if local_rangeproof_mmr_size < theoretical_pmmr_size {
-			cur_segment_count -= 1;
-		}
-
 		let total_segment_count = SegmentIdentifier::count_segments_required(
 			self.archive_header.output_mmr_size,
 			self.default_rangeproof_segment_height,
 		);
+
+		// When resuming, we need to ensure we're getting the previous segment if needed.
+		// Do not apply this to the final partial segment once the target size is reached.
+		if total_segment_count != cur_segment_count {
+			let theoretical_pmmr_size = SegmentIdentifier::pmmr_size(
+				cur_segment_count,
+				self.default_rangeproof_segment_height,
+			);
+			if local_rangeproof_mmr_size < theoretical_pmmr_size {
+				cur_segment_count -= 1;
+			}
+		}
 		trace!(
 			"Next required rangeproof segment is {} of {}",
 			cur_segment_count,
