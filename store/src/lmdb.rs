@@ -759,6 +759,8 @@ where
 	read: Arc<RoTxn<'static, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
 	skip: usize,
+	total_keys: usize,
+	skip_keys: usize,
 	deserialize: F,
 	#[allow(dead_code)]
 	tx_counter: TxCounter,
@@ -777,11 +779,26 @@ where
 				return match (self.deserialize)(k, v) {
 					Ok(v) => {
 						self.skip += 1;
+						self.skip_keys += 1;
 						Some(v)
 					}
 					Err(_) => None,
 				};
 			}
+		} else if self.total_keys > self.skip_keys {
+			let keys = if let Ok(iter) = self.db.iter(&self.read) {
+				iter.move_between_keys()
+					.skip(self.skip_keys)
+					.take(10000)
+					.filter(|kv| kv.is_ok())
+					.map(|kv| kv.unwrap().0.to_vec())
+					.collect::<Vec<Vec<u8>>>()
+			} else {
+				vec![]
+			};
+			self.skip = 0;
+			self.keys = keys;
+			return self.next();
 		}
 		None
 	}
@@ -798,8 +815,10 @@ where
 		read: RoTxn<'static, WithoutTls>,
 		deserialize: F,
 	) -> DatabaseIterator<F, T> {
+		let total_keys = db.iter(&read).unwrap().count();
 		let keys = if let Ok(iter) = db.iter(&read) {
 			iter.move_between_keys()
+				.take(10000)
 				.filter(|kv| kv.is_ok())
 				.map(|kv| kv.unwrap().0.to_vec())
 				.collect::<Vec<Vec<u8>>>()
@@ -810,6 +829,8 @@ where
 			db,
 			read: Arc::new(read),
 			keys,
+			total_keys,
+			skip_keys: 0,
 			skip: 0,
 			deserialize,
 			tx_counter: TxCounter {
