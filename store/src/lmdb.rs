@@ -277,6 +277,7 @@ impl Store {
 		};
 		let (resize, new_size) = needs_resize(&from_env, self.alloc_chunk_size);
 		if resize {
+			// We are sure there are no active txs, cause migration is called on database creation.
 			unsafe {
 				from_env.resize(new_size)?;
 				self.env.resize(new_size)?;
