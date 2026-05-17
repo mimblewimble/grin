@@ -126,7 +126,7 @@ fn test_iter() -> Result<(), store::Error> {
 
 	// Check we can see the new entry via an iterator after committing the batch.
 	let mut iter = store.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;
-	assert_eq!(iter.next(), Some(value.to_vec()));
+	assert_eq!(iter.next(), Some(Ok(value.to_vec())));
 	assert_eq!(iter.next(), None);
 
 	clean_output_dir(test_dir);
