@@ -644,21 +644,23 @@ impl TxHashSet {
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
 		let mut removed_count = 0;
-		for (key, pos1) in batch.output_pos_iter()? {
-			let pos0 = pos1.pos - 1;
-			if let Some(out) = output_pmmr.get_data(pos0) {
-				if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
-					// If the pos matches and the index key matches the commitment
-					// then keep the entry, other we want to clean it up.
-					if pos0 == pos0_via_mmr
-						&& batch.is_match_output_pos_key(&key, &out.commitment())
-					{
-						continue;
+		for kp in batch.output_pos_iter()? {
+			if let Ok((key, pos1)) = kp {
+				let pos0 = pos1.pos - 1;
+				if let Some(out) = output_pmmr.get_data(pos0) {
+					if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
+						// If the pos matches and the index key matches the commitment
+						// then keep the entry, other we want to clean it up.
+						if pos0 == pos0_via_mmr
+							&& batch.is_match_output_pos_key(&key, &out.commitment())
+						{
+							continue;
+						}
 					}
 				}
+				batch.delete(Some(store::OUTPUT_POS_PREFIX), &key)?;
+				removed_count += 1;
 			}
-			batch.delete(Some(store::OUTPUT_POS_PREFIX), &key)?;
-			removed_count += 1;
 		}
 		debug!(
 			"init_output_pos_index: removed {} stale index entries",

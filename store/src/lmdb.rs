@@ -770,35 +770,33 @@ impl<F, T> Iterator for DatabaseIterator<F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
-	type Item = T;
+	type Item = Result<T, Error>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if let Some(k) = self.keys.iter().skip(self.skip).next() {
-			let v = self.db.get(&self.read, k).unwrap_or(None);
-			if let Some(v) = v {
-				return match (self.deserialize)(k, v) {
-					Ok(v) => {
-						self.skip += 1;
-						self.skip_keys += 1;
-						Some(v)
+			match self.db.get(&self.read, k) {
+				Ok(v) => {
+					if let Some(v) = v {
+						return match (self.deserialize)(k, v) {
+							Ok(v) => {
+								self.skip += 1;
+								self.skip_keys += 1;
+								Some(Ok(v))
+							}
+							Err(e) => {
+								error!("db iter: error deserializing: {}", e);
+								Some(Err(Error::from(e)))
+							}
+						};
 					}
-					Err(_) => None,
-				};
+				}
+				Err(e) => {
+					return {
+						error!("db iter: error read value: {}", e);
+						Some(Err(Error::from(e)))
+					}
+				}
 			}
-		} else if self.total_keys > self.skip_keys {
-			let keys = if let Ok(iter) = self.db.iter(&self.read) {
-				iter.move_between_keys()
-					.skip(self.skip_keys)
-					.take(10000)
-					.filter(|kv| kv.is_ok())
-					.map(|kv| kv.unwrap().0.to_vec())
-					.collect::<Vec<Vec<u8>>>()
-			} else {
-				vec![]
-			};
-			self.skip = 0;
-			self.keys = keys;
-			return self.next();
 		}
 		None
 	}

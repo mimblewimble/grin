@@ -339,7 +339,9 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)>, Error> {
+	pub fn output_pos_iter(
+		&self,
+	) -> Result<impl Iterator<Item = Result<(Vec<u8>, CommitPos), Error>>, Error> {
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(Some(OUTPUT_POS_PREFIX), move |k, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
@@ -459,7 +461,7 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over all full blocks in the db.
 	/// Uses default db serialization strategy via db protocol version.
-	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Block> + 'a, Error> {
+	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Result<Block, Error>> + 'a, Error> {
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(Some(BLOCK_PREFIX), move |_, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
@@ -469,7 +471,9 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over raw data for full blocks in the db.
 	/// Used during block migration (we need flexibility around deserialization).
-	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)>, Error> {
+	pub fn blocks_raw_iter(
+		&self,
+	) -> Result<impl Iterator<Item = Result<(Vec<u8>, Vec<u8>), Error>>, Error> {
 		self.db
 			.iter(Some(BLOCK_PREFIX), |k, v| Ok((k.to_vec(), v.to_vec())))
 	}

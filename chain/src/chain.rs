@@ -1299,9 +1299,11 @@ impl Chain {
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
 		for block in batch.blocks_iter()? {
-			if block.header.height < tail.height {
-				let _ = batch.delete_block(&block.hash());
-				count += 1;
+			if let Ok(block) = block {
+				if block.header.height < tail.height {
+					let _ = batch.delete_block(&block.hash());
+					count += 1;
+				}
 			}
 		}
 

@@ -279,7 +279,10 @@ impl Peers {
 	pub fn all_peer_data(&self) -> Vec<PeerData> {
 		match self.store.iter_batch() {
 			Ok(batch) => match batch.peers_iter() {
-				Ok(iter) => iter.collect(),
+				Ok(iter) => iter
+					.filter(|p| p.is_ok())
+					.map(|p| p.ok().unwrap())
+					.collect(),
 				Err(e) => {
 					error!("failed to get all peer data: {:?}", e);
 					vec![]

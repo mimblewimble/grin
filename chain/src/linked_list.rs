@@ -409,13 +409,17 @@ impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 		let mut entry_count = 0;
 		let list_db_key = Some(self.list_prefix);
 		for key in batch.db.iter(list_db_key, |k, _| Ok(k.to_vec()))? {
-			let _ = batch.delete(list_db_key, &key);
-			list_count += 1;
+			if let Ok(key) = key {
+				let _ = batch.delete(list_db_key, &key);
+				list_count += 1;
+			}
 		}
 		let entry_db_key = Some(self.entry_prefix);
 		for key in batch.db.iter(entry_db_key, |k, _| Ok(k.to_vec()))? {
-			let _ = batch.delete(entry_db_key, &key);
-			entry_count += 1;
+			if let Ok(key) = key {
+				let _ = batch.delete(entry_db_key, &key);
+				entry_count += 1;
+			}
 		}
 		debug!(
 			"clear: lists deleted: {}, entries deleted: {}",

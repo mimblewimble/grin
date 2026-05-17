@@ -195,7 +195,7 @@ pub struct PeersIterBatch<'a> {
 
 impl<'a> PeersIterBatch<'a> {
 	/// Iterator over all known peers.
-	pub fn peers_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
+	pub fn peers_iter(&self) -> Result<impl Iterator<Item = Result<PeerData, Error>>, Error> {
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(Some(PEER_PREFIX), move |_, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
@@ -212,6 +212,8 @@ impl<'a> PeersIterBatch<'a> {
 	) -> Result<Vec<PeerData>, Error> {
 		let peers = self
 			.peers_iter()?
+			.filter(|p| p.is_ok())
+			.map(|p| p.ok().unwrap())
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.choose_multiple(&mut thread_rng(), count);
 		Ok(peers)
@@ -220,7 +222,11 @@ impl<'a> PeersIterBatch<'a> {
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Result<Vec<PeerData>, Error> {
-		let peers: Vec<PeerData> = self.peers_iter()?.collect();
+		let peers: Vec<PeerData> = self
+			.peers_iter()?
+			.filter(|p| p.is_ok())
+			.map(|p| p.ok().unwrap())
+			.collect();
 		Ok(peers)
 	}
 
@@ -232,8 +238,10 @@ impl<'a> PeersIterBatch<'a> {
 		let mut to_remove = vec![];
 
 		for x in self.peers_iter()? {
-			if predicate(&x) {
-				to_remove.push(x)
+			if let Ok(x) = x {
+				if predicate(&x) {
+					to_remove.push(x)
+				}
 			}
 		}
 
