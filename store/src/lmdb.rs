@@ -255,7 +255,15 @@ impl Store {
 					Ok(_) => {
 						let _ = fs::remove_dir_all(&migrate_from);
 					}
-					Err(e) => error!("DB {} migration error: {:?}", env_name, e),
+					Err(e) => {
+						error!("DB {} migration error: {:?}", env_name, e);
+						match s.clear() {
+							Ok(_) => {}
+							Err(e) => {
+								error!("Can not clear new DB after unsuccessful migration: {:?}", e)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -293,24 +301,23 @@ impl Store {
 		let read_from = from_env.read_txn()?;
 		let mut count = 0;
 		for kv in db_from.iter(&read_from)? {
-			if let Ok((k, v)) = kv {
-				if k.len() > 1 && k[1] == PREFIX_KEY_SEPARATOR {
-					let db_name = k.split_at(1).0;
-					if let Some(db) = self.pre_dbs.get(&db_name[0]) {
-						let key = k.split_at(2).1;
-						db.put(&mut write_to, key, &v)?;
-						count += 1;
-					} else {
-						error!("Migration: unknown db key: {}", db_name[0]);
-					}
-				} else {
-					self.def_db.put(&mut write_to, k, &v)?;
+			let (k, v) = kv?;
+			if k.len() > 1 && k[1] == PREFIX_KEY_SEPARATOR {
+				let db_name = k.split_at(1).0;
+				if let Some(db) = self.pre_dbs.get(&db_name[0]) {
+					let key = k.split_at(2).1;
+					db.put(&mut write_to, key, &v)?;
 					count += 1;
+				} else {
+					error!("Migration: unknown DB key: {}", db_name[0]);
 				}
+			} else {
+				self.def_db.put(&mut write_to, k, &v)?;
+				count += 1;
 			}
 		}
 		write_to.commit()?;
-		debug!("Migrated {} records from DB {:?}", count, from_path);
+		debug!("Migrated {} records from {:?}", count, from_path);
 		Ok(())
 	}
 
@@ -445,6 +452,17 @@ impl Store {
 		}
 
 		self.set_resize_checking(false);
+	}
+
+	/// Clear all data from database environment.
+	fn clear(&self) -> Result<(), Error> {
+		let mut w = self.env.write_txn()?;
+		self.def_db.clear(&mut w)?;
+		for db in self.pre_dbs.values() {
+			db.clear(&mut w)?;
+		}
+		w.commit()?;
+		Ok(())
 	}
 
 	/// Protocol version for the store.
