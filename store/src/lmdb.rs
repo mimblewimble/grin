@@ -775,9 +775,9 @@ where
 	db: Arc<Database<Bytes, Bytes>>,
 	read: Arc<RoTxn<'static, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
-	skip: usize,
 	total_keys: usize,
-	skip_keys: usize,
+	skip_cur: usize,
+	skip_total: usize,
 	deserialize: F,
 	#[allow(dead_code)]
 	tx_counter: TxCounter,
@@ -790,14 +790,14 @@ where
 	type Item = Result<T, Error>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		if let Some(k) = self.keys.iter().skip(self.skip).next() {
+		if let Some(k) = self.keys.iter().skip(self.skip_cur).next() {
 			match self.db.get(&self.read, k) {
 				Ok(v) => {
 					if let Some(v) = v {
 						return match (self.deserialize)(k, v) {
 							Ok(v) => {
-								self.skip += 1;
-								self.skip_keys += 1;
+								self.skip_total += 1;
+								self.skip_cur += 1;
 								Some(Ok(v))
 							}
 							Err(e) => {
@@ -814,6 +814,20 @@ where
 					}
 				}
 			}
+		} else if self.total_keys > self.skip_total {
+			let keys = if let Ok(iter) = self.db.iter(&self.read) {
+				iter.move_between_keys()
+					.skip(self.skip_total)
+					.take(10000)
+					.filter(|kv| kv.is_ok())
+					.map(|kv| kv.unwrap().0.to_vec())
+					.collect::<Vec<Vec<u8>>>()
+			} else {
+				vec![]
+			};
+			self.skip_cur = 0;
+			self.keys = keys;
+			return self.next();
 		}
 		None
 	}
@@ -850,8 +864,8 @@ where
 			read: Arc::new(read),
 			keys,
 			total_keys,
-			skip_keys: 0,
-			skip: 0,
+			skip_cur: 0,
+			skip_total: 0,
 			deserialize,
 			tx_counter: TxCounter {
 				env_path: store.env_path.clone(),
