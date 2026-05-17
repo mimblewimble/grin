@@ -43,6 +43,9 @@ pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 20;
 /// will always be requested first)
 pub const SEGMENT_REQUEST_COUNT: usize = 15;
 
+/// How many blocks behind the tip a PIBD peer may be and still be considered usable.
+pub const PIBD_PEER_HEIGHT_SLACK_BLOCKS: u64 = 2;
+
 /// If the syncer hasn't seen a max work peer that supports PIBD in this number of seconds
 /// give up and revert back to the txhashset.zip download method
 pub const TXHASHSET_ZIP_FALLBACK_TIME_SECS: i64 = 60;
