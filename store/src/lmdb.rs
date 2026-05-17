@@ -452,10 +452,16 @@ impl Store {
 	}
 
 	/// Get database from provided key or return default.
-	fn get_db(&self, db_key: Option<u8>) -> &Database<Bytes, Bytes> {
+	fn get_db(&self, db_key: Option<u8>) -> Result<&Database<Bytes, Bytes>, Error> {
 		match db_key {
-			Some(db) => self.pre_dbs.get(&db).unwrap(),
-			None => &self.def_db,
+			Some(db) => {
+				if let Some(db) = self.pre_dbs.get(&db) {
+					Ok(db)
+				} else {
+					Err(Error::OtherErr("db for provided key not found".to_string()))
+				}
+			}
+			None => Ok(&self.def_db),
 		}
 	}
 
@@ -471,7 +477,7 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let db = self.get_db(db_key);
+		let db = self.get_db(db_key)?;
 		let res: Option<&[u8]> = db.get(read, key)?;
 		match res {
 			None => Ok(None),
@@ -514,10 +520,15 @@ impl Store {
 		let res = {
 			match self.env.read_txn() {
 				Ok(read) => {
-					let db = self.get_db(db_key);
-					let res = db.get(&read, key);
-					match res {
-						Ok(r) => Ok(r.is_some()),
+					let db_res = self.get_db(db_key);
+					match db_res {
+						Ok(db) => {
+							let res = db.get(&read, key);
+							match res {
+								Ok(r) => Ok(r.is_some()),
+								Err(e) => Err(Error::from(e)),
+							}
+						}
 						Err(e) => Err(Error::from(e)),
 					}
 				}
@@ -542,13 +553,19 @@ impl Store {
 		TxCounter::on_change_tx_count(&self.env_path, true);
 		match self.env.clone().static_read_txn() {
 			Ok(read) => {
-				let db = self.get_db(db_key);
-				Ok(DatabaseIterator::new(
-					self,
-					Arc::new(db.clone()),
-					read,
-					deserialize,
-				))
+				let db_res = self.get_db(db_key);
+				match db_res {
+					Ok(db) => Ok(DatabaseIterator::new(
+						self,
+						Arc::new(db.clone()),
+						read,
+						deserialize,
+					)),
+					Err(e) => {
+						TxCounter::on_change_tx_count(&self.env_path, false);
+						Err(Error::from(e))
+					}
+				}
 			}
 			Err(e) => {
 				TxCounter::on_change_tx_count(&self.env_path, false);
@@ -624,7 +641,7 @@ impl<'a> Batch<'a> {
 
 	/// Writes a single key/value pair to the provided database key.
 	pub fn put(&mut self, db_key: Option<u8>, key: &[u8], value: &[u8]) -> Result<(), Error> {
-		let db = self.store.get_db(db_key);
+		let db = self.store.get_db(db_key)?;
 		db.put(&mut self.write, key, value)?;
 		Ok(())
 	}
@@ -680,7 +697,7 @@ impl<'a> Batch<'a> {
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
 		let read = self.write.nested_read_txn()?;
-		let db = self.store.get_db(db_key);
+		let db = self.store.get_db(db_key)?;
 		let res = db.get(&read, key)?;
 		Ok(res.is_some())
 	}
@@ -718,7 +735,7 @@ impl<'a> Batch<'a> {
 
 	/// Deletes a key/value pair from the database.
 	pub fn delete(&mut self, db_key: Option<u8>, key: &[u8]) -> Result<(), Error> {
-		let db = self.store.get_db(db_key);
+		let db = self.store.get_db(db_key)?;
 		db.delete(&mut self.write, key)?;
 		Ok(())
 	}
