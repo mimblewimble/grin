@@ -150,8 +150,8 @@ pub struct Chain {
 	store: Arc<store::ChainStore>,
 	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
-	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	header_pmmr: Arc<RwLock<txhashset::PMMRHandle<BlockHeader>>>,
+	txhashset: Arc<RwLock<TxHashSet>>,
+	header_pmmr: Arc<RwLock<PMMRHandle<BlockHeader>>>,
 	pibd_segmenter: Arc<RwLock<Option<Segmenter>>>,
 	pibd_desegmenter: Arc<RwLock<Option<Desegmenter>>>,
 	// POW verification function
@@ -189,9 +189,9 @@ impl Chain {
 		// Initialize the output_pos index based on UTXO set
 		// and NRD kernel_pos index based recent kernel history.
 		{
-			let batch = store.batch()?;
-			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
-			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
+			let mut batch = store.batch()?;
+			txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
+			txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 			batch.commit()?;
 		}
 
@@ -275,7 +275,7 @@ impl Chain {
 	pub fn reset_chain_head_to_genesis(&self) -> Result<(), Error> {
 		let mut header_pmmr = self.header_pmmr.write();
 		let mut txhashset = self.txhashset.write();
-		let batch = self.store.batch()?;
+		let mut batch = self.store.batch()?;
 
 		// Change head back to genesis
 		{
@@ -314,7 +314,7 @@ impl Chain {
 
 	/// Reset PIBD head
 	pub fn reset_pibd_head(&self) -> Result<(), Error> {
-		let batch = self.store.batch()?;
+		let mut batch = self.store.batch()?;
 		batch.save_pibd_head(&self.genesis().into())?;
 		Ok(())
 	}
@@ -530,9 +530,9 @@ impl Chain {
 	pub fn new_ctx<'a>(
 		&self,
 		opts: Options,
-		batch: store::Batch<'a>,
-		header_pmmr: &'a mut txhashset::PMMRHandle<BlockHeader>,
-		txhashset: &'a mut txhashset::TxHashSet,
+		batch: Batch<'a>,
+		header_pmmr: &'a mut PMMRHandle<BlockHeader>,
+		txhashset: &'a mut TxHashSet,
 	) -> Result<pipe::BlockContext<'a>, Error> {
 		let denylist = self.denylist.read().clone();
 		Ok(pipe::BlockContext {
@@ -832,7 +832,7 @@ impl Chain {
 		&self,
 		header: &BlockHeader,
 		ext: &mut ExtensionPair,
-		batch: &Batch,
+		batch: &mut Batch,
 	) -> Result<BlockHeader, Error> {
 		let denylist = self.denylist.read().clone();
 		pipe::rewind_and_apply_fork(header, ext, batch, &|header| {
@@ -846,7 +846,7 @@ impl Chain {
 		&self,
 		header: &BlockHeader,
 		ext: &mut HeaderExtension,
-		batch: &Batch,
+		batch: &mut Batch,
 	) -> Result<(), Error> {
 		let denylist = self.denylist.read().clone();
 		pipe::rewind_and_apply_header_fork(header, ext, batch, &|header| {
@@ -1015,7 +1015,7 @@ impl Chain {
 	fn validate_kernel_history(
 		&self,
 		header: &BlockHeader,
-		txhashset: &txhashset::TxHashSet,
+		txhashset: &TxHashSet,
 	) -> Result<(), Error> {
 		debug!("validate_kernel_history: rewinding and validating kernel history (readonly)");
 
@@ -1151,11 +1151,11 @@ impl Chain {
 			self.validate_kernel_history(&header, &txhashset)?;
 
 			let header_pmmr = self.header_pmmr.read();
-			let batch = self.store.batch()?;
+			let mut batch = self.store.batch()?;
 			txhashset.verify_kernel_pos_index(
 				&self.genesis.header,
 				&header_pmmr,
-				&batch,
+				&mut batch,
 				None,
 				None,
 			)?;
@@ -1213,10 +1213,10 @@ impl Chain {
 		}
 
 		// Rebuild our output_pos index in the db based on fresh UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
 
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
-		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 
 		// Commit all the changes to the db.
 		batch.commit()?;
@@ -1257,9 +1257,9 @@ impl Chain {
 	/// *Only* runs if we are not in archive mode.
 	fn remove_historical_blocks(
 		&self,
-		header_pmmr: &txhashset::PMMRHandle<BlockHeader>,
+		header_pmmr: &PMMRHandle<BlockHeader>,
 		archive_header: BlockHeader,
-		batch: &store::Batch<'_>,
+		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		if self.archive_mode() {
 			return Ok(());
@@ -1299,9 +1299,11 @@ impl Chain {
 
 		// Remove old blocks (including short lived fork blocks) which height < tail.height
 		for block in batch.blocks_iter()? {
-			if block.header.height < tail.height {
-				let _ = batch.delete_block(&block.hash());
-				count += 1;
+			if let Ok(block) = block {
+				if block.header.height < tail.height {
+					let _ = batch.delete_block(&block.hash());
+					count += 1;
+				}
 			}
 		}
 
@@ -1345,7 +1347,7 @@ impl Chain {
 		// Take a write lock on the txhashet and start a new writeable db batch.
 		let header_pmmr = self.header_pmmr.read();
 		let mut txhashset = self.txhashset.write();
-		let batch = self.store.batch()?;
+		let mut batch = self.store.batch()?;
 
 		// Compact the txhashset itself (rewriting the pruned backend files).
 		{
@@ -1361,15 +1363,15 @@ impl Chain {
 
 		// If we are not in archival mode remove historical blocks from the db.
 		if !self.archive_mode() {
-			self.remove_historical_blocks(&header_pmmr, archive_header, &batch)?;
+			self.remove_historical_blocks(&header_pmmr, archive_header, &mut batch)?;
 		}
 
 		// Make sure our output_pos index is consistent with the UTXO set.
-		txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
 
 		// TODO - Why is this part of chain compaction?
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
-		txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
+		txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 
 		// Commit all the above db changes.
 		batch.commit()?;

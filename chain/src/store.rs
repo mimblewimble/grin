@@ -26,7 +26,7 @@ use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_core::ser;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error};
+use grin_store::{option_to_not_found, Error};
 use std::convert::TryInto;
 use std::sync::Arc;
 
@@ -38,7 +38,8 @@ const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
 const PIBD_HEAD_PREFIX: u8 = b'I';
 const HEADER_HEAD_PREFIX: u8 = b'G';
-const OUTPUT_POS_PREFIX: u8 = b'p';
+/// Prefix for output pos index.
+pub const OUTPUT_POS_PREFIX: u8 = b'p';
 
 /// Prefix for NRD kernel pos index lists.
 pub const NRD_KERNEL_LIST_PREFIX: u8 = b'K';
@@ -48,6 +49,17 @@ pub const NRD_KERNEL_ENTRY_PREFIX: u8 = b'k';
 const BLOCK_SUMS_PREFIX: u8 = b'M';
 const BLOCK_SPENT_PREFIX: u8 = b'S';
 
+/// All database prefixes.
+const DB_PREFIXES: [u8; 7] = [
+	BLOCK_HEADER_PREFIX,
+	BLOCK_PREFIX,
+	OUTPUT_POS_PREFIX,
+	NRD_KERNEL_LIST_PREFIX,
+	NRD_KERNEL_ENTRY_PREFIX,
+	BLOCK_SUMS_PREFIX,
+	BLOCK_SPENT_PREFIX,
+];
+
 /// All chain-related database operations
 pub struct ChainStore {
 	db: store::Store,
@@ -56,30 +68,40 @@ pub struct ChainStore {
 impl ChainStore {
 	/// Create new chain store
 	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
-		let db = store::Store::new(db_root, None, Some(STORE_SUBPATH), None)?;
+		let db = store::Store::new(
+			db_root,
+			None,
+			Some(STORE_SUBPATH),
+			DB_PREFIXES.to_vec(),
+			None,
+		)?;
 		Ok(ChainStore { db })
 	}
 
 	/// The current chain head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX], None), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(None, &[HEAD_PREFIX], None), || {
+			"HEAD".to_owned()
+		})
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX], None), || {
+		option_to_not_found(self.db.get_ser(None, &[HEADER_HEAD_PREFIX], None), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
 
 	/// The current chain "tail" (earliest block in the store).
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(None, &[TAIL_PREFIX], None), || {
+			"TAIL".to_owned()
+		})
 	}
 
 	/// The current PIBD head (will differ from the other heads. Return genesis block if PIBD head doesn't exist).
 	pub fn pibd_head(&self) -> Result<Tip, Error> {
-		let res = option_to_not_found(self.db.get_ser(&[PIBD_HEAD_PREFIX], None), || {
+		let res = option_to_not_found(self.db.get_ser(None, &[PIBD_HEAD_PREFIX], None), || {
 			"PIBD_HEAD".to_owned()
 		});
 
@@ -96,21 +118,23 @@ impl ChainStore {
 
 	/// Get full block.
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
-			format!("BLOCK: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(Some(BLOCK_PREFIX), h.as_ref(), None),
+			|| format!("BLOCK: {}", h),
+		)
 	}
 
 	/// Does this full block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
-		self.db.exists(&to_key(BLOCK_PREFIX, h))
+		self.db.exists(Some(BLOCK_PREFIX), h.as_ref())
 	}
 
 	/// Get block_sums for the block hash.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
-			format!("Block sums for block: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(Some(BLOCK_SUMS_PREFIX), h.as_ref(), None),
+			|| format!("Block sums for block: {}", h),
+		)
 	}
 
 	/// Get previous header.
@@ -129,7 +153,7 @@ impl ChainStore {
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
+			self.db.get_ser(Some(BLOCK_HEADER_PREFIX), h.as_ref(), None),
 			|| format!("BLOCK HEADER: {}", h),
 		)
 	}
@@ -139,8 +163,9 @@ impl ChainStore {
 	pub fn get_block_header_skip_proof(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(
-				&to_key(BLOCK_HEADER_PREFIX, h),
-				Some(ser::DeserializationMode::SkipPow),
+				Some(BLOCK_HEADER_PREFIX),
+				h.as_ref(),
+				Some(DeserializationMode::SkipPow),
 			),
 			|| format!("BLOCK HEADER: {}", h),
 		)
@@ -159,7 +184,8 @@ impl ChainStore {
 
 	/// Get PMMR pos and block height for the given output commitment.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
-		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit), None)
+		self.db
+			.get_ser(Some(OUTPUT_POS_PREFIX), commit.as_ref(), None)
 	}
 
 	/// Builds a new batch to be used with this store.
@@ -180,17 +206,21 @@ pub struct Batch<'a> {
 impl<'a> Batch<'a> {
 	/// The head.
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEAD_PREFIX], None), || "HEAD".to_owned())
+		option_to_not_found(self.db.get_ser(None, &[HEAD_PREFIX], None), || {
+			"HEAD".to_owned()
+		})
 	}
 
 	/// The tail.
 	pub fn tail(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[TAIL_PREFIX], None), || "TAIL".to_owned())
+		option_to_not_found(self.db.get_ser(None, &[TAIL_PREFIX], None), || {
+			"TAIL".to_owned()
+		})
 	}
 
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&[HEADER_HEAD_PREFIX], None), || {
+		option_to_not_found(self.db.get_ser(None, &[HEADER_HEAD_PREFIX], None), || {
 			"HEADER_HEAD".to_owned()
 		})
 	}
@@ -201,40 +231,41 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save body head to db.
-	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&[HEAD_PREFIX], t)
+	pub fn save_body_head(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[HEAD_PREFIX], t)
 	}
 
 	/// Save body "tail" to db.
-	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&[TAIL_PREFIX], t)
+	pub fn save_body_tail(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[TAIL_PREFIX], t)
 	}
 
 	/// Save header head to db.
-	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&[HEADER_HEAD_PREFIX], t)
+	pub fn save_header_head(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[HEADER_HEAD_PREFIX], t)
 	}
 
 	/// Save PIBD head to db.
-	pub fn save_pibd_head(&self, t: &Tip) -> Result<(), Error> {
-		self.db.put_ser(&[PIBD_HEAD_PREFIX], t)
+	pub fn save_pibd_head(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[PIBD_HEAD_PREFIX], t)
 	}
 
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, h), None), || {
-			format!("Block with hash: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(Some(BLOCK_PREFIX), h.as_ref(), None),
+			|| format!("Block with hash: {}", h),
+		)
 	}
 
 	/// Does the block exist?
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
-		self.db.exists(&to_key(BLOCK_PREFIX, h))
+		self.db.exists(Some(BLOCK_PREFIX), h.as_ref())
 	}
 
 	/// Save the block to the db.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
-	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
+	pub fn save_block(&mut self, b: &Block) -> Result<(), Error> {
 		debug!(
 			"save_block: {} at {} ({} -> v{})",
 			b.header.hash(),
@@ -242,27 +273,27 @@ impl<'a> Batch<'a> {
 			b.inputs().version_str(),
 			self.db.protocol_version(),
 		);
-		self.db.put_ser(&to_key(BLOCK_PREFIX, b.hash())[..], b)?;
+		self.db.put_ser(Some(BLOCK_PREFIX), b.hash().as_ref(), b)?;
 		Ok(())
 	}
 
 	/// We maintain a "spent" index for each full block to allow the output_pos
 	/// to be easily reverted during rewind.
-	pub fn save_spent_index(&self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
+	pub fn save_spent_index(&mut self, h: &Hash, spent: &[CommitPos]) -> Result<(), Error> {
 		self.db
-			.put_ser(&to_key(BLOCK_SPENT_PREFIX, h)[..], &spent.to_vec())?;
+			.put_ser(Some(BLOCK_SPENT_PREFIX), h.as_ref(), &spent.to_vec())?;
 		Ok(())
 	}
 
 	/// Low level function to delete directly by raw key.
-	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
-		self.db.delete(key)
+	pub fn delete(&mut self, db_key: Option<u8>, key: &[u8]) -> Result<(), Error> {
+		self.db.delete(db_key, key)
 	}
 
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
-	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_PREFIX, bh)[..])?;
+	pub fn delete_block(&mut self, bh: &Hash) -> Result<(), Error> {
+		self.db.delete(Some(BLOCK_PREFIX), bh.as_ref())?;
 
 		// Best effort at deleting associated data for this block.
 		// Not an error if these fail.
@@ -275,40 +306,44 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save block header to db.
-	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn save_block_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
 		// Store the header itself indexed by hash.
 		self.db
-			.put_ser(&to_key(BLOCK_HEADER_PREFIX, hash)[..], header)?;
+			.put_ser(Some(BLOCK_HEADER_PREFIX), hash.as_ref(), header)?;
 
 		Ok(())
 	}
 
 	/// Save output_pos and block height to index.
-	pub fn save_output_pos_height(&self, commit: &Commitment, pos: CommitPos) -> Result<(), Error> {
+	pub fn save_output_pos_height(
+		&mut self,
+		commit: &Commitment,
+		pos: CommitPos,
+	) -> Result<(), Error> {
 		self.db
-			.put_ser(&to_key(OUTPUT_POS_PREFIX, commit)[..], &pos)
+			.put_ser(Some(OUTPUT_POS_PREFIX), commit.as_ref(), &pos)
 	}
 
 	/// Delete the output_pos index entry for a spent output.
-	pub fn delete_output_pos_height(&self, commit: &Commitment) -> Result<(), Error> {
-		self.db.delete(&to_key(OUTPUT_POS_PREFIX, commit))
+	pub fn delete_output_pos_height(&mut self, commit: &Commitment) -> Result<(), Error> {
+		self.db.delete(Some(OUTPUT_POS_PREFIX), commit.as_ref())
 	}
 
 	/// When using the output_pos iterator we have access to the index keys but not the
 	/// original commitment that the key is constructed from. So we need a way of comparing
 	/// a key with another commitment without reconstructing the commitment from the key bytes.
 	pub fn is_match_output_pos_key(&self, key: &[u8], commit: &Commitment) -> bool {
-		let commit_key = to_key(OUTPUT_POS_PREFIX, commit);
-		commit_key == key
+		commit.as_ref() == key
 	}
 
 	/// Iterator over the output_pos index.
-	pub fn output_pos_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, CommitPos)>, Error> {
-		let key = to_key(OUTPUT_POS_PREFIX, "");
+	pub fn output_pos_iter(
+		&self,
+	) -> Result<impl Iterator<Item = Result<(Vec<u8>, CommitPos), Error>>, Error> {
 		let protocol_version = self.db.protocol_version();
-		self.db.iter(&key, move |k, mut v| {
+		self.db.iter(Some(OUTPUT_POS_PREFIX), move |k, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
 				.map(|pos| (k.to_vec(), pos))
 				.map_err(From::from)
@@ -328,7 +363,8 @@ impl<'a> Batch<'a> {
 
 	/// Get output_pos and block height from index.
 	pub fn get_output_pos_height(&self, commit: &Commitment) -> Result<Option<CommitPos>, Error> {
-		self.db.get_ser(&to_key(OUTPUT_POS_PREFIX, commit), None)
+		self.db
+			.get_ser(Some(OUTPUT_POS_PREFIX), commit.as_ref(), None)
 	}
 
 	/// Get the previous header.
@@ -348,7 +384,7 @@ impl<'a> Batch<'a> {
 	/// Get block header.
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(BLOCK_HEADER_PREFIX, h), None),
+			self.db.get_ser(Some(BLOCK_HEADER_PREFIX), h.as_ref(), None),
 			|| format!("BLOCK HEADER: {}", h),
 		)
 	}
@@ -358,33 +394,35 @@ impl<'a> Batch<'a> {
 	pub fn get_block_header_skip_proof(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(
-				&to_key(BLOCK_HEADER_PREFIX, h),
-				Some(ser::DeserializationMode::SkipPow),
+				Some(BLOCK_HEADER_PREFIX),
+				h.as_ref(),
+				Some(DeserializationMode::SkipPow),
 			),
 			|| format!("BLOCK HEADER: {}", h),
 		)
 	}
 
 	/// Delete the block spent index.
-	fn delete_spent_index(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_SPENT_PREFIX, bh))
+	fn delete_spent_index(&mut self, bh: &Hash) -> Result<(), Error> {
+		self.db.delete(Some(BLOCK_SPENT_PREFIX), bh.as_ref())
 	}
 
 	/// Save block_sums for the block.
-	pub fn save_block_sums(&self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
-		self.db.put_ser(&to_key(BLOCK_SUMS_PREFIX, h)[..], &sums)
+	pub fn save_block_sums(&mut self, h: &Hash, sums: BlockSums) -> Result<(), Error> {
+		self.db.put_ser(Some(BLOCK_SUMS_PREFIX), h.as_ref(), &sums)
 	}
 
 	/// Get block_sums for the block.
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, h), None), || {
-			format!("Block sums for block: {}", h)
-		})
+		option_to_not_found(
+			self.db.get_ser(Some(BLOCK_SUMS_PREFIX), h.as_ref(), None),
+			|| format!("Block sums for block: {}", h),
+		)
 	}
 
 	/// Delete the block_sums for the block.
-	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, bh))
+	fn delete_block_sums(&mut self, bh: &Hash) -> Result<(), Error> {
+		self.db.delete(Some(BLOCK_SUMS_PREFIX), bh.as_ref())
 	}
 
 	/// Get the block input bitmap based on our spent index.
@@ -402,7 +440,7 @@ impl<'a> Batch<'a> {
 	/// If we need to rewind a block then we use this to "unspend" the spent outputs.
 	pub fn get_spent_index(&self, bh: &Hash) -> Result<Vec<CommitPos>, Error> {
 		option_to_not_found(
-			self.db.get_ser(&to_key(BLOCK_SPENT_PREFIX, bh), None),
+			self.db.get_ser(Some(BLOCK_SPENT_PREFIX), bh.as_ref(), None),
 			|| format!("spent index: {}", bh),
 		)
 	}
@@ -423,10 +461,9 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over all full blocks in the db.
 	/// Uses default db serialization strategy via db protocol version.
-	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Block>, Error> {
-		let key = to_key(BLOCK_PREFIX, "");
+	pub fn blocks_iter(&self) -> Result<impl Iterator<Item = Result<Block, Error>> + 'a, Error> {
 		let protocol_version = self.db.protocol_version();
-		self.db.iter(&key, move |_, mut v| {
+		self.db.iter(Some(BLOCK_PREFIX), move |_, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
 				.map_err(From::from)
 		})
@@ -434,9 +471,11 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over raw data for full blocks in the db.
 	/// Used during block migration (we need flexibility around deserialization).
-	pub fn blocks_raw_iter(&self) -> Result<impl Iterator<Item = (Vec<u8>, Vec<u8>)>, Error> {
-		let key = to_key(BLOCK_PREFIX, "");
-		self.db.iter(&key, |k, v| Ok((k.to_vec(), v.to_vec())))
+	pub fn blocks_raw_iter(
+		&self,
+	) -> Result<impl Iterator<Item = Result<(Vec<u8>, Vec<u8>), Error>>, Error> {
+		self.db
+			.iter(Some(BLOCK_PREFIX), |k, v| Ok((k.to_vec(), v.to_vec())))
 	}
 
 	/// Protocol version of our underlying db.
