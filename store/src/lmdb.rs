@@ -84,7 +84,7 @@ where
 const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
 /// Default environment.
-const DEFAULT_ENV_NAME: &'static str = "lmdb";
+pub const DEFAULT_ENV_NAME: &'static str = "lmdb";
 /// Default multi-database environment without prefixes.
 const DEFAULT_MULTI_DB_ENV_NAME: &'static str = "multi_lmdb";
 /// Prefix key separator.
@@ -263,6 +263,7 @@ impl Store {
 								error!("Can not clear new DB after unsuccessful migration: {:?}", e)
 							}
 						}
+						return Err(e);
 					}
 				}
 			}
