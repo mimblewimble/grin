@@ -31,6 +31,8 @@ const PIHD_MAX_IN_FLIGHT_SEGMENTS_PER_PEER: usize = 2;
 const HEADER_REQUEST_TIMEOUT_SECS: i64 = 10;
 const PIHD_MAX_TIMED_OUT_SEGMENTS: usize = 3;
 const PIHD_DISABLE_SECS: i64 = 120;
+const PIHD_PEER_TIMEOUT_COOLDOWN_SECS: i64 = 30;
+const PIHD_STALL_FALLBACK_SECS: i64 = 120;
 
 struct PihdHeaderRequest {
 	identifier: SegmentIdentifier,
@@ -54,7 +56,9 @@ pub struct HeaderSync {
 	stalling_ts: Option<DateTime<Utc>>,
 	pending_pihd: Vec<PihdHeaderRequest>,
 	pending_legacy: Option<LegacyHeaderRequest>,
-	pihd_timeout_count: usize,
+	pihd_failure_count: usize,
+	pihd_peer_timeout_until: Vec<(PeerAddr, DateTime<Utc>)>,
+	pihd_stalling_ts: Option<DateTime<Utc>>,
 	pihd_disabled_until: Option<DateTime<Utc>>,
 	pihd_active: bool,
 }
@@ -74,7 +78,9 @@ impl HeaderSync {
 			stalling_ts: None,
 			pending_pihd: vec![],
 			pending_legacy: None,
-			pihd_timeout_count: 0,
+			pihd_failure_count: 0,
+			pihd_peer_timeout_until: vec![],
+			pihd_stalling_ts: None,
 			pihd_disabled_until: None,
 			pihd_active: false,
 		}
@@ -171,10 +177,12 @@ impl HeaderSync {
 		let now = Utc::now();
 		let peers = self.peers.clone();
 		if header_head.height > self.prev_header_sync.1 {
-			self.pihd_timeout_count = 0;
+			self.pihd_failure_count = 0;
+			self.pihd_stalling_ts = None;
 		}
 
-		let mut timed_out = 0;
+		let mut failed = 0;
+		let mut failed_peers = vec![];
 		self.pending_pihd.retain(|req| {
 			let completed_height = req
 				.identifier
@@ -186,7 +194,12 @@ impl HeaderSync {
 			let complete = header_head.height >= completed_height;
 			let timeout = now > req.requested_at + Duration::seconds(HEADER_REQUEST_TIMEOUT_SECS);
 			if !complete && connected && timeout {
-				timed_out += 1;
+				failed += 1;
+				failed_peers.push(req.peer_addr);
+			}
+			if !complete && !connected {
+				failed += 1;
+				failed_peers.push(req.peer_addr);
 			}
 			!complete && connected && !timeout
 		});
@@ -202,24 +215,35 @@ impl HeaderSync {
 			let timeout = now > req.request_time + Duration::seconds(HEADER_REQUEST_TIMEOUT_SECS);
 			!complete && connected && !timeout
 		});
-		if timed_out > 0 {
-			self.pihd_timeout_count += timed_out;
-			if self.pihd_timeout_count >= PIHD_MAX_TIMED_OUT_SEGMENTS {
+		if failed > 0 {
+			for peer_addr in failed_peers {
+				self.note_pihd_peer_failure(peer_addr, now);
+			}
+			self.pihd_failure_count += failed;
+			if self.pihd_stalling_ts.is_none() {
+				self.pihd_stalling_ts = Some(now);
+			}
+			let pihd_stalled = self
+				.pihd_stalling_ts
+				.map(|stalling_ts| now > stalling_ts + Duration::seconds(PIHD_STALL_FALLBACK_SECS))
+				.unwrap_or(false);
+			if self.pihd_failure_count >= PIHD_MAX_TIMED_OUT_SEGMENTS && pihd_stalled {
 				info!(
-					"sync: disabling PIHD for {} seconds after {} timed out header segment request(s)",
-					PIHD_DISABLE_SECS, self.pihd_timeout_count
+					"sync: disabling PIHD for {} seconds after {} failed header segment request(s) and {} seconds without header progress",
+					PIHD_DISABLE_SECS, self.pihd_failure_count, PIHD_STALL_FALLBACK_SECS
 				);
 				if self.pihd_active {
 					info!(
-						"sync: PIHD header sync aborted at height {}; timed out {} header segment request(s), falling back to legacy header sync",
+						"sync: PIHD header sync aborted at height {}; failed {} header segment request(s), falling back to legacy header sync",
 						header_head.height,
-						self.pihd_timeout_count
+						self.pihd_failure_count
 					);
 					self.pihd_active = false;
 				}
 				self.pending_pihd.clear();
 				self.sync_state.retain_pihd_header_segments(|_| false);
-				self.pihd_timeout_count = 0;
+				self.pihd_failure_count = 0;
+				self.pihd_stalling_ts = None;
 				self.pihd_disabled_until = Some(now + Duration::seconds(PIHD_DISABLE_SECS));
 			}
 		}
@@ -232,6 +256,22 @@ impl HeaderSync {
 				self.pending_legacy = None;
 			}
 		}
+	}
+
+	fn note_pihd_peer_failure(&mut self, peer_addr: PeerAddr, now: DateTime<Utc>) {
+		self.pihd_peer_timeout_until
+			.retain(|(addr, until)| *addr != peer_addr && *until > now);
+		self.pihd_peer_timeout_until.push((
+			peer_addr,
+			now + Duration::seconds(PIHD_PEER_TIMEOUT_COOLDOWN_SECS),
+		));
+	}
+
+	fn pihd_peer_available(&self, peer_addr: PeerAddr, now: DateTime<Utc>) -> bool {
+		!self
+			.pihd_peer_timeout_until
+			.iter()
+			.any(|(addr, until)| *addr == peer_addr && *until > now)
 	}
 
 	fn pihd_enabled(&mut self) -> bool {
@@ -364,6 +404,19 @@ impl HeaderSync {
 	}
 
 	fn pihd_header_sync(&mut self, sync_head: chain::Tip, peers: Vec<Arc<Peer>>) {
+		let now = Utc::now();
+		self.pihd_peer_timeout_until
+			.retain(|(_, until)| *until > now);
+		let preferred_peers = peers
+			.iter()
+			.filter(|peer| self.pihd_peer_available(peer.info.addr, now))
+			.cloned()
+			.collect::<Vec<_>>();
+		let peers = if preferred_peers.is_empty() {
+			peers
+		} else {
+			preferred_peers
+		};
 		if self.pending_pihd.len() >= PIHD_MAX_IN_FLIGHT_SEGMENTS {
 			return;
 		}
