@@ -32,8 +32,8 @@ use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead, MAX_PEER_ADDRS,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead, MAX_PEER_ADDRS,
 };
 use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::*;
@@ -45,6 +45,7 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
+	blocked: RwLock<HashMap<PeerAddr, (DateTime<Utc>, u32)>>,
 	config: P2PConfig,
 }
 
@@ -55,6 +56,7 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
+			blocked: RwLock::new(HashMap::new()),
 		}
 	}
 
@@ -139,6 +141,19 @@ impl Peers {
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: PeerAddr) -> Option<Arc<Peer>> {
 		self.iter().connected().by_addr(addr)
+	}
+
+	/// Disconnect a connected peer without banning it.
+	pub fn disconnect_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("disconnect_peer: failed to get peers lock");
+			Error::PeerException
+		})?;
+		if let Some(peer) = peers.remove(&peer_addr) {
+			warn!("disconnecting peer {} ({})", peer_addr, reason);
+			peer.stop();
+		}
+		Ok(())
 	}
 
 	pub fn is_banned(&self, peer_addr: PeerAddr) -> bool {
@@ -440,6 +455,56 @@ impl Peers {
 			>= self.config.peer_min_preferred_outbound_count() as usize
 	}
 
+	/// Whether this peer has been temporarily blocked.
+	pub fn is_blocked(&self, peer_addr: PeerAddr) -> bool {
+		match self.blocked.try_read_for(LOCK_TIMEOUT) {
+			Some(blocked) => match blocked.get(&peer_addr) {
+				None => false,
+				Some((expiry, _)) => expiry > &Utc::now(),
+			},
+			None => {
+				error!("is_blocked: failed to get blocked lock");
+				false
+			}
+		}
+	}
+
+	/// Temporarily block a peer without banning it.
+	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("block_peer: failed to get blocked lock");
+			Error::PeerException
+		})?;
+
+		let times = match blocked.get(&peer_addr) {
+			Some((_, times)) => times + 1,
+			None => 1,
+		};
+		let duration = match times {
+			1 => 60,
+			2 => 180,
+			_ => 600,
+		};
+		let expiry = Utc::now() + Duration::seconds(duration);
+		blocked.insert(peer_addr, (expiry, times));
+
+		warn!(
+			"state_sync: block peer {} ({}) for {} seconds after {} timeout(s)",
+			peer_addr, reason, duration, times
+		);
+		Ok(())
+	}
+
+	/// Clear all temporarily blocked peers.
+	pub fn unblock_peers(&self) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("unblock_peers: failed to get blocked lock");
+			Error::PeerException
+		})?;
+		blocked.clear();
+		Ok(())
+	}
+
 	/// Removes those peers that seem to have expired
 	pub fn remove_expired(&self) {
 		let now = Utc::now();
@@ -574,6 +639,14 @@ impl ChainAdapter for Peers {
 		self.adapter.locate_headers(hs)
 	}
 
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		self.adapter.locate_header_segment(id, peer_info)
+	}
+
 	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
 		self.adapter.get_block(h, peer_info)
 	}
@@ -664,9 +737,18 @@ impl ChainAdapter for Peers {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter
-			.receive_bitmap_segment(block_hash, output_root, segment)
+		if !self
+			.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected bitmap PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_output_segment(
@@ -674,25 +756,73 @@ impl ChainAdapter for Peers {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter
-			.receive_output_segment(block_hash, bitmap_root, segment)
+		if !self
+			.adapter
+			.receive_output_segment(block_hash, bitmap_root, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected output PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_rangeproof_segment(block_hash, segment)
+		if !self
+			.adapter
+			.receive_rangeproof_segment(block_hash, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected rangeproof PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_kernel_segment(block_hash, segment)
+		if !self
+			.adapter
+			.receive_kernel_segment(block_hash, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected kernel PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
+	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		match self
+			.adapter
+			.receive_header_segment(id, headers, peer_info)?
+		{
+			HeaderSegmentAcceptance::Accepted => Ok(HeaderSegmentAcceptance::Accepted),
+			HeaderSegmentAcceptance::Ban => {
+				self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+					.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				Ok(HeaderSegmentAcceptance::Ban)
+			}
+		}
 	}
 }
 
@@ -816,6 +946,16 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(move |p| p.info.capabilities.contains(cap)),
+		}
+	}
+
+	/// Custom filter.
+	pub fn with_filter(
+		self,
+		f: impl Fn(&Arc<Peer>) -> bool,
+	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| f(p)),
 		}
 	}
 

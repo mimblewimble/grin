@@ -50,6 +50,6 @@ pub use crate::chain::{Chain, MAX_ORPHAN_SIZE};
 pub use crate::error::Error;
 pub use crate::store::ChainStore;
 pub use crate::types::{
-	BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, Tip, TxHashsetDownloadStats,
-	TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, HeaderSyncMode, Options, SyncState, SyncStatus, Tip,
+	TxHashsetDownloadStats, TxHashsetWriteStatus,
 };
