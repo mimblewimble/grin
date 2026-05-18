@@ -25,6 +25,7 @@ use std::{thread, time};
 use crate::core::core::hash::Hash;
 use crate::core::global;
 use crate::core::pow::Difficulty;
+use crate::p2p::msg::built_info;
 use crate::p2p::types::PeerAddr;
 use crate::p2p::Peer;
 
@@ -88,7 +89,12 @@ fn peer_handshake() {
 	)
 	.unwrap();
 
-	assert!(peer.info.user_agent.ends_with(env!("CARGO_PKG_VERSION")));
+	let git_hash =
+		built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "".to_owned(), |v| ".".to_owned() + v);
+	assert!(peer
+		.info
+		.user_agent
+		.ends_with(format!("{}{}", env!("CARGO_PKG_VERSION"), git_hash).as_str()));
 
 	thread::sleep(time::Duration::from_secs(1));
 

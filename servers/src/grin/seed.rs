@@ -33,22 +33,20 @@ use crate::p2p::types::PeerAddr;
 use crate::p2p::ChainAdapter;
 use crate::util::StopState;
 
-/// DNS Seeds with contact email associated - Mainnet
+/// DNS Seeds with contacts associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
-	"mainnet.seed.grin.lesceller.com", // q.lesceller@gmail.com
-	"mainnet.seed.grin.prokapi.com",   // hendi@prokapi.com
-	"grinseed.revcore.net",            // yeastplume@gmail.com
-	"mainnet-seed.grinnode.live",      // info@grinnode.live
-	"mainnet.grin.punksec.de",         // grin@punksec.de
-	"grinnode.30-r.com",               // trinitron@30-r.com
+	"mainnet-seed.grinnode.live", // info@grinnode.live
+	"grincoin.org",               // xmpp:aglkm@conversations.im
+	"main.gri.mw",                // admin@gri.mw
+	"mainnet.grinffindor.org",    // support@grinffindor.org
+	"main-seed.grin.money",       // support@grinily.com
 ];
-/// DNS Seeds with contact email associated - Testnet
+/// DNS Seeds with contacts associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
-	"floonet.seed.grin.lesceller.com", // q.lesceller@gmail.com
-	"floonet.seed.grin.prokapi.com",   // hendi@prokapi.com
-	"grintestseed.revcore.net",        // yeastplume@gmail.com
-	"testnet.grin.punksec.de",         // grin@punksec.de
-	"testnet.grinnode.30-r.com",       // trinitron@30-r.com
+	"testnet.grincoin.org",    // xmpp:aglkm@conversations.im
+	"test.gri.mw",             // admin@gri.mw
+	"testnet.grinffindor.org", // support@grinffindor.org
+	"test-seed.grin.money",    // support@grinily.com
 ];
 
 pub fn connect_and_monitor(
