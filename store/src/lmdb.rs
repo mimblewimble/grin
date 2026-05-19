@@ -278,7 +278,7 @@ impl Store {
 		from_name: Option<&str>,
 		from_path: &Path,
 	) -> Result<(), Error> {
-		debug!("Migrating DB {:?}", from_path);
+		info!("Migrating DB {:?}, please wait...", from_path);
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
 			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(24);
@@ -318,7 +318,7 @@ impl Store {
 			}
 		}
 		write_to.commit()?;
-		debug!("Migrated {} records from {:?}", count, from_path);
+		info!("Migrated {} records from {:?}", count, from_path);
 		Ok(())
 	}
 
