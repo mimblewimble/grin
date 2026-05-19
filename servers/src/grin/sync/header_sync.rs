@@ -104,8 +104,11 @@ impl HeaderSync {
 
 		self.cleanup_pending_requests(sync_head);
 
-		// TODO - can we safely reuse the peer here across multiple runs?
-		let sync_peer = self.choose_sync_peer();
+		let sync_peer = self
+			.syncing_peer
+			.clone()
+			.map(|p| Some(p))
+			.unwrap_or_else(|| self.choose_sync_peer());
 		if let Some(sync_peer) = sync_peer {
 			let (peer_height, peer_diff) = {
 				let info = sync_peer.info.live_info.read();
@@ -343,9 +346,9 @@ impl HeaderSync {
 						}
 						_ => (),
 					}
+					self.syncing_peer = None;
 				}
 			}
-			self.syncing_peer = None;
 			true
 		} else {
 			// resetting the timeout as long as we progress
