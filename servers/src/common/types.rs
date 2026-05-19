@@ -408,9 +408,14 @@ impl DandelionEpoch {
 
 /// Server initialization status.
 pub enum ServerInitStatus {
+	/// Database loading.
 	LoadDatabase,
+	/// P2P server initialization.
 	StartSync,
+	/// API server initialization.
 	StartAPI,
+	/// Server instance after successful initialization.
 	FinishedLoading(Server),
+	/// Error on initialization.
 	ErrorLoading(Error),
 }

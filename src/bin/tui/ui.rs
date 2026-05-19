@@ -40,7 +40,6 @@ use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{logs, menu, mining, peers, status, version};
 use grin_core::global;
 use grin_servers::common::types::{Error, ServerInitStatus};
-use grin_servers::ServerStats;
 use grin_util::logger::LogEntry;
 
 pub struct UI {

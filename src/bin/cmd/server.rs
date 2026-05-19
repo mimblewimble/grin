@@ -28,7 +28,7 @@ use crate::tui::ui;
 use futures::channel::oneshot;
 use grin_p2p::msg::PeerAddrs;
 use grin_p2p::PeerAddr;
-use grin_servers::common::types::{Error, ServerInitStatus};
+use grin_servers::common::types::ServerInitStatus;
 use grin_servers::Server;
 use grin_util::logger::LogEntry;
 use std::sync::mpsc;

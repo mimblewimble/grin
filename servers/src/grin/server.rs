@@ -52,8 +52,6 @@ use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
 use futures::channel::oneshot;
-use futures::SinkExt;
-use grin_util::logger::LogEntry;
 
 /// Arcified  thread-safe TransactionPool with type parameters used by server components
 pub type ServerTxPool = Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, PoolToNetAdapter>>>;
