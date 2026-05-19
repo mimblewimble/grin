@@ -39,6 +39,8 @@ use crate::tui::constants::{ROOT_STACK, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEE
 use crate::tui::types::{TUIStatusListener, UIMessage};
 use crate::tui::{logs, menu, mining, peers, status, version};
 use grin_core::global;
+use grin_servers::common::types::{Error, ServerInitStatus};
+use grin_servers::ServerStats;
 use grin_util::logger::LogEntry;
 
 pub struct UI {
@@ -46,7 +48,7 @@ pub struct UI {
 	ui_rx: mpsc::Receiver<UIMessage>,
 	ui_tx: mpsc::Sender<UIMessage>,
 	controller_tx: mpsc::Sender<ControllerMessage>,
-	logs_rx: mpsc::Receiver<LogEntry>,
+	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 }
 
 fn modify_theme(theme: &mut Theme) {
@@ -65,7 +67,7 @@ impl UI {
 	/// Create a new UI
 	pub fn new(
 		controller_tx: mpsc::Sender<ControllerMessage>,
-		logs_rx: mpsc::Receiver<LogEntry>,
+		logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	) -> UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
 
@@ -139,8 +141,10 @@ impl UI {
 			return false;
 		}
 
-		while let Some(message) = self.logs_rx.try_iter().next() {
-			logs::TUILogsView::update(&mut self.cursive, message);
+		if let Some(logs_rx) = &self.logs_rx {
+			while let Some(message) = logs_rx.try_iter().next() {
+				logs::TUILogsView::update(&mut self.cursive, message);
+			}
 		}
 
 		// Process any pending UI messages
@@ -174,6 +178,8 @@ impl UI {
 pub struct Controller {
 	rx: mpsc::Receiver<ControllerMessage>,
 	ui: UI,
+	serv_rx: mpsc::Receiver<ServerInitStatus>,
+	server: Option<Server>,
 }
 
 pub enum ControllerMessage {
@@ -182,16 +188,52 @@ pub enum ControllerMessage {
 
 impl Controller {
 	/// Create a new controller
-	pub fn new(logs_rx: mpsc::Receiver<LogEntry>) -> Result<Controller, String> {
+	pub fn new(
+		logs_rx: Option<mpsc::Receiver<LogEntry>>,
+		serv_rx: mpsc::Receiver<ServerInitStatus>,
+	) -> Result<Controller, String> {
 		let (tx, rx) = mpsc::channel::<ControllerMessage>();
 		Ok(Controller {
 			rx,
 			ui: UI::new(tx, logs_rx),
+			serv_rx,
+			server: None,
 		})
 	}
 
+	/// Server initialization status.
+	pub fn init_status(&mut self, text: &str, pop: bool) {
+		if pop {
+			self.ui.cursive.pop_layer();
+		}
+		let content = StyledString::styled(text, Color::Light(BaseColor::Green));
+		self.ui
+			.cursive
+			.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
+	}
+
+	/// Server initialization error.
+	pub fn init_error(&mut self, e: Error) {
+		let content = StyledString::styled(format!("{:?}", e), Color::Light(BaseColor::Red));
+		self.ui.cursive.add_layer(
+			CircularFocus::new(Dialog::around(TextView::new(content)).button("Exit", |s| {
+				s.quit();
+			}))
+			.wrap_tab(),
+		);
+	}
+
+	/// Server UI after initialization.
+	pub fn server(&mut self, server: &Server) {
+		if let Ok(stats) = server.get_server_stats() {
+			self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+		}
+	}
+
 	/// Run the controller
-	pub fn run(&mut self, server: Server) {
+	pub fn run(&mut self) {
+		self.init_status("Starting server...", false);
+
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		let delay = time::Duration::from_millis(50);
@@ -201,20 +243,33 @@ impl Controller {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
-						server.stop();
-						return;
+						break;
 					}
+				}
+			}
+
+			if let Some(m) = self.serv_rx.try_iter().next() {
+				match m {
+					ServerInitStatus::LoadDatabase => self.init_status("Loading database...", true),
+					ServerInitStatus::StartSync => self.init_status("Start syncing...", true),
+					ServerInitStatus::StartAPI => self.init_status("Starting API...", true),
+					ServerInitStatus::FinishedLoading(s) => {
+						self.ui.cursive.pop_layer();
+						self.server = Some(s)
+					}
+					ServerInitStatus::ErrorLoading(e) => self.init_error(e),
 				}
 			}
 
 			if Utc::now().timestamp() > next_stat_update {
 				next_stat_update = Utc::now().timestamp() + stat_update_interval;
-				if let Ok(stats) = server.get_server_stats() {
-					self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+				if let Some(server) = self.server.take() {
+					if let Ok(stats) = server.get_server_stats() {
+						self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+					}
 				}
 			}
 			thread::sleep(delay);
 		}
-		server.stop();
 	}
 }

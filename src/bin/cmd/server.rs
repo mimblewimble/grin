@@ -28,6 +28,8 @@ use crate::tui::ui;
 use futures::channel::oneshot;
 use grin_p2p::msg::PeerAddrs;
 use grin_p2p::PeerAddr;
+use grin_servers::common::types::{Error, ServerInitStatus};
+use grin_servers::Server;
 use grin_util::logger::LogEntry;
 use std::sync::mpsc;
 
@@ -46,29 +48,25 @@ fn start_server_tui(
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 ) {
-	// Run the UI controller.. here for now for simplicity to access
-	// everything it might need
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, logs_rx: Option<mpsc::Receiver<LogEntry>>| {
-				let mut controller = ui::Controller::new(logs_rx.unwrap()).unwrap_or_else(|e| {
-					panic!("Error loading UI controller: {}", e);
-				});
-				controller.run(serv);
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
+		// Run the UI controller.
+		let (serv_tx, serv_rx) = mpsc::channel::<ServerInitStatus>();
+		let mut controller = ui::Controller::new(logs_rx, serv_rx).unwrap_or_else(|e| {
+			panic!("Error loading UI controller: {}", e);
+		});
+		let serv_tx_clone = serv_tx.clone();
+		thread::spawn(move || {
+			match Server::start(config, None, Some(serv_tx_clone.clone()), api_chan) {
+				Ok(s) => serv_tx_clone.send(ServerInitStatus::FinishedLoading(s)),
+				Err(e) => serv_tx_clone.send(ServerInitStatus::ErrorLoading(e)),
+			}
+		});
+		controller.run();
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, _: Option<mpsc::Receiver<LogEntry>>| {
+		match Server::start(config, None, None, api_chan) {
+			Ok(s) => {
 				let running = Arc::new(AtomicBool::new(true));
 				let r = running.clone();
 				ctrlc::set_handler(move || {
@@ -79,12 +77,12 @@ fn start_server_tui(
 					thread::sleep(Duration::from_secs(1));
 				}
 				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-				serv.stop();
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
+				s.stop();
+			}
+			Err(e) => {
+				error!("Error starting GRIN: {:?}", e);
+			}
+		}
 	}
 }
 
