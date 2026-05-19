@@ -123,6 +123,11 @@ impl UI {
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
 		grin_ui.cursive.add_global_callback('q', move |c| {
+			let v = c.pop_layer();
+			if v.is_some() {
+				c.add_layer(v.unwrap());
+				return;
+			}
 			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
 			c.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
 			controller_tx_clone
