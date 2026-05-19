@@ -190,7 +190,7 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
-		if let Some(server_tx) = server_tx {
+		if let Some(ref server_tx) = server_tx {
 			let _ = server_tx.send(ServerInitStatus::LoadDatabase);
 		}
 
@@ -221,7 +221,7 @@ impl Server {
 		};
 		debug!("Capabilities: {:?}", capabilities);
 
-		if let Some(server_tx) = server_tx {
+		if let Some(ref server_tx) = server_tx {
 			let _ = server_tx.send(ServerInitStatus::StartSync);
 		}
 
@@ -270,7 +270,7 @@ impl Server {
 				}
 			})?;
 
-		if let Some(server_tx) = server_tx {
+		if let Some(ref server_tx) = server_tx {
 			let _ = server_tx.send(ServerInitStatus::StartAPI);
 		}
 
