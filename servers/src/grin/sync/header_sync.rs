@@ -395,6 +395,7 @@ impl HeaderSync {
 		peers_iter()
 			.with_capabilities(Capabilities::PIHD_HIST)
 			.with_difficulty(|x| x > sync_head.total_difficulty)
+			.with_filter(|p| p.info.height() > sync_head.height)
 			.with_filter(|p| p.info.height().saturating_add(height_slack) >= max_height)
 			.into_iter()
 			.collect()
@@ -432,6 +433,10 @@ impl HeaderSync {
 				height: PIHD_HEADER_SEGMENT_HEIGHT,
 				idx: segment_idx,
 			};
+			let start_height = match pihd_segment_start_height(identifier) {
+				Some(height) => height,
+				None => return,
+			};
 			if self
 				.pending_pihd
 				.iter()
@@ -443,17 +448,21 @@ impl HeaderSync {
 			let peer = match peers
 				.iter()
 				.find(|peer| {
-					self.pending_pihd
-						.iter()
-						.filter(|req| req.peer_addr == peer.info.addr)
-						.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS_PER_PEER
+					peer.info.height() >= start_height
+						&& self
+							.pending_pihd
+							.iter()
+							.filter(|req| req.peer_addr == peer.info.addr)
+							.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS_PER_PEER
 				})
 				.or_else(|| {
 					peers.iter().find(|peer| {
-						self.pending_pihd
-							.iter()
-							.filter(|req| req.peer_addr == peer.info.addr)
-							.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS
+						peer.info.height() >= start_height
+							&& self
+								.pending_pihd
+								.iter()
+								.filter(|req| req.peer_addr == peer.info.addr)
+								.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS
 					})
 				}) {
 				Some(peer) => peer.clone(),
@@ -507,6 +516,12 @@ impl HeaderSync {
 	}
 }
 
+fn pihd_segment_start_height(id: SegmentIdentifier) -> Option<u64> {
+	id.idx
+		.checked_mul(id.segment_capacity())
+		.and_then(|height| height.checked_add(1))
+}
+
 // current height back to 0 decreasing in powers of 2
 fn get_locator_heights(height: u64) -> Vec<u64> {
 	let mut current = height;
@@ -544,6 +559,24 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,]
+		);
+	}
+
+	#[test]
+	fn test_pihd_segment_start_height() {
+		assert_eq!(
+			pihd_segment_start_height(SegmentIdentifier {
+				height: PIHD_HEADER_SEGMENT_HEIGHT,
+				idx: 0
+			}),
+			Some(1)
+		);
+		assert_eq!(
+			pihd_segment_start_height(SegmentIdentifier {
+				height: PIHD_HEADER_SEGMENT_HEIGHT,
+				idx: 1
+			}),
+			Some((p2p::MAX_BLOCK_HEADERS as u64) + 1)
 		);
 	}
 }

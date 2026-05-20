@@ -129,6 +129,25 @@ impl PruneList {
 		Ok(())
 	}
 
+	/// Discard in-memory changes and restore the last flushed prune_list state.
+	pub fn discard(&mut self) -> io::Result<()> {
+		let path = match self.path.clone() {
+			Some(path) => path,
+			None => {
+				*self = PruneList::empty();
+				return Ok(());
+			}
+		};
+
+		let bitmap = if path.exists() {
+			read_bitmap(&path)?
+		} else {
+			Bitmap::new()
+		};
+		*self = PruneList::new(Some(path), bitmap);
+		Ok(())
+	}
+
 	/// Return the total shift from all entries in the prune_list.
 	/// This is the shift we need to account for when adding new entries to our PMMR.
 	pub fn get_total_shift(&self) -> u64 {

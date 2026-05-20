@@ -229,6 +229,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// and queue them up for a connection attempt
 	// intentionally make too many attempts (2x) as some (most?) will fail
 	// as many nodes in our db are not publicly accessible
+	let default_peers = PeerAddrs::default();
+	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 	let mut new_peers = vec![];
 	let max_peer_attempts = 128;
 	let max_attempt_delay = Duration::hours(1).num_seconds();
@@ -241,7 +243,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
-		new_peers.push(&hp.addr);
+		new_peers.push(hp.addr);
 	}
 	// always check min 32 (max 96, if there are no healthy) random unknown peers received from peer list request.
 	let req_unk_count = cmp::max(
@@ -252,7 +254,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		.iter()
 		.choose_multiple(&mut thread_rng(), req_unk_count)
 	{
-		new_peers.push(upa);
+		new_peers.push(*upa);
 	}
 	debug!(
 		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
@@ -269,7 +271,16 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		.filter(|p| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
-		new_peers.push(&dp.addr);
+		new_peers.push(dp.addr);
+	}
+
+	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
+	if !peers.enough_outbound_peers() {
+		for addr in seed_list(&config) {
+			if !peers_deny.as_slice().contains(&addr) && !new_peers.contains(&addr) {
+				new_peers.push(addr);
+			}
+		}
 	}
 
 	// Only queue up connection attempts for candidate peers where we
@@ -277,8 +288,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// The call to is_known() may fail due to contention on the peers map.
 	// Do not attempt any connection where is_known() fails for any reason.
 	for pa in new_peers {
-		if let Ok(false) = peers.is_known(*pa) {
-			tx.send(*pa).unwrap();
+		if let Ok(false) = peers.is_known(pa) {
+			tx.send(pa).unwrap();
 		}
 	}
 }
@@ -314,11 +325,30 @@ fn connect_to_seeds_and_peers(
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 128);
 
 	// if so, get their addresses, otherwise use our seeds
-	let peer_addrs = if peers.len() > 3 {
+	let mut peer_addrs = if peers.len() > 3 {
 		peers.iter().map(|p| p.addr).collect::<Vec<_>>()
 	} else {
 		seed_list(&config)
 	};
+
+	// If the peer db has too few healthy peer-list providers, fill from seeds.
+	let min_outbound = config.peer_min_preferred_outbound_count() as usize;
+	let allowed_peer_count = peer_addrs
+		.iter()
+		.filter(|addr| !peers_deny.as_slice().contains(addr))
+		.count();
+	if allowed_peer_count < min_outbound {
+		let mut allowed_peer_count = allowed_peer_count;
+		for addr in seed_list(&config) {
+			if !peers_deny.as_slice().contains(&addr) && !peer_addrs.contains(&addr) {
+				peer_addrs.push(addr);
+				allowed_peer_count += 1;
+			}
+			if allowed_peer_count >= min_outbound {
+				break;
+			}
+		}
+	}
 
 	if peer_addrs.is_empty() {
 		warn!("No seeds were retrieved.");
