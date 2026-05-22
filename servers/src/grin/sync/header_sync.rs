@@ -107,6 +107,7 @@ impl HeaderSync {
 		let sync_peer = self
 			.syncing_peer
 			.clone()
+			.filter(|p| self.peers.get_connected_peer(p.info.addr).is_some())
 			.map(|p| Some(p))
 			.unwrap_or_else(|| self.choose_sync_peer());
 		if let Some(sync_peer) = sync_peer {
@@ -152,8 +153,11 @@ impl HeaderSync {
 					highest_height: peer_height,
 					highest_diff: peer_diff,
 				});
-				self.header_sync(sync_head, sync_peer.clone());
-				self.syncing_peer = Some(sync_peer.clone());
+				if self.header_sync(sync_head, sync_peer.clone()) {
+					self.syncing_peer = Some(sync_peer.clone());
+				} else {
+					self.syncing_peer = None;
+				}
 			} else {
 				if !self.pihd_active {
 					info!(
@@ -401,9 +405,11 @@ impl HeaderSync {
 			.collect()
 	}
 
-	fn header_sync(&mut self, sync_head: chain::Tip, peer: Arc<Peer>) {
+	fn header_sync(&mut self, sync_head: chain::Tip, peer: Arc<Peer>) -> bool {
 		if peer.info.total_difficulty() > sync_head.total_difficulty {
-			self.request_headers(sync_head, peer);
+			self.request_headers(sync_head, peer)
+		} else {
+			false
 		}
 	}
 
@@ -488,9 +494,13 @@ impl HeaderSync {
 	}
 
 	/// Request some block headers from a peer to advance us.
-	fn request_headers(&mut self, sync_head: chain::Tip, peer: Arc<Peer>) {
-		if self.pending_legacy.is_some() {
-			return;
+	fn request_headers(&mut self, sync_head: chain::Tip, peer: Arc<Peer>) -> bool {
+		if let Some(req) = &self.pending_legacy {
+			return req.peer_addr == peer.info.addr
+				&& self.peers.get_connected_peer(peer.info.addr).is_some();
+		}
+		if self.peers.get_connected_peer(peer.info.addr).is_none() {
+			return false;
 		}
 		if let Ok(locator) = self.get_locator(sync_head) {
 			debug!(
@@ -504,8 +514,10 @@ impl HeaderSync {
 					height: sync_head.height,
 					requested_at: Utc::now(),
 				});
+				return true;
 			}
 		}
+		false
 	}
 
 	/// Build a locator based on header_head.
