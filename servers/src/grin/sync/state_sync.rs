@@ -267,15 +267,10 @@ impl StateSync {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
-		// Remove stale requests, if we haven't received the segment within a minute re-request
-		// TODO: verify timing
+		// Remove stale requests, if we haven't received the segment in time re-request
 		let stale_segments = self
 			.sync_state
 			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
-		let retry_segments = self.sync_state.retryable_pibd_segments(
-			pibd_params::BLOCKING_SEGMENT_RETRY_SECS,
-			pibd_params::BLOCKING_SEGMENT_RETRY_COUNT,
-		);
 		if !stale_segments.is_empty() {
 			for (seg_id, peer_addr) in stale_segments.iter() {
 				if let Some(peer_addr) = peer_addr {
@@ -376,10 +371,7 @@ impl StateSync {
 		// For each segment, pick a desirable peer and send message
 		// (Provided we're not waiting for a response for this message from someone else)
 		let mut sent_requests = 0;
-		let mut request_candidates: Vec<_> = retry_segments
-			.into_iter()
-			.map(|(seg_id, peer)| (seg_id, peer, true))
-			.collect();
+		let mut request_candidates = vec![];
 
 		let mut bitmap_candidates = vec![];
 		let mut output_candidates = vec![];
@@ -391,7 +383,7 @@ impl StateSync {
 				.iter()
 				.find(|(stale_id, _)| stale_id == &seg_id)
 				.and_then(|(_, addr)| *addr);
-			let candidate = (seg_id, excluded_peer, false);
+			let candidate = (seg_id, excluded_peer);
 			match candidate.0.segment_type {
 				SegmentType::Bitmap => bitmap_candidates.push(candidate),
 				SegmentType::Output => output_candidates.push(candidate),
@@ -423,11 +415,11 @@ impl StateSync {
 			}
 		}
 
-		for (seg_id, excluded_peer, is_retry) in request_candidates.iter() {
-			if !is_retry && sent_requests >= request_budget {
+		for (seg_id, excluded_peer) in request_candidates.iter() {
+			if sent_requests >= request_budget {
 				continue;
 			}
-			if !is_retry && self.sync_state.contains_pibd_segment(seg_id) {
+			if self.sync_state.contains_pibd_segment(seg_id) {
 				trace!("Request list contains, continuing: {:?}", seg_id);
 				continue;
 			}
@@ -524,11 +516,7 @@ impl StateSync {
 				});
 			if let Some(p) = peer {
 				// add to list of segments that are being tracked
-				if *is_retry {
-					self.sync_state.refresh_pibd_segment(seg_id, p.info.addr.0);
-				} else {
-					self.sync_state.add_pibd_segment(seg_id, p.info.addr.0);
-				}
+				self.sync_state.add_pibd_segment(seg_id, p.info.addr.0);
 				let res = match seg_id.segment_type {
 					SegmentType::Bitmap => p.send_bitmap_segment_request(
 						archive_header.hash(),
@@ -553,15 +541,6 @@ impl StateSync {
 						p.info.addr, e
 					);
 					self.sync_state.remove_pibd_segment(seg_id);
-				} else if *is_retry {
-					if let Some(prev_peer) = excluded_peer {
-						if p.info.addr.0 != *prev_peer {
-							info!(
-								"state_sync: retrying blocking segment {:?} with new peer {} (previously {})",
-								seg_id, p.info.addr, prev_peer
-							);
-						}
-					}
 				} else if let Some(prev_peer) = excluded_peer {
 					if p.info.addr.0 != *prev_peer {
 						info!(
@@ -580,9 +559,7 @@ impl StateSync {
 						seg_id, p.info.addr
 					);
 				}
-				if !is_retry {
-					sent_requests += 1;
-				}
+				sent_requests += 1;
 			}
 		}
 		false

@@ -36,13 +36,7 @@ pub const SEGMENT_APPLY_BATCH_SIZE: usize = 12;
 
 /// How long the state sync should wait after requesting a segment from a peer before
 /// deciding the segment isn't going to arrive. The syncer will then re-request the segment
-pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 60;
-
-/// How long to wait before retrying a pending segment that may be blocking progress
-pub const BLOCKING_SEGMENT_RETRY_SECS: i64 = 10;
-
-/// Maximum number of pending blocking segments to retry in one state sync loop
-pub const BLOCKING_SEGMENT_RETRY_COUNT: usize = 2;
+pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 20;
 
 /// Number of simultaneous requests for segments we should make. Note this is currently
 /// divisible by 3 to try and evenly spread requests amount the 3 main MMRs (Bitmap segments

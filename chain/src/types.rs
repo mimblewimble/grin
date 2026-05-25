@@ -377,17 +377,6 @@ impl SyncState {
 		}
 	}
 
-	/// Add or refresh PIBD segment request tracking
-	pub fn refresh_pibd_segment(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
-		let mut requested_segments = self.requested_pibd_segments.write();
-		if let Some(existing) = requested_segments.iter_mut().find(|i| &i.identifier == id) {
-			existing.request_time = Utc::now();
-			existing.last_peer = Some(peer_addr);
-		} else {
-			requested_segments.push(PIBDSegmentContainer::new(id.clone(), Some(peer_addr)));
-		}
-	}
-
 	/// Remove segment from list
 	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
 		debug!("sync_state: removing PIBD request tracking for {:?}", id);
@@ -480,22 +469,6 @@ impl SyncState {
 	/// Number of currently pending PIBD segment requests
 	pub fn pending_pibd_segment_count(&self) -> usize {
 		self.requested_pibd_segments.read().len()
-	}
-
-	/// Pending PIBD segment requests older than the provided retry delay
-	pub fn retryable_pibd_segments(
-		&self,
-		retry_seconds: i64,
-		limit: usize,
-	) -> Vec<(SegmentTypeIdentifier, Option<SocketAddr>)> {
-		let cutoff_time = Utc::now() - Duration::seconds(retry_seconds);
-		self.requested_pibd_segments
-			.read()
-			.iter()
-			.filter(|i| i.request_time <= cutoff_time)
-			.take(limit)
-			.map(|i| (i.identifier.clone(), i.last_peer))
-			.collect()
 	}
 
 	/// Track a pending PIHD header segment request.
