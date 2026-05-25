@@ -63,15 +63,13 @@ fn start_server_tui(
 				Ok(s) => {
 					if !tui_running_clone.load(Ordering::Relaxed) {
 						s.stop();
-						return serv_tx_clone.send(ServerInitStatus::ErrorLoading(
-							grin_servers::common::types::Error::General(
-								"TUI was already stopped".to_string(),
-							),
-						));
+						return;
 					}
-					serv_tx_clone.send(ServerInitStatus::FinishedLoading(s))
+					let _ = serv_tx_clone.send(ServerInitStatus::FinishedLoading(s));
 				}
-				Err(e) => serv_tx_clone.send(ServerInitStatus::ErrorLoading(e)),
+				Err(e) => {
+					let _ = serv_tx_clone.send(ServerInitStatus::ErrorLoading(e));
+				}
 			}
 		});
 		controller.run();
