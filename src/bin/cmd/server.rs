@@ -55,14 +55,27 @@ fn start_server_tui(
 		let mut controller = ui::Controller::new(logs_rx, serv_rx).unwrap_or_else(|e| {
 			panic!("Error loading UI controller: {}", e);
 		});
+		let tui_running = Arc::new(AtomicBool::new(true));
 		let serv_tx_clone = serv_tx.clone();
+		let tui_running_clone = tui_running.clone();
 		thread::spawn(move || {
 			match Server::start(config, None, Some(serv_tx_clone.clone()), api_chan) {
-				Ok(s) => serv_tx_clone.send(ServerInitStatus::FinishedLoading(s)),
+				Ok(s) => {
+					if !tui_running_clone.load(Ordering::Relaxed) {
+						s.stop();
+						return serv_tx_clone.send(ServerInitStatus::ErrorLoading(
+							grin_servers::common::types::Error::General(
+								"TUI was already stopped".to_string(),
+							),
+						));
+					}
+					serv_tx_clone.send(ServerInitStatus::FinishedLoading(s))
+				}
 				Err(e) => serv_tx_clone.send(ServerInitStatus::ErrorLoading(e)),
 			}
 		});
 		controller.run();
+		tui_running.store(false, Ordering::Relaxed);
 	} else {
 		warn!("Starting GRIN w/o UI...");
 		match Server::start(config, None, None, api_chan) {
