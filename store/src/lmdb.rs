@@ -811,15 +811,13 @@ where
 
 	fn next(&mut self) -> Option<Self::Item> {
 		if let Some(k) = self.keys.iter().skip(self.skip_cur).next() {
+			self.skip_total += 1;
+			self.skip_cur += 1;
 			match self.db.get(&self.read, k) {
 				Ok(v) => {
 					if let Some(v) = v {
 						return match (self.deserialize)(k, v) {
-							Ok(v) => {
-								self.skip_total += 1;
-								self.skip_cur += 1;
-								Some(Ok(v))
-							}
+							Ok(v) => Some(Ok(v)),
 							Err(e) => {
 								error!("db iter: error deserializing: {}", e);
 								Some(Err(Error::from(e)))
