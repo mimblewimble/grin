@@ -15,6 +15,12 @@
 //! Basic TUI to better output the overall system status and status
 //! of various subsystems
 
+use super::constants::MAIN_MENU;
+use crate::built_info;
+use crate::servers::Server;
+use crate::tui::constants::{ROOT_STACK, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC};
+use crate::tui::types::{TUIStatusListener, UIMessage};
+use crate::tui::{logs, menu, mining, peers, status, version};
 use chrono::prelude::Utc;
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
@@ -29,18 +35,12 @@ use cursive::views::{
 	CircularFocus, Dialog, LinearLayout, Panel, SelectView, StackView, TextView, ViewRef,
 };
 use cursive::{CursiveRunnable, CursiveRunner};
-use std::sync::mpsc;
-use std::{thread, time};
-
-use super::constants::MAIN_MENU;
-use crate::built_info;
-use crate::servers::Server;
-use crate::tui::constants::{ROOT_STACK, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC};
-use crate::tui::types::{TUIStatusListener, UIMessage};
-use crate::tui::{logs, menu, mining, peers, status, version};
 use grin_core::global;
 use grin_servers::common::types::{Error, ServerInitStatus};
 use grin_util::logger::LogEntry;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::{thread, time};
 
 pub struct UI {
 	cursive: CursiveRunner<CursiveRunnable>,
@@ -48,6 +48,7 @@ pub struct UI {
 	ui_tx: mpsc::Sender<UIMessage>,
 	controller_tx: mpsc::Sender<ControllerMessage>,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
+	show_dialog: Arc<AtomicBool>,
 }
 
 fn modify_theme(theme: &mut Theme) {
@@ -76,6 +77,7 @@ impl UI {
 			ui_rx,
 			controller_tx,
 			logs_rx,
+			show_dialog: Arc::new(AtomicBool::new(false)),
 		};
 
 		// Create UI objects, etc
@@ -103,7 +105,7 @@ impl UI {
 				built_info::PKG_VERSION,
 				global::get_chain_type()
 			),
-			Color::Dark(BaseColor::Green),
+			Dark(BaseColor::Green),
 		));
 
 		let main_layer = LinearLayout::new(Orientation::Vertical)
@@ -118,22 +120,21 @@ impl UI {
 		let mut theme = grin_ui.cursive.current_theme().clone();
 		modify_theme(&mut theme);
 		grin_ui.cursive.set_theme(theme);
+
 		grin_ui.cursive.add_fullscreen_layer(main_layer);
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
+		let show_dialog_clone = grin_ui.show_dialog.clone();
 		grin_ui.cursive.add_global_callback('q', move |c| {
-			let v = c.pop_layer();
-			if v.is_some() {
-				c.add_layer(v.unwrap());
+			if show_dialog_clone.load(Ordering::Relaxed) {
 				return;
 			}
 			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
 			c.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
-			controller_tx_clone
-				.send(ControllerMessage::Shutdown)
-				.unwrap();
+			let _ = controller_tx_clone.send(ControllerMessage::Shutdown);
 		});
+
 		grin_ui.cursive.set_fps(3);
 		grin_ui
 	}
@@ -214,6 +215,7 @@ impl Controller {
 		self.ui
 			.cursive
 			.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
+		self.ui.show_dialog.store(true, Ordering::Relaxed);
 	}
 
 	/// Server initialization error.
@@ -225,6 +227,7 @@ impl Controller {
 			}))
 			.wrap_tab(),
 		);
+		self.ui.show_dialog.store(true, Ordering::Relaxed);
 	}
 
 	/// Server UI after initialization.
@@ -262,6 +265,7 @@ impl Controller {
 					ServerInitStatus::StartAPI => self.init_status("Starting API...", true),
 					ServerInitStatus::FinishedLoading(s) => {
 						self.ui.cursive.pop_layer();
+						self.ui.show_dialog.store(false, Ordering::Relaxed);
 						self.server = Some(s)
 					}
 					ServerInitStatus::ErrorLoading(e) => self.init_error(e),
