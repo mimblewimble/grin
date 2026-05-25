@@ -247,6 +247,9 @@ impl Controller {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
+						if let Some(s) = self.server {
+							s.stop();
+						}
 						break;
 					}
 				}
