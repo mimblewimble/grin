@@ -405,22 +405,36 @@ impl<T: PosEntry> RewindableListIndex for MultiIndex<T> {
 
 impl<T: PosEntry> PruneableListIndex for MultiIndex<T> {
 	fn clear(&self, batch: &mut Batch<'_>) -> Result<(), Error> {
-		let mut list_count = 0;
-		let mut entry_count = 0;
+		let mut lists_to_delete = vec![];
 		let list_db_key = Some(self.list_prefix);
 		for key in batch.db.iter(list_db_key, |k, _| Ok(k.to_vec()))? {
 			if let Ok(key) = key {
-				let _ = batch.delete(list_db_key, &key);
-				list_count += 1;
+				lists_to_delete.push(key);
 			}
 		}
+		let mut list_count = 0;
+		for l in lists_to_delete {
+			match batch.delete(list_db_key, &l) {
+				Ok(_) => list_count += 1,
+				Err(_) => {}
+			}
+		}
+
+		let mut entries_to_delete = vec![];
 		let entry_db_key = Some(self.entry_prefix);
 		for key in batch.db.iter(entry_db_key, |k, _| Ok(k.to_vec()))? {
 			if let Ok(key) = key {
-				let _ = batch.delete(entry_db_key, &key);
-				entry_count += 1;
+				entries_to_delete.push(key);
 			}
 		}
+		let mut entry_count = 0;
+		for e in entries_to_delete {
+			match batch.delete(entry_db_key, &e) {
+				Ok(_) => entry_count += 1,
+				Err(_) => {}
+			}
+		}
+
 		debug!(
 			"clear: lists deleted: {}, entries deleted: {}",
 			list_count, entry_count

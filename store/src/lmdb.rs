@@ -316,7 +316,7 @@ impl Store {
 					db.put(&mut write_to, key, &v)?;
 					count += 1;
 				} else {
-					error!("Migration: unknown DB key: {}", db_name[0]);
+					warn!("Migration: unknown DB key: {}", db_name[0]);
 				}
 			} else {
 				self.def_db.put(&mut write_to, k, &v)?;
@@ -566,11 +566,11 @@ impl Store {
 	}
 
 	/// Produces an iterator from the provided database key.
-	pub fn iter<F, T>(
+	pub fn iter<'a, F, T>(
 		&self,
 		db_key: Option<u8>,
 		deserialize: F,
-	) -> Result<DatabaseIterator<F, T>, Error>
+	) -> Result<DatabaseIterator<'a, F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
@@ -668,7 +668,8 @@ impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the provided database key.
 	pub fn put(&mut self, db_key: Option<u8>, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		let db = self.store.get_db(db_key)?;
-		db.put(&mut self.write, key, value)?;
+		let w = &mut self.write;
+		db.put(w, key, value)?;
 		Ok(())
 	}
 
@@ -730,14 +731,38 @@ impl<'a> Batch<'a> {
 
 	/// Produces an iterator from the provided database key.
 	pub fn iter<F, T>(
-		&self,
+		&'a self,
 		db_key: Option<u8>,
 		deserialize: F,
-	) -> Result<DatabaseIterator<F, T>, Error>
+	) -> Result<DatabaseIterator<'a, F, T>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.store.iter(db_key, deserialize)
+		self.store.wait_for_resize();
+
+		TxCounter::on_change_tx_count(&self.store.env_path, true);
+		let read = self.write.nested_read_txn();
+		match read {
+			Ok(read) => {
+				let db_res = self.store.get_db(db_key);
+				match db_res {
+					Ok(db) => Ok(DatabaseIterator::new(
+						self.store,
+						Arc::new(db.clone()),
+						read,
+						deserialize,
+					)),
+					Err(e) => {
+						TxCounter::on_change_tx_count(&self.store.env_path, false);
+						Err(Error::from(e))
+					}
+				}
+			}
+			Err(e) => {
+				TxCounter::on_change_tx_count(&self.store.env_path, false);
+				Err(Error::from(e))
+			}
+		}
 	}
 
 	/// Gets a `Readable` value from the database by provided key and deserialization strategy.
@@ -794,12 +819,12 @@ impl<'a> Batch<'a> {
 
 /// An iterator based on database key.
 /// Caller is responsible for deserialization of the data.
-pub struct DatabaseIterator<F, T>
+pub struct DatabaseIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
 	db: Arc<Database<Bytes, Bytes>>,
-	read: Arc<RoTxn<'static, WithoutTls>>,
+	read: Arc<RoTxn<'a, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
 	total_keys: usize,
 	skip_cur: usize,
@@ -809,7 +834,7 @@ where
 	tx_counter: TxCounter,
 }
 
-impl<F, T> Iterator for DatabaseIterator<F, T>
+impl<F, T> Iterator for DatabaseIterator<'_, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -857,7 +882,7 @@ where
 	}
 }
 
-impl<F, T> DatabaseIterator<F, T>
+impl<'a, F, T> DatabaseIterator<'a, F, T>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -865,9 +890,9 @@ where
 	pub fn new(
 		store: &Store,
 		db: Arc<Database<Bytes, Bytes>>,
-		read: RoTxn<'static, WithoutTls>,
+		read: RoTxn<'a, WithoutTls>,
 		deserialize: F,
-	) -> DatabaseIterator<F, T> {
+	) -> DatabaseIterator<'a, F, T> {
 		let (keys, total_keys) = if let Ok(iter) = db.iter(&read) {
 			let total = iter.move_between_keys().count();
 			let keys = if let Ok(iter) = db.iter(&read) {

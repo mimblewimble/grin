@@ -643,7 +643,7 @@ impl TxHashSet {
 
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
-		let mut removed_count = 0;
+		let mut pos_to_delete = vec![];
 		for kp in batch.output_pos_iter()? {
 			if let Ok((key, pos1)) = kp {
 				let pos0 = pos1.pos - 1;
@@ -658,9 +658,13 @@ impl TxHashSet {
 						}
 					}
 				}
-				batch.delete(Some(store::OUTPUT_POS_PREFIX), &key)?;
-				removed_count += 1;
+				pos_to_delete.push(key);
 			}
+		}
+		let mut removed_count = 0;
+		for p in pos_to_delete {
+			batch.delete(Some(store::OUTPUT_POS_PREFIX), &p)?;
+			removed_count += 1;
 		}
 		debug!(
 			"init_output_pos_index: removed {} stale index entries",

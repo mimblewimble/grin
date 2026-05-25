@@ -118,13 +118,12 @@ fn test_iter() -> Result<(), store::Error> {
 	let mut batch = store.batch()?;
 	batch.put(Some(prefix), &key, &value)?;
 
-	// TODO - This is not currently possible (and we need to be aware of this).
-	// Currently our SerIterator is limited to using a ReadTransaction only.
-	//
 	// Check we can see the new entry via an iterator using the uncommitted batch.
-	// let mut iter: SerIterator<Vec<u8>> = batch.iter(&[0])?;
-	// assert_eq!(iter.next(), Some((key.to_vec(), value.to_vec())));
-	// assert_eq!(iter.next(), None);
+	{
+		let mut iter = batch.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;
+		assert_eq!(iter.next(), Some(Ok(value.to_vec())));
+		assert_eq!(iter.next(), None);
+	}
 
 	// Check we can not yet see the new entry via an iterator outside the uncommitted batch.
 	let mut iter = store.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;

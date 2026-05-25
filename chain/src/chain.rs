@@ -1293,18 +1293,23 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut count = 0;
 		let tail_hash = header_pmmr.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
-		// Remove old blocks (including short lived fork blocks) which height < tail.height
-		for block in batch.blocks_iter()? {
+		// Remove old blocks (including short-lived fork blocks) which height < tail.height
+		let mut blocks_to_delete = vec![];
+		let iter = batch.blocks_iter()?;
+		for block in iter {
 			if let Ok(block) = block {
 				if block.header.height < tail.height {
-					let _ = batch.delete_block(&block.hash());
-					count += 1;
+					blocks_to_delete.push(block.hash());
 				}
 			}
+		}
+		let mut count = 0;
+		for bh in blocks_to_delete {
+			let _ = batch.delete_block(&bh);
+			count += 1;
 		}
 
 		batch.save_body_tail(&Tip::from_header(&tail))?;

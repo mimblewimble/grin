@@ -195,7 +195,9 @@ pub struct PeersIterBatch<'a> {
 
 impl<'a> PeersIterBatch<'a> {
 	/// Iterator over all known peers.
-	pub fn peers_iter(&self) -> Result<impl Iterator<Item = Result<PeerData, Error>>, Error> {
+	pub fn peers_iter(
+		&'a self,
+	) -> Result<impl Iterator<Item = Result<PeerData, Error>> + 'a, Error> {
 		let protocol_version = self.db.protocol_version();
 		self.db.iter(Some(PEER_PREFIX), move |_, mut v| {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
