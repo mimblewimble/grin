@@ -93,7 +93,7 @@ fn start_server_tui(
 				s.stop();
 			}
 			Err(e) => {
-				error!("Error starting GRIN: {:?}", e);
+				panic!("Error starting GRIN: {:?}", e);
 			}
 		}
 	}
