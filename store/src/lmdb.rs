@@ -252,9 +252,15 @@ impl Store {
 			let migrate_from = Path::new(root_path).join(env_name);
 			if migrate_from.exists() {
 				match s.migrate_to_default_env(db_name, &migrate_from) {
-					Ok(_) => {
-						let _ = fs::remove_dir_all(&migrate_from);
-					}
+					Ok(_) => match fs::remove_dir_all(&migrate_from) {
+						Ok(_) => {}
+						Err(e) => {
+							return Err(Error::FileErr(format!(
+								"Can not remove old DB file: {:?}",
+								e
+							)));
+						}
+					},
 					Err(e) => {
 						error!("DB {} migration error: {:?}", env_name, e);
 						match s.clear() {
