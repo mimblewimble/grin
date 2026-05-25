@@ -26,21 +26,18 @@ The development team will be happy to help and guide you with any of these point
 
 # Find Us
 
-When you are starting to contribute to grin, we really would appreciate if you come by the gitter chat channels.
+When you are starting to contribute to grin, we really would appreciate if you come by one of the community channels.
 
 In case of problems with trying out grin, before starting to contribute, there's the [grincoin#support](https://keybase.io/team/grincoin) on Keybase. Write there about what you've done, what you want to do, and maybe paste logs through a text paste webservice.
 
-
-* [Grin Governance Council Public](https://t.me/Grin_Governance) channel where biweekly meeting held for governance and development issues.
-* [Grin General Telegram channel](https://t.me/grinprivacy/1) for general discussion for the community.
+* [Grin Governance Council Public](https://t.me/Grin_Governance) channel where biweekly meetings are held for governance and development issues.
+* [Grin General Telegram channel](https://t.me/grinprivacy/1) for general community discussion.
 * Please [join the grincoin#general  on Keybase](https://keybase.io/team/grincoin) to get a feeling for the community.
 * And see the developers chat channel [grincoin#dev  on Keybase](https://keybase.io/team/grincoin) if you have questions about source code files.
   If you explain what you're looking at and what you want to do, we'll try to help you along the way.
 * See `docs/*.md` and the folder structure explanations, [the wiki](https://github.com/mimblewimble/docs/wiki) and the official [Grin documentation](https://docs.grin.mw/).
 * Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/) and news channels like the [Reddit/grincoin](https://www.reddit.com/r/grincoin/)
 
-
-  
 ## Testing
 
 Run all tests with `cargo test --all` and please remember to test locally before creating a PR on github.
