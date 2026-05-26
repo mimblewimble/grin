@@ -57,10 +57,16 @@ The development team will be happy to help and guide you with any of these point
 
 When you are starting to contribute to grin, we really would appreciate if you come by one of the community channels.
 
+If you run into problems while trying out Grin before contributing, ask in [grincoin#support](https://keybase.io/team/grincoin) on Keybase. Describe what you've done, what you want to do, and include logs using a paste service if needed.
+
 * Join the development discussion on [Telegram](https://t.me/grindevelopment).
-* Join the [grincoin team on Keybase](https://keybase.io/team/grincoin) for community and support channels.
-* Join the discussion on the [Forum](https://forum.grin.mw).
+* [Grin Governance Council Public](https://t.me/Grin_Governance) channel where biweekly meetings are held for governance and development issues.
+* [Grin General Telegram channel](https://t.me/grinprivacy/1) for general community discussion.
+* Please [join grincoin#general on Keybase](https://keybase.io/team/grincoin) to get a feeling for the community.
+* See the developers' chat channel [grincoin#dev on Keybase](https://keybase.io/team/grincoin) if you have questions about source code files.
+  If you explain what you're looking at and what you want to do, we'll try to help you along the way.
 * See `docs/*.md` and the folder structure explanations, [the wiki](https://github.com/mimblewimble/docs/wiki) and the official [Grin documentation](https://docs.grin.mw/).
+* Further information and discussions are in the [Forum](https://forum.grin.mw), the [website](https://grin.mw), the [mailing list](https://lists.launchpad.net/mimblewimble/), and news channels like [Reddit/grincoin](https://www.reddit.com/r/grincoin/).
 
 ## Testing
 
