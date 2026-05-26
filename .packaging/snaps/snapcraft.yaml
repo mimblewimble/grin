@@ -1,0 +1,32 @@
+name: grin
+version: 5.4.0
+summary: Minimal implementation of the Mimblewimble protocol
+description: |
+  https://grin.mw/
+
+confinement: strict
+grade: stable
+base: core22
+
+parts:
+  grin:
+    plugin: rust
+    source: ../..
+    build-packages:
+      - build-essential
+      - clang
+      - cmake
+      - libncurses5-dev
+      - libncursesw5-dev
+      - libssl-dev
+      - llvm
+      - pkg-config
+      - zlib1g-dev
+
+apps:
+  grin:
+    environment:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    command: bin/grin
+    plugs: [network, network-bind]

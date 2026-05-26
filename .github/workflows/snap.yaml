@@ -1,0 +1,30 @@
+name: Snap Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-snap:
+    name: Build snap
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build snap package
+        uses: snapcore/action-build@v1
+        with:
+          path: .packaging/snaps
+
+      - name: Show snap package
+        run: find . -maxdepth 3 -name "*.snap" -ls
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: grin-snap
+          path: "*.snap"
+          if-no-files-found: error
