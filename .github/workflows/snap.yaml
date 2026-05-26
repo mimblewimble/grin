@@ -3,6 +3,8 @@ name: Snap Package
 on:
   workflow_dispatch:
   push:
+    branches:
+      - snap_addition
     tags:
       - "v*.*.*"
 
