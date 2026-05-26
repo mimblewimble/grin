@@ -11,7 +11,7 @@ base: core22
 parts:
   grin:
     plugin: rust
-    source: ../..
+    source: .
     build-packages:
       - build-essential
       - clang

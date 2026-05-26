@@ -16,10 +16,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Prepare snapcraft project
+        run: |
+          mkdir -p snap
+          cp .packaging/snaps/snapcraft.yaml snap/snapcraft.yaml
+
       - name: Build snap package
         uses: snapcore/action-build@v1
         with:
-          path: .packaging/snaps
+          path: .
 
       - name: Show snap package
         run: find . -maxdepth 3 -name "*.snap" -ls
