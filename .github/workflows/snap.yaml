@@ -4,9 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - snap_addition
-    tags:
-      - "v*.*.*"
+      - master
+      - staging
 
 jobs:
   build-snap:
