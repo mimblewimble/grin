@@ -451,8 +451,18 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.iter().outbound().connected().count()
-			>= self.config.peer_min_preferred_outbound_count() as usize
+		let min_count = self.config.peer_min_preferred_outbound_count() as usize;
+		let count = match &self.config.peers_allow {
+			None => min_count,
+			Some(p) => {
+				if p.peers.is_empty() {
+					min_count
+				} else {
+					p.peers.len()
+				}
+			}
+		};
+		self.iter().outbound().connected().count() >= count
 	}
 
 	/// Whether this peer has been temporarily blocked.

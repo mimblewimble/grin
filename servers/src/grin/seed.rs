@@ -185,12 +185,19 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		unknown.len()
 	);
 
+	// Connect only to allow list if configured.
+	if connect_to_allow_list(&config, &peers, &tx) {
+		return;
+	}
+
 	// Connect to seeds again if there is no peers at database,
 	// helps to avoid stuck when 1st request to seed list was failed.
 	if total_count == 0 {
 		connect_to_seeds_and_peers(peers.clone(), tx.clone(), config);
 		return;
 	}
+
+	let default_peers = PeerAddrs::default();
 
 	if !peers.enough_outbound_peers() {
 		// loop over connected peers that can provide peer lists
@@ -212,7 +219,6 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		}
 
 		// Attempt to connect to any preferred peers.
-		let default_peers = PeerAddrs::default();
 		let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
 		for p in peers_preferred.peers.iter() {
 			if !connected_peers.is_empty() {
@@ -225,12 +231,12 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		}
 	}
 
+	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+
 	// find some peers from our db
 	// and queue them up for a connection attempt
 	// intentionally make too many attempts (2x) as some (most?) will fail
 	// as many nodes in our db are not publicly accessible
-	let default_peers = PeerAddrs::default();
-	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 	let mut new_peers = vec![];
 	let max_peer_attempts = 128;
 	let max_attempt_delay = Duration::hours(1).num_seconds();
@@ -238,7 +244,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	for hp in healthy
 		.iter()
 		.filter(|p| {
-			peers.get_connected_peer(p.addr).is_none()
+			!peers_deny.contains(&p.addr)
+				&& peers.get_connected_peer(p.addr).is_none()
 				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
@@ -252,6 +259,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	);
 	for upa in unknown
 		.iter()
+		.filter(|p| !peers_deny.contains(p))
 		.choose_multiple(&mut thread_rng(), req_unk_count)
 	{
 		new_peers.push(*upa);
@@ -268,7 +276,10 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// check min 32 (max 128, if there are no healthy and unknown) random defunct peers no more often than 1 hour per peer.
 	for dp in defuncts
 		.iter()
-		.filter(|p| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
+		.filter(|p| {
+			!peers_deny.contains(&p.addr)
+				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
 		new_peers.push(dp.addr);
@@ -277,7 +288,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !peers.enough_outbound_peers() {
 		for addr in seed_list(&config) {
-			if !peers_deny.as_slice().contains(&addr) && !new_peers.contains(&addr) {
+			if !peers_deny.contains(&addr) && !new_peers.contains(&addr) {
 				new_peers.push(addr);
 			}
 		}
@@ -301,17 +312,13 @@ fn connect_to_seeds_and_peers(
 	tx: mpsc::Sender<PeerAddr>,
 	config: P2PConfig,
 ) {
-	let default_peers = PeerAddrs::default();
-	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
-
-	// If "peers_allow" is explicitly configured then just use this list
-	// remembering to filter out "peers_deny".
-	if let Some(peers) = config.peers_allow {
-		for addr in peers.difference(peers_deny.as_slice()) {
-			let _ = tx.send(addr);
-		}
+	// If "peers_allow" is explicitly configured then just use this list.
+	if connect_to_allow_list(&config, &peers, &tx) {
 		return;
 	}
+
+	let default_peers = PeerAddrs::default();
+	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 
 	// Always try our "peers_preferred" remembering to filter out "peers_deny".
 	if let Some(peers) = config.peers_preferred.as_ref() {
@@ -360,6 +367,28 @@ fn connect_to_seeds_and_peers(
 			let _ = tx.send(addr);
 		}
 	}
+}
+
+/// Connect to allow list of peers if configured filtering denied peers.
+fn connect_to_allow_list(
+	config: &P2PConfig,
+	peers: &Arc<p2p::Peers>,
+	tx: &mpsc::Sender<PeerAddr>,
+) -> bool {
+	if let Some(p) = &config.peers_allow {
+		let default_peers = PeerAddrs::default();
+		let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+		let peers_allow = p.difference(peers_deny.as_slice());
+		if !peers_allow.peers.is_empty() {
+			for addr in peers_allow {
+				if !peers.is_known(addr).unwrap_or(false) {
+					let _ = tx.send(addr);
+				}
+			}
+			return true;
+		}
+	}
+	false
 }
 
 /// Regularly poll a channel receiver for new addresses and initiate a
