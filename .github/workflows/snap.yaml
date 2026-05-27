@@ -32,11 +32,11 @@ jobs:
           path: .
 
       - name: Show snap package
-        run: ls -l "${{ steps.build.outputs.snap }}"
+        run: find . -maxdepth 1 -name "*.snap" -ls
 
       - name: Upload snap artifact
         uses: actions/upload-artifact@v6
         with:
           name: grin-snap
-          path: ${{ steps.build.outputs.snap }}
+          path: "*.snap"
           if-no-files-found: error
