@@ -5,7 +5,7 @@ description: |
   https://grin.mw/
 
 confinement: strict
-grade: stable
+grade: SNAP_GRADE
 base: core22
 
 parts:

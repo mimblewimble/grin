@@ -17,20 +17,26 @@ jobs:
 
       - name: Prepare snapcraft project
         run: |
+          grade=stable
+          if [ "${{ github.ref_name }}" = "staging" ]; then
+            grade=devel
+          fi
+
           mkdir -p snap
-          cp .packaging/snaps/snapcraft.yaml snap/snapcraft.yaml
+          sed "s/SNAP_GRADE/$grade/" .packaging/snaps/snapcraft.yaml > snap/snapcraft.yaml
 
       - name: Build snap package
+        id: build
         uses: snapcore/action-build@v1
         with:
           path: .
 
       - name: Show snap package
-        run: find . -maxdepth 3 -name "*.snap" -ls
+        run: ls -l "${{ steps.build.outputs.snap }}"
 
       - name: Upload snap artifact
         uses: actions/upload-artifact@v6
         with:
           name: grin-snap
-          path: "*.snap"
+          path: ${{ steps.build.outputs.snap }}
           if-no-files-found: error
