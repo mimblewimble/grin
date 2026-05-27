@@ -1,5 +1,5 @@
 name: grin
-version: 5.4.0
+adopt-info: grin
 summary: Minimal implementation of the Mimblewimble protocol
 description: |
   https://grin.mw/
@@ -12,6 +12,9 @@ parts:
   grin:
     plugin: rust
     source: .
+    override-pull: |
+      craftctl default
+      craftctl set version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
     build-packages:
       - build-essential
       - clang
