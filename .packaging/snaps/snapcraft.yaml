@@ -8,7 +8,7 @@ confinement: strict
 grade: SNAP_GRADE
 base: core22
 architectures:
-  - build-on: [amd64]
+  - build-on: [arm64]
     build-for: [arm64]
   - build-on: [amd64]
     build-for: [amd64]
