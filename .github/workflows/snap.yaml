@@ -17,9 +17,9 @@ jobs:
 
       - name: Prepare snapcraft project
         run: |
-          grade=stable
-          if [ "${{ github.ref_name }}" = "staging" ]; then
-            grade=devel
+          grade=devel
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            grade=stable
           fi
 
           mkdir -p snap
