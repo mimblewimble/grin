@@ -262,8 +262,11 @@ fn comments() -> HashMap<String, String> {
 		"host".to_string(),
 		"
 #The interface on which to listen.
-#0.0.0.0 will listen on all interfaces, allowing others to interact
-#127.0.0.1 will listen on the local machine only
+#:: will listen on all IPv6 interfaces and may also accept IPv4 depending on OS socket settings
+#0.0.0.0 will listen on all IPv4 interfaces, allowing others to interact
+#Set host to 0.0.0.0 if only IPv4 listening is desired
+#127.0.0.1 will listen on the local machine only over IPv4
+#::1 will listen on the local machine only over IPv6
 "
 		.to_string(),
 	);
