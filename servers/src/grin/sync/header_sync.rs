@@ -104,49 +104,51 @@ impl HeaderSync {
 
 		self.cleanup_pending_requests(sync_head);
 
-		let sync_peer = self
-			.syncing_peer
-			.clone()
-			.filter(|p| self.peers.get_connected_peer(p.info.addr).is_some())
-			.map(|p| Some(p))
-			.unwrap_or_else(|| self.choose_sync_peer());
-		if let Some(sync_peer) = sync_peer {
-			let (peer_height, peer_diff) = {
-				let info = sync_peer.info.live_info.read();
-				(info.height, info.total_difficulty)
-			};
+		if !self.header_sync_due(sync_head) {
+			return Ok(false);
+		}
 
-			// Quick check - nothing to sync if we are caught up with the peer.
-			if peer_diff <= sync_head.total_difficulty {
-				if self.pihd_active {
-					info!(
-						"sync: PIHD header sync completed at height {}, total difficulty {}",
-						sync_head.height, sync_head.total_difficulty
-					);
-					self.pihd_active = false;
-				}
-				return Ok(false);
-			}
+		let (pihd_peers, pihd_max_height, pihd_max_diff) = if self.pihd_enabled() {
+			self.choose_pihd_peers(sync_head)
+		} else {
+			(vec![], 0, Difficulty::zero())
+		};
 
-			if !self.header_sync_due(sync_head) {
-				return Ok(false);
-			}
-
-			let pihd_peers = if self.pihd_enabled() {
-				self.choose_pihd_peers(sync_head)
-			} else {
-				vec![]
-			};
-			if pihd_peers.is_empty() {
-				if self.pihd_active {
-					info!(
+		if pihd_peers.is_empty() {
+			if self.pihd_active {
+				info!(
 						"sync: PIHD header sync aborted at height {}; falling back to legacy header sync",
 						sync_head.height
 					);
-					self.pihd_active = false;
+				self.pihd_active = false;
+			}
+			self.pending_pihd.clear();
+			self.sync_state.retain_pihd_header_segments(|_| false);
+
+			let sync_peer = self
+				.syncing_peer
+				.clone()
+				.filter(|p| self.peers.get_connected_peer(p.info.addr).is_some())
+				.map(|p| Some(p))
+				.unwrap_or_else(|| self.choose_sync_peer());
+			if let Some(sync_peer) = sync_peer {
+				let (peer_height, peer_diff) = {
+					let info = sync_peer.info.live_info.read();
+					(info.height, info.total_difficulty)
+				};
+
+				// Quick check - nothing to sync if we are caught up with the peer.
+				if peer_diff <= sync_head.total_difficulty {
+					if self.pihd_active {
+						info!(
+							"sync: PIHD header sync completed at height {}, total difficulty {}",
+							sync_head.height, sync_head.total_difficulty
+						);
+						self.pihd_active = false;
+					}
+					return Ok(false);
 				}
-				self.pending_pihd.clear();
-				self.sync_state.retain_pihd_header_segments(|_| false);
+
 				self.sync_state.update(SyncStatus::HeaderSync {
 					sync_head,
 					sync_mode: HeaderSyncMode::Legacy,
@@ -158,24 +160,24 @@ impl HeaderSync {
 				} else {
 					self.syncing_peer = None;
 				}
-			} else {
-				if !self.pihd_active {
-					info!(
-						"sync: PIHD header sync started at height {} with {} eligible peer(s)",
-						sync_head.height,
-						pihd_peers.len()
-					);
-					self.pihd_active = true;
-				}
-				self.sync_state.update(SyncStatus::HeaderSync {
-					sync_head,
-					sync_mode: HeaderSyncMode::Pihd,
-					highest_height: peer_height,
-					highest_diff: peer_diff,
-				});
-				self.pihd_header_sync(sync_head, pihd_peers);
-				self.syncing_peer = None;
 			}
+		} else {
+			if !self.pihd_active {
+				info!(
+					"sync: PIHD header sync started at height {} with {} eligible peer(s)",
+					sync_head.height,
+					pihd_peers.len()
+				);
+				self.pihd_active = true;
+			}
+			self.sync_state.update(SyncStatus::HeaderSync {
+				sync_head,
+				sync_mode: HeaderSyncMode::Pihd,
+				highest_height: pihd_max_height,
+				highest_diff: pihd_max_diff,
+			});
+			self.pihd_header_sync(sync_head, pihd_peers);
+			self.syncing_peer = None;
 		}
 		Ok(true)
 	}
@@ -383,26 +385,28 @@ impl HeaderSync {
 		})
 	}
 
-	fn choose_pihd_peers(&self, sync_head: chain::Tip) -> Vec<Arc<Peer>> {
+	fn choose_pihd_peers(&self, sync_head: chain::Tip) -> (Vec<Arc<Peer>>, u64, Difficulty) {
 		let peers_iter = || {
 			self.peers
 				.iter()
 				.with_capabilities(Capabilities::HEADER_HIST)
 				.connected()
 		};
+		let max_diff = peers_iter().max_difficulty().unwrap_or(Difficulty::zero());
 		let max_height = peers_iter()
 			.into_iter()
 			.map(|p| p.info.height())
 			.max()
 			.unwrap_or(0);
 		let height_slack = pibd_params::SYNC_PEER_HEIGHT_SLACK_BLOCKS;
-		peers_iter()
+		let peers = peers_iter()
 			.with_capabilities(Capabilities::PIHD_HIST)
 			.with_difficulty(|x| x > sync_head.total_difficulty)
 			.with_filter(|p| p.info.height() > sync_head.height)
 			.with_filter(|p| p.info.height().saturating_add(height_slack) >= max_height)
 			.into_iter()
-			.collect()
+			.collect();
+		(peers, max_height, max_diff)
 	}
 
 	fn header_sync(&mut self, sync_head: chain::Tip, peer: Arc<Peer>) -> bool {
