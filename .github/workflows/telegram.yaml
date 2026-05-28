@@ -40,7 +40,7 @@ on:
         required: false
   pull_request_target:
     types: [opened, reopened, ready_for_review]
-    branches: [master, staging, telegram_bot]
+    branches: [master, staging]
   issues:
     types: [opened, reopened]
 
