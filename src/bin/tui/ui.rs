@@ -128,7 +128,7 @@ impl UI {
 		let show_dialog_clone = grin_ui.show_dialog.clone();
 		grin_ui.cursive.add_global_callback('q', move |c| {
 			if show_dialog_clone.load(Ordering::Relaxed) {
-				return;
+				c.pop_layer();
 			}
 			let content = StyledString::styled("Shutting down...", Color::Light(BaseColor::Yellow));
 			c.add_layer(CircularFocus::new(Dialog::around(TextView::new(content))).wrap_tab());
