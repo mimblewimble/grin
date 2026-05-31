@@ -31,6 +31,7 @@ use grin_p2p::PeerAddr;
 use grin_servers::common::types::ServerInitStatus;
 use grin_servers::Server;
 use grin_util::logger::LogEntry;
+use grin_util::StopState;
 use std::sync::mpsc;
 
 /// wrap below to allow UI to clean up on stop
@@ -55,13 +56,18 @@ fn start_server_tui(
 		let mut controller = ui::Controller::new(logs_rx, serv_rx).unwrap_or_else(|e| {
 			panic!("Error loading UI controller: {}", e);
 		});
-		let tui_running = Arc::new(AtomicBool::new(true));
 		let serv_tx_clone = serv_tx.clone();
-		let tui_running_clone = tui_running.clone();
+		let stop_state = Arc::new(StopState::new());
+		let stop_state_clone = stop_state.clone();
 		thread::spawn(move || {
-			match Server::start(config, None, Some(serv_tx_clone.clone()), api_chan) {
+			match Server::start(
+				config,
+				Some(stop_state_clone.clone()),
+				Some(serv_tx_clone.clone()),
+				api_chan,
+			) {
 				Ok(s) => {
-					if !tui_running_clone.load(Ordering::Relaxed) {
+					if stop_state_clone.is_stopped() {
 						s.stop();
 						return;
 					}
@@ -73,7 +79,7 @@ fn start_server_tui(
 			}
 		});
 		controller.run();
-		tui_running.store(false, Ordering::Relaxed);
+		stop_state.stop();
 	} else {
 		warn!("Starting GRIN w/o UI...");
 		match Server::start(config, None, None, api_chan) {
