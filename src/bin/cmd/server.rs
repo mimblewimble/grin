@@ -28,7 +28,10 @@ use crate::tui::ui;
 use futures::channel::oneshot;
 use grin_p2p::msg::PeerAddrs;
 use grin_p2p::PeerAddr;
+use grin_servers::common::types::ServerInitStatus;
+use grin_servers::Server;
 use grin_util::logger::LogEntry;
+use grin_util::StopState;
 use std::sync::mpsc;
 
 /// wrap below to allow UI to clean up on stop
@@ -37,38 +40,50 @@ pub fn start_server(
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 ) {
-	start_server_tui(config, logs_rx, api_chan);
-	exit(0);
+	exit(start_server_tui(config, logs_rx, api_chan));
 }
 
 fn start_server_tui(
 	config: servers::ServerConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-) {
-	// Run the UI controller.. here for now for simplicity to access
-	// everything it might need
+) -> i32 {
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, logs_rx: Option<mpsc::Receiver<LogEntry>>| {
-				let mut controller = ui::Controller::new(logs_rx.unwrap()).unwrap_or_else(|e| {
-					panic!("Error loading UI controller: {}", e);
-				});
-				controller.run(serv);
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
+		// Run the UI controller.
+		let (serv_tx, serv_rx) = mpsc::channel::<ServerInitStatus>();
+		let mut controller = ui::Controller::new(logs_rx, serv_rx).unwrap_or_else(|e| {
+			panic!("Error loading UI controller: {}", e);
+		});
+		let serv_tx_clone = serv_tx.clone();
+		let stop_state = Arc::new(StopState::new());
+		let stop_state_clone = stop_state.clone();
+		thread::spawn(move || {
+			match Server::start(
+				config,
+				Some(stop_state_clone.clone()),
+				Some(serv_tx_clone.clone()),
+				api_chan,
+			) {
+				Ok(s) => {
+					if stop_state_clone.is_stopped() {
+						s.stop();
+						return;
+					}
+					let _ = serv_tx_clone.send(ServerInitStatus::FinishedLoading(s));
+				}
+				Err(e) => {
+					let _ = serv_tx_clone.send(ServerInitStatus::ErrorLoading(e));
+				}
+			}
+		});
+		let exit_code = controller.run();
+		stop_state.stop();
+		exit_code
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, _: Option<mpsc::Receiver<LogEntry>>| {
+		match Server::start(config, None, None, api_chan) {
+			Ok(s) => {
 				let running = Arc::new(AtomicBool::new(true));
 				let r = running.clone();
 				ctrlc::set_handler(move || {
@@ -79,12 +94,14 @@ fn start_server_tui(
 					thread::sleep(Duration::from_secs(1));
 				}
 				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-				serv.stop();
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
+				s.stop();
+				0
+			}
+			Err(e) => {
+				error!("Error starting GRIN: {:?}", e);
+				1
+			}
+		}
 	}
 }
 

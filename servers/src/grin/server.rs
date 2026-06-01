@@ -39,7 +39,7 @@ use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{
 	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
 };
-use crate::common::types::{Error, ServerConfig, StratumServerConfig};
+use crate::common::types::{Error, ServerConfig, ServerInitStatus, StratumServerConfig};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
@@ -52,7 +52,6 @@ use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
 use futures::channel::oneshot;
-use grin_util::logger::LogEntry;
 
 /// Arcified  thread-safe TransactionPool with type parameters used by server components
 pub type ServerTxPool = Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, PoolToNetAdapter>>>;
@@ -84,20 +83,16 @@ impl Server {
 	/// Instantiates and starts a new server. Optionally takes a callback
 	/// for the server to send an ARC copy of itself, to allow another process
 	/// to poll info about the server status
-	pub fn start<F>(
+	pub fn start(
 		config: ServerConfig,
-		logs_rx: Option<mpsc::Receiver<LogEntry>>,
-		mut info_callback: F,
 		stop_state: Option<Arc<StopState>>,
+		server_tx: Option<mpsc::Sender<ServerInitStatus>>,
 		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-	) -> Result<(), Error>
-	where
-		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
-	{
+	) -> Result<Server, Error> {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Server::new(config, stop_state, api_chan)?;
+		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -118,8 +113,7 @@ impl Server {
 			}
 		}
 
-		info_callback(serv, logs_rx);
-		Ok(())
+		Ok(serv)
 	}
 
 	// Exclusive (advisory) lock_file to ensure we do not run multiple
@@ -151,6 +145,7 @@ impl Server {
 	pub fn new(
 		config: ServerConfig,
 		stop_state: Option<Arc<StopState>>,
+		server_tx: Option<mpsc::Sender<ServerInitStatus>>,
 		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 	) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
@@ -193,6 +188,10 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::LoadDatabase);
+		}
+
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
 			chain_adapter.clone(),
@@ -219,6 +218,10 @@ impl Server {
 			Capabilities::default()
 		};
 		debug!("Capabilities: {:?}", capabilities);
+
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::StartSync);
+		}
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			&config.db_root,
@@ -264,6 +267,10 @@ impl Server {
 					error!("P2P server failed with erorr: {:?}", e);
 				}
 			})?;
+
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::StartAPI);
+		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
