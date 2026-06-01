@@ -1,0 +1,45 @@
+name: Snap Package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+      - staging
+
+jobs:
+  build-snap:
+    name: Build snap
+    strategy:
+      matrix:
+        runs-on: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare snapcraft project
+        run: |
+          grade=devel
+          if [ "${{ github.ref_name }}" = "master" ]; then
+            grade=stable
+          fi
+
+          mkdir -p snap
+          sed "s/SNAP_GRADE/$grade/" .packaging/snaps/snapcraft.yaml > snap/snapcraft.yaml
+
+      - name: Build snap package
+        id: build
+        uses: snapcore/action-build@v1
+        with:
+          path: .
+
+      - name: Show snap package
+        run: find . -maxdepth 1 -name "*.snap" -ls
+
+      - name: Upload snap artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: grin-snap
+          path: "*.snap"
+          if-no-files-found: error
