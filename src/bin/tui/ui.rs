@@ -223,7 +223,7 @@ impl Controller {
 		let content = StyledString::styled(format!("{:?}", e), Color::Light(BaseColor::Red));
 		self.ui.cursive.add_layer(
 			CircularFocus::new(Dialog::around(TextView::new(content)).button("Exit", |s| {
-				s.quit();
+				std::process::exit(1);
 			}))
 			.wrap_tab(),
 		);
