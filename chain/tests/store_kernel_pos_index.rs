@@ -38,7 +38,7 @@ fn test_store_kernel_idx() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
 	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
@@ -185,7 +185,7 @@ fn test_store_kernel_idx_pop_back() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
 	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
@@ -293,7 +293,7 @@ fn test_store_kernel_idx_rewind() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
 	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
@@ -395,7 +395,7 @@ fn test_store_kernel_idx_multiple_commits() {
 	let commit = Commitment::from_vec(vec![]);
 	let commit2 = Commitment::from_vec(vec![1]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
 	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
@@ -483,7 +483,7 @@ fn test_store_kernel_idx_clear() -> Result<(), Error> {
 	let commit = Commitment::from_vec(vec![]);
 	let commit2 = Commitment::from_vec(vec![1]);
 
-	let store = ChainStore::new(chain_dir)?;
+	let store = ChainStore::new(chain_dir, None)?;
 	let index = store::nrd_recent_kernel_index();
 
 	// Add a couple of single entries to the index and commit the batch.

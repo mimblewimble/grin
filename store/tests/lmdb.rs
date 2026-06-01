@@ -79,7 +79,7 @@ fn test_exists() -> Result<(), store::Error> {
 	setup(test_dir);
 
 	let prefix = b'P';
-	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
+	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
@@ -109,7 +109,7 @@ fn test_iter() -> Result<(), store::Error> {
 	setup(test_dir);
 
 	let prefix = b'P';
-	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
+	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
@@ -148,7 +148,7 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
@@ -164,7 +164,7 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None)?;
+		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
@@ -252,6 +252,7 @@ fn test_migration() -> Result<(), store::Error> {
 		None,
 		Some(DEFAULT_ENV_NAME),
 		vec![test_prefix_1, test_prefix_2],
+		None,
 		None,
 	)?;
 
