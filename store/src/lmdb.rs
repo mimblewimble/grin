@@ -19,7 +19,7 @@ use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{mpsc, Arc, OnceLock};
 use std::time::Duration;
 use std::{fs, thread};
 
@@ -159,6 +159,7 @@ impl Store {
 		db_name: Option<&str>,
 		prefixes: Vec<u8>,
 		max_readers: Option<u32>,
+		db_migration_prog_tx: Option<mpsc::Sender<i8>>,
 	) -> Result<Store, Error> {
 		let full_path = Path::new(root_path)
 			.join(DEFAULT_MULTI_DB_ENV_NAME)
@@ -251,7 +252,8 @@ impl Store {
 		if env_name != DEFAULT_MULTI_DB_ENV_NAME {
 			let migrate_from = Path::new(root_path).join(env_name);
 			if migrate_from.exists() {
-				match s.migrate_to_default_env(db_name, &migrate_from) {
+				let _ = s.clear();
+				match s.migrate_to_default_env(db_name, &migrate_from, db_migration_prog_tx) {
 					Ok(_) => match fs::remove_dir_all(&migrate_from) {
 						Ok(_) => {}
 						Err(e) => {
@@ -283,8 +285,14 @@ impl Store {
 		&self,
 		from_name: Option<&str>,
 		from_path: &Path,
+		db_migration_prog_tx: Option<mpsc::Sender<i8>>,
 	) -> Result<(), Error> {
 		info!("Migrating DB {:?}, please wait...", from_path);
+
+		if let Some(migration_prog_tx) = &db_migration_prog_tx {
+			let _ = migration_prog_tx.send(0i8);
+		}
+
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
 			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(24);
@@ -307,7 +315,16 @@ impl Store {
 		let mut write_to = self.env.write_txn()?;
 		let read_from = from_env.read_txn()?;
 		let mut count = 0;
-		for kv in db_from.iter(&read_from)? {
+		let total = db_from.iter(&read_from)?.count();
+		let mut prev_prog = 0;
+		for (index, kv) in db_from.iter(&read_from)?.enumerate() {
+			if let Some(migration_prog_tx) = &db_migration_prog_tx {
+				let prog = 100 * index / total;
+				if prev_prog != prog && prog != 100 {
+					prev_prog = prog;
+					let _ = migration_prog_tx.send(prog as i8);
+				}
+			}
 			let (k, v) = kv?;
 			if k.len() > 1 && k[1] == PREFIX_KEY_SEPARATOR {
 				let db_name = k.split_at(1).0;
@@ -324,6 +341,11 @@ impl Store {
 			}
 		}
 		write_to.commit()?;
+
+		if let Some(migration_prog_tx) = &db_migration_prog_tx {
+			let _ = migration_prog_tx.send(100i8);
+		}
+
 		info!("Migrated {} records from {:?}", count, from_path);
 		Ok(())
 	}

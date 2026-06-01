@@ -43,7 +43,7 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -171,8 +171,9 @@ impl Chain {
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		archive_mode: bool,
+		db_migration_prog_tx: Option<mpsc::Sender<i8>>,
 	) -> Result<Chain, Error> {
-		let store = Arc::new(store::ChainStore::new(&db_root)?);
+		let store = Arc::new(store::ChainStore::new(&db_root, db_migration_prog_tx)?);
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;

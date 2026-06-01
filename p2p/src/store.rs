@@ -124,6 +124,7 @@ impl PeerStore {
 			Some(STORE_SUBPATH),
 			vec![PEER_PREFIX],
 			None,
+			None,
 		)?;
 		Ok(PeerStore { db })
 	}

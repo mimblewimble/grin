@@ -28,7 +28,7 @@ use grin_core::ser;
 use grin_store as store;
 use grin_store::{option_to_not_found, Error};
 use std::convert::TryInto;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 
 const STORE_SUBPATH: &str = "chain";
 
@@ -67,13 +67,17 @@ pub struct ChainStore {
 
 impl ChainStore {
 	/// Create new chain store
-	pub fn new(db_root: &str) -> Result<ChainStore, Error> {
+	pub fn new(
+		db_root: &str,
+		db_migration_prog_tx: Option<mpsc::Sender<i8>>,
+	) -> Result<ChainStore, Error> {
 		let db = store::Store::new(
 			db_root,
 			None,
 			Some(STORE_SUBPATH),
 			DB_PREFIXES.to_vec(),
 			None,
+			db_migration_prog_tx,
 		)?;
 		Ok(ChainStore { db })
 	}
