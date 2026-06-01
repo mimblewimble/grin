@@ -40,15 +40,14 @@ pub fn start_server(
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 ) {
-	start_server_tui(config, logs_rx, api_chan);
-	exit(0);
+	exit(start_server_tui(config, logs_rx, api_chan));
 }
 
 fn start_server_tui(
 	config: servers::ServerConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-) {
+) -> i32 {
 	if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
 		// Run the UI controller.
@@ -78,8 +77,9 @@ fn start_server_tui(
 				}
 			}
 		});
-		controller.run();
+		let exit_code = controller.run();
 		stop_state.stop();
+		exit_code
 	} else {
 		warn!("Starting GRIN w/o UI...");
 		match Server::start(config, None, None, api_chan) {
@@ -95,10 +95,11 @@ fn start_server_tui(
 				}
 				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 				s.stop();
+				0
 			}
 			Err(e) => {
 				error!("Error starting GRIN: {:?}", e);
-				exit(1);
+				1
 			}
 		}
 	}

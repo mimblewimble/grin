@@ -223,7 +223,7 @@ impl Controller {
 		let content = StyledString::styled(format!("{:?}", e), Color::Light(BaseColor::Red));
 		self.ui.cursive.add_layer(
 			CircularFocus::new(Dialog::around(TextView::new(content)).button("Exit", |s| {
-				std::process::exit(1);
+				s.quit();
 			}))
 			.wrap_tab(),
 		);
@@ -238,12 +238,13 @@ impl Controller {
 	}
 
 	/// Run the controller
-	pub fn run(&mut self) {
+	pub fn run(&mut self) -> i32 {
 		self.init_status("Starting server...", false);
 
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		let delay = time::Duration::from_millis(50);
+		let mut exit_code = 0;
 		while self.ui.step() {
 			if let Some(message) = self.rx.try_iter().next() {
 				match message {
@@ -253,7 +254,7 @@ impl Controller {
 						if let Some(s) = self.server.take() {
 							s.stop();
 						}
-						break;
+						return exit_code;
 					}
 				}
 			}
@@ -268,7 +269,10 @@ impl Controller {
 						self.ui.show_dialog.store(false, Ordering::Relaxed);
 						self.server = Some(s)
 					}
-					ServerInitStatus::ErrorLoading(e) => self.init_error(e),
+					ServerInitStatus::ErrorLoading(e) => {
+						exit_code = 1;
+						self.init_error(e);
+					}
 				}
 			}
 
@@ -282,5 +286,6 @@ impl Controller {
 			}
 			thread::sleep(delay);
 		}
+		exit_code
 	}
 }
