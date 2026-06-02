@@ -87,6 +87,8 @@ const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 pub const DEFAULT_ENV_NAME: &'static str = "lmdb";
 /// Default multi-database environment without prefixes.
 const DEFAULT_MULTI_DB_ENV_NAME: &'static str = "multi_lmdb";
+/// Migration completion marker in the default database.
+const MIGRATION_COMPLETE_KEY: &[u8] = b"__grin_migration_complete";
 /// Prefix key separator.
 pub const PREFIX_KEY_SEPARATOR: u8 = b':';
 
@@ -252,32 +254,60 @@ impl Store {
 		if env_name != DEFAULT_MULTI_DB_ENV_NAME {
 			let migrate_from = Path::new(root_path).join(env_name);
 			if migrate_from.exists() {
-				let _ = s.clear();
-				match s.migrate_to_default_env(db_name, &migrate_from, db_migration_prog_tx) {
-					Ok(_) => match fs::remove_dir_all(&migrate_from) {
-						Ok(_) => {}
+				let delete_old_db_file = || -> Result<(), Error> {
+					match fs::remove_dir_all(&migrate_from) {
+						Ok(_) => Ok(()),
 						Err(e) => {
 							return Err(Error::FileErr(format!(
 								"Can not remove old DB file: {:?}",
 								e
 							)));
 						}
-					},
-					Err(e) => {
-						error!("DB {} migration error: {:?}", env_name, e);
-						match s.clear() {
-							Ok(_) => {}
-							Err(e) => {
-								error!("Can not clear new DB after unsuccessful migration: {:?}", e)
+					}
+				};
+				if s.migration_complete()? {
+					if let Err(e) = delete_old_db_file() {
+						return Err(e);
+					}
+				} else {
+					let _ = s.clear();
+					match s.migrate_to_default_env(db_name, &migrate_from, db_migration_prog_tx) {
+						Ok(_) => {
+							if let Err(e) = delete_old_db_file() {
+								return Err(e);
 							}
 						}
-						return Err(e);
+						Err(e) => {
+							error!("DB {} migration error: {:?}", env_name, e);
+							match s.clear() {
+								Ok(_) => {}
+								Err(e) => {
+									error!(
+										"Can not clear new DB after unsuccessful migration: {:?}",
+										e
+									)
+								}
+							}
+							return Err(e);
+						}
 					}
 				}
 			}
 		}
 
 		Ok(s)
+	}
+
+	/// Check if migration has already completed successfully.
+	fn migration_complete(&self) -> Result<bool, Error> {
+		let read = self.env.read_txn()?;
+		Ok(self.def_db.get(&read, MIGRATION_COMPLETE_KEY)?.is_some())
+	}
+
+	/// Mark migration as successfully completed.
+	fn set_migration_complete(&self, write: &mut RwTxn<'_>) -> Result<(), Error> {
+		self.def_db.put(write, MIGRATION_COMPLETE_KEY, b"1")?;
+		Ok(())
 	}
 
 	/// Migrate database from provided path to default environment.
@@ -340,6 +370,7 @@ impl Store {
 				count += 1;
 			}
 		}
+		self.set_migration_complete(&mut write_to)?;
 		write_to.commit()?;
 
 		if let Some(migration_prog_tx) = &db_migration_prog_tx {
