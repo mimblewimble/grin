@@ -410,6 +410,8 @@ impl DandelionEpoch {
 pub enum ServerInitStatus {
 	/// Database loading.
 	LoadDatabase,
+	/// Database migration progress.
+	DBMigrationProgress(i8),
 	/// P2P server initialization.
 	StartSync,
 	/// API server initialization.

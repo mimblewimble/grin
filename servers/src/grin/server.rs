@@ -16,6 +16,7 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
+use fs2::FileExt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -25,8 +26,6 @@ use std::{
 	thread::{self, JoinHandle},
 	time::{self, Duration},
 };
-
-use fs2::FileExt;
 use walkdir::WalkDir;
 
 use crate::api;
@@ -194,12 +193,29 @@ impl Server {
 			let _ = server_tx.send(ServerInitStatus::LoadDatabase);
 		}
 
+		let (db_migration_prog_tx, db_migration_prog_rx) = mpsc::channel::<i8>();
+		if let Some(ref server_tx) = server_tx {
+			let server_tx = server_tx.clone();
+			thread::spawn(move || loop {
+				match db_migration_prog_rx.recv() {
+					Ok(p) => {
+						if p == 100 {
+							break;
+						}
+						let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
+					}
+					Err(_) => break,
+				}
+			});
+		}
+
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
 			archive_mode,
+			Some(db_migration_prog_tx),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());

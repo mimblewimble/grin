@@ -74,6 +74,7 @@ impl SegmenterResponder {
 					genesis,
 					pow::verify_size,
 					false,
+					None,
 				)
 				.unwrap(),
 			),
@@ -134,6 +135,7 @@ impl DesegmenterRequestor {
 					genesis,
 					pow::verify_size,
 					false,
+					None,
 				)
 				.unwrap(),
 			),
