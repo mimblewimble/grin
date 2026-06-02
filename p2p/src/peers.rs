@@ -277,22 +277,33 @@ impl Peers {
 		}
 	}
 
-	/// Iterator over all peers we know about (stored in our db).
-	pub fn peer_data_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
-		self.store.peers_iter().map_err(From::from)
-	}
-
 	/// Convenience for reading all peer data from the db.
 	pub fn all_peer_data(&self) -> Vec<PeerData> {
-		self.peer_data_iter()
-			.map(|peers| peers.collect())
-			.unwrap_or(vec![])
+		match self.store.iter_batch() {
+			Ok(batch) => match batch.peers_iter() {
+				Ok(iter) => iter
+					.filter(|p| p.is_ok())
+					.map(|p| p.ok().unwrap())
+					.collect(),
+				Err(e) => {
+					error!("failed to get all peer data: {:?}", e);
+					vec![]
+				}
+			},
+			Err(e) => {
+				error!("failed to get all peer data: {:?}", e);
+				vec![]
+			}
+		}
 	}
 
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		match self.store.find_peers(state, cap, count) {
-			Ok(peers) => peers,
+		match self.store.iter_batch() {
+			Ok(batch) => batch.find_peers(state, cap, count).unwrap_or_else(|e| {
+				error!("failed to find peers: {:?}", e);
+				vec![]
+			}),
 			Err(e) => {
 				error!("failed to find peers: {:?}", e);
 				vec![]
@@ -515,24 +526,26 @@ impl Peers {
 		let now = Utc::now();
 
 		// Delete defunct peers from storage
-		let _ = self.store.delete_peers(|peer| {
-			let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
+		if let Ok(batch) = self.store.iter_batch() {
+			let _ = batch.delete_peers(|peer| {
+				let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
 
-			let should_remove = peer.flags == State::Defunct
-				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
+				let should_remove = peer.flags == State::Defunct
+					&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
 
-			if should_remove {
-				debug!(
-					"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
-					peer.addr,
-					diff.num_days(),
-					diff.num_hours(),
-					diff.num_minutes()
-				);
-			}
+				if should_remove {
+					debug!(
+						"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
+						peer.addr,
+						diff.num_days(),
+						diff.num_hours(),
+						diff.num_minutes()
+					);
+				}
 
-			should_remove
-		});
+				should_remove
+			});
+		}
 	}
 }
 
