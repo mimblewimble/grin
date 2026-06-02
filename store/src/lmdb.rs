@@ -228,25 +228,28 @@ impl Store {
 		}
 
 		// Database setup.
-		let r_env_map = env_map.read();
-		let env = r_env_map.get(&full_path).unwrap().env.clone();
-		let mut write = env.write_txn()?;
-		let def_name = db_name.unwrap_or(DEFAULT_ENV_NAME);
-		let def_db = env.create_database(&mut write, Some(def_name))?;
-		let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes>>::new();
-		for p in prefixes {
-			let db = env.create_database(&mut write, Some(p.to_string().as_str()))?;
-			dbs_map.insert(p, db);
-		}
-		write.commit()?;
+		let s = {
+			let r_env_map = env_map.read();
+			let env = r_env_map.get(&full_path).unwrap().env.clone();
+			let mut write = env.write_txn()?;
+			let def_name = db_name.unwrap_or(DEFAULT_ENV_NAME);
+			let def_db = env.create_database(&mut write, Some(def_name))?;
+			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes>>::new();
+			for p in prefixes {
+				let db = env.create_database(&mut write, Some(p.to_string().as_str()))?;
+				dbs_map.insert(p, db);
+			}
+			write.commit()?;
 
-		let s = Store {
-			env: env.clone(),
-			env_path: full_path.clone(),
-			pre_dbs: Arc::new(dbs_map),
-			def_db,
-			version: DEFAULT_DB_VERSION,
-			alloc_chunk_size,
+			let s = Store {
+				env: env.clone(),
+				env_path: full_path.clone(),
+				pre_dbs: Arc::new(dbs_map),
+				def_db,
+				version: DEFAULT_DB_VERSION,
+				alloc_chunk_size,
+			};
+			s
 		};
 
 		// Migrate to default environment if needed.
