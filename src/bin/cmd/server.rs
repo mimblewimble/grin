@@ -34,21 +34,13 @@ use grin_util::logger::LogEntry;
 use grin_util::StopState;
 use std::sync::mpsc;
 
-/// wrap below to allow UI to clean up on stop
+/// Start node server at TUI or non-TUI mode.
 pub fn start_server(
 	config: servers::ServerConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
 ) {
-	exit(start_server_tui(config, logs_rx, api_chan));
-}
-
-fn start_server_tui(
-	config: servers::ServerConfig,
-	logs_rx: Option<mpsc::Receiver<LogEntry>>,
-	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-) -> i32 {
-	if config.run_tui.unwrap_or(false) {
+	let exit_code = if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
 		// Run the UI controller.
 		let (serv_tx, serv_rx) = mpsc::channel::<ServerInitStatus>();
@@ -102,7 +94,8 @@ fn start_server_tui(
 				1
 			}
 		}
-	}
+	};
+	exit(exit_code);
 }
 
 /// Handles the server part of the command line, mostly running, starting and

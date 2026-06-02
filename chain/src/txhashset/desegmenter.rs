@@ -189,7 +189,7 @@ impl Desegmenter {
 
 			// TODO: Unwraps
 			let tip = Tip::from_header(&h);
-			let batch = self.store.batch()?;
+			let mut batch = self.store.batch()?;
 			batch.save_pibd_head(&tip)?;
 			batch.commit()?;
 
@@ -283,11 +283,11 @@ impl Desegmenter {
 		{
 			let header_pmmr = self.header_pmmr.read();
 			let txhashset = self.txhashset.read();
-			let batch = self.store.batch()?;
+			let mut batch = self.store.batch()?;
 			txhashset.verify_kernel_pos_index(
 				&self.genesis,
 				&header_pmmr,
-				&batch,
+				&mut batch,
 				Some(status.clone()),
 				Some(stop_state.clone()),
 			)?;
@@ -308,9 +308,9 @@ impl Desegmenter {
 				&mut header_pmmr,
 				&mut txhashset,
 				&mut batch,
-				|ext, batch| {
+				|ext, mut batch| {
 					let extension = &mut ext.extension;
-					extension.rewind(&self.archive_header, batch)?;
+					extension.rewind(&self.archive_header, &mut batch)?;
 
 					// Validate the extension, generating the utxo_sum and kernel_sum.
 					// Full validation, including rangeproofs and kernel signature verification.
@@ -359,10 +359,10 @@ impl Desegmenter {
 			}
 
 			// Rebuild our output_pos index in the db based on fresh UTXO set.
-			txhashset.init_output_pos_index(&header_pmmr, &batch)?;
+			txhashset.init_output_pos_index(&header_pmmr, &mut batch)?;
 
 			// Rebuild our NRD kernel_pos index based on recent kernel history.
-			txhashset.init_recent_kernel_pos_index(&header_pmmr, &batch)?;
+			txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 
 			// Commit all the changes to the db.
 			batch.commit()?;

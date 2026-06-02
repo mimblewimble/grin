@@ -247,16 +247,16 @@ impl Controller {
 		let mut exit_code = 0;
 		while self.ui.step() {
 			if let Some(message) = self.rx.try_iter().next() {
-				match message {
+				return match message {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
 						if let Some(s) = self.server.take() {
 							s.stop();
 						}
-						return exit_code;
+						exit_code
 					}
-				}
+				};
 			}
 
 			if let Some(m) = self.serv_rx.try_iter().next() {
@@ -272,6 +272,10 @@ impl Controller {
 					ServerInitStatus::ErrorLoading(e) => {
 						exit_code = 1;
 						self.init_error(e);
+					}
+					ServerInitStatus::DBMigrationProgress(p) => {
+						let status = format!("Migrating database: {}%, please wait...", p);
+						self.init_status(status.as_str(), true);
 					}
 				}
 			}
