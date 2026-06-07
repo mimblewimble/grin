@@ -141,6 +141,32 @@ fn test_iter() -> Result<(), store::Error> {
 }
 
 #[test]
+fn test_iter_pages() -> Result<(), store::Error> {
+	let test_dir = "target/test_iter_pages";
+	setup(test_dir);
+
+	let prefix = b'P';
+	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+
+	{
+		let mut batch = store.batch()?;
+		for i in 0..10_001u32 {
+			batch.put(Some(prefix), &i.to_be_bytes(), &[1])?;
+		}
+		batch.commit()?;
+	}
+
+	let count = store
+		.iter(Some(prefix), |_, v| Ok(v.to_vec()))?
+		.collect::<Result<Vec<_>, _>>()?
+		.len();
+	assert_eq!(count, 10_001);
+
+	clean_output_dir(test_dir);
+	Ok(())
+}
+
+#[test]
 fn lmdb_allocate() -> Result<(), store::Error> {
 	let test_dir = "target/lmdb_allocate";
 	setup(test_dir);
