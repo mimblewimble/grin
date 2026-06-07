@@ -18,6 +18,7 @@ use grin_p2p as p2p;
 use grin_util as util;
 use grin_util::StopState;
 
+use std::fs;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::{thread, time};
@@ -44,11 +45,17 @@ fn test_setup() {
 	util::init_test_logger();
 }
 
+fn clean_output_dir(dir_name: &str) {
+	let _ = fs::remove_dir_all(dir_name);
+}
+
 // Starts a server and connects a client peer to it to check handshake,
 // followed by a ping/pong exchange to make sure the connection is live.
 #[test]
 fn peer_handshake() {
 	test_setup();
+	let test_dir = "target/peer_handshake";
+	clean_output_dir(test_dir);
 
 	let p2p_config = p2p::P2PConfig {
 		host: "127.0.0.1".parse().unwrap(),
@@ -60,7 +67,7 @@ fn peer_handshake() {
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
 		p2p::Server::new(
-			".grin",
+			test_dir,
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
