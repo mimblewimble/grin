@@ -892,7 +892,9 @@ where
 
 	fn next(&mut self) -> Option<Self::Item> {
 		loop {
-			if let Some(k) = self.keys.iter().skip(self.skip_cur).next() {
+			if self.done {
+				return None;
+			} else if let Some(k) = self.keys.iter().skip(self.skip_cur).next() {
 				self.skip_total += 1;
 				self.skip_cur += 1;
 				match self.db.get(&self.read, k) {
@@ -914,8 +916,6 @@ where
 						}
 					}
 				}
-			} else if self.done {
-				return None;
 			} else if let Err(e) = self.load_next_keys() {
 				error!("db iter: error read keys: {}", e);
 				self.done = true;
