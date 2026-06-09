@@ -21,6 +21,39 @@ use croaring::Bitmap;
 use std::cmp::min;
 use std::fmt::Debug;
 
+const MAX_SEGMENT_READ_ITEMS: u64 = 1_000_000;
+const SEGMENT_READ_PREALLOC_ITEMS: u64 = 1024;
+
+fn read_segment_item_count<R: Reader>(reader: &mut R) -> Result<u64, Error> {
+	let count = reader.read_u64()?;
+	if count > MAX_SEGMENT_READ_ITEMS {
+		return Err(Error::TooLargeReadErr);
+	}
+	Ok(count)
+}
+
+fn read_segment_positions<R: Reader>(reader: &mut R, count: u64) -> Result<Vec<u64>, Error> {
+	let mut positions = Vec::with_capacity(min(count, SEGMENT_READ_PREALLOC_ITEMS) as usize);
+	let mut last_pos = 0;
+	for _ in 0..count {
+		let pos = reader.read_u64()?;
+		if pos <= last_pos {
+			return Err(Error::SortError);
+		}
+		last_pos = pos;
+		positions.push(pos - 1);
+	}
+	Ok(positions)
+}
+
+fn read_segment_items<T: Readable, R: Reader>(reader: &mut R, count: u64) -> Result<Vec<T>, Error> {
+	let mut items = Vec::with_capacity(min(count, SEGMENT_READ_PREALLOC_ITEMS) as usize);
+	for _ in 0..count {
+		items.push(T::read(reader)?);
+	}
+	Ok(items)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Possible segment types, according to this desegmenter
 pub enum SegmentType {
@@ -568,39 +601,13 @@ impl<T: Readable> Readable for Segment<T> {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let identifier = Readable::read(reader)?;
 
-		let n_hashes = reader.read_u64()? as usize;
-		let mut hash_pos = Vec::with_capacity(n_hashes);
-		let mut last_pos = 0;
-		for _ in 0..n_hashes {
-			let pos = reader.read_u64()?;
-			if pos <= last_pos {
-				return Err(Error::SortError);
-			}
-			last_pos = pos;
-			hash_pos.push(pos - 1);
-		}
+		let n_hashes = read_segment_item_count(reader)?;
+		let hash_pos = read_segment_positions(reader, n_hashes)?;
+		let hashes = read_segment_items(reader, n_hashes)?;
 
-		let mut hashes = Vec::<Hash>::with_capacity(n_hashes);
-		for _ in 0..n_hashes {
-			hashes.push(Readable::read(reader)?);
-		}
-
-		let n_leaves = reader.read_u64()? as usize;
-		let mut leaf_pos = Vec::with_capacity(n_leaves);
-		last_pos = 0;
-		for _ in 0..n_leaves {
-			let pos = reader.read_u64()?;
-			if pos <= last_pos {
-				return Err(Error::SortError);
-			}
-			last_pos = pos;
-			leaf_pos.push(pos - 1);
-		}
-
-		let mut leaf_data = Vec::<T>::with_capacity(n_leaves);
-		for _ in 0..n_leaves {
-			leaf_data.push(Readable::read(reader)?);
-		}
+		let n_leaves = read_segment_item_count(reader)?;
+		let leaf_pos = read_segment_positions(reader, n_leaves)?;
+		let leaf_data = read_segment_items(reader, n_leaves)?;
 
 		let proof = Readable::read(reader)?;
 
@@ -823,12 +830,8 @@ impl SegmentProof {
 
 impl Readable for SegmentProof {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let n_hashes = reader.read_u64()? as usize;
-		let mut hashes = Vec::with_capacity(n_hashes);
-		for _ in 0..n_hashes {
-			let hash: Hash = Readable::read(reader)?;
-			hashes.push(hash);
-		}
+		let n_hashes = read_segment_item_count(reader)?;
+		let hashes = read_segment_items(reader, n_hashes)?;
 		Ok(Self { hashes })
 	}
 }
