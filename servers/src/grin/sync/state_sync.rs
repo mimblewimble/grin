@@ -415,6 +415,9 @@ impl StateSync {
 			}
 		}
 
+		let peers = self.peers.clone();
+		let sync_state = self.sync_state.clone();
+
 		for (seg_id, excluded_peer) in request_candidates.iter() {
 			if sent_requests >= request_budget {
 				continue;
@@ -423,9 +426,6 @@ impl StateSync {
 				trace!("Request list contains, continuing: {:?}", seg_id);
 				continue;
 			}
-
-			// TODO: urg
-			let peers = self.peers.clone();
 
 			// First, get max difficulty or greater peers
 			let peers_iter = || peers.iter().connected();
@@ -481,7 +481,6 @@ impl StateSync {
 
 			// Choose a random "most work" peer, excluding peer from stale/retry segment
 			// and preferring outbound if at all possible.
-			let sync_state = self.sync_state.clone();
 			let peer = available_pibd_peers()
 				.outbound()
 				.with_filter(|p| {

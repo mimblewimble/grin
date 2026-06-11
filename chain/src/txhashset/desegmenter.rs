@@ -522,10 +522,10 @@ impl Desegmenter {
 				self.archive_header.output_mmr_size,
 				self.default_output_segment_height,
 			);
-			let mut elems_added = 0;
+			let mut output_elems_added = 0;
 			if let Some(mut next_output_idx) = self.next_required_output_segment_index() {
 				while (next_output_idx as usize) < total_output_segments {
-					if elems_added == max_elements / 3 {
+					if output_elems_added == max_elements / 3 {
 						break;
 					}
 					let output_id = SegmentIdentifier {
@@ -536,7 +536,7 @@ impl Desegmenter {
 						output_id.segment_pos_range(self.archive_header.output_mmr_size);
 					if last > local_output_mmr_size && !self.has_output_segment_with_id(output_id) {
 						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Output, output_id));
-						elems_added += 1;
+						output_elems_added += 1;
 					}
 					next_output_idx += 1;
 				}
@@ -546,10 +546,10 @@ impl Desegmenter {
 				self.archive_header.output_mmr_size,
 				self.default_rangeproof_segment_height,
 			);
-			elems_added = 0;
+			let mut rangeproof_elems_added = 0;
 			if let Some(mut next_rp_idx) = self.next_required_rangeproof_segment_index() {
 				while (next_rp_idx as usize) < total_rangeproof_segments {
-					if elems_added == max_elements / 3 {
+					if rangeproof_elems_added == max_elements / 3 {
 						break;
 					}
 					let rp_id = SegmentIdentifier {
@@ -562,7 +562,7 @@ impl Desegmenter {
 						&& !self.has_rangeproof_segment_with_id(rp_id)
 					{
 						return_vec.push(SegmentTypeIdentifier::new(SegmentType::RangeProof, rp_id));
-						elems_added += 1;
+						rangeproof_elems_added += 1;
 					}
 					next_rp_idx += 1;
 				}
@@ -572,10 +572,10 @@ impl Desegmenter {
 				self.archive_header.kernel_mmr_size,
 				self.default_kernel_segment_height,
 			);
-			elems_added = 0;
+			let mut kernel_elems_added = 0;
 			if let Some(mut next_kernel_idx) = self.next_required_kernel_segment_index() {
 				while (next_kernel_idx as usize) < total_kernel_segments {
-					if elems_added == max_elements / 3 {
+					if kernel_elems_added == max_elements / 3 {
 						break;
 					}
 					let k_id = SegmentIdentifier {
@@ -586,7 +586,7 @@ impl Desegmenter {
 						k_id.segment_pos_range(self.archive_header.kernel_mmr_size);
 					if last > local_kernel_mmr_size && !self.has_kernel_segment_with_id(k_id) {
 						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Kernel, k_id));
-						elems_added += 1;
+						kernel_elems_added += 1;
 					}
 					next_kernel_idx += 1;
 				}

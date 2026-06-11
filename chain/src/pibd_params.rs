@@ -28,7 +28,7 @@ pub const RANGEPROOF_SEGMENT_HEIGHT: u8 = 11;
 /// Kernel segment height assumed for requests and segment calculation
 pub const KERNEL_SEGMENT_HEIGHT: u8 = 11;
 
-/// Maximum number of received segments to cache (across all trees) before we stop requesting others
+/// Maximum cached segment threshold used when dropping stale segment cache entries.
 pub const MAX_CACHED_SEGMENTS: usize = 30;
 
 /// Number of segments to apply in a single LMDB transaction
