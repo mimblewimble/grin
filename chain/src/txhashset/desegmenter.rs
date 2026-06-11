@@ -395,7 +395,7 @@ impl Desegmenter {
 			{
 				self.apply_bitmap_segment(idx)?;
 			} else {
-				debug!(
+				trace!(
 					"desegmenter: waiting for bitmap segment idx {} (cache size {})",
 					bmp_idx,
 					self.bitmap_segment_cache.len()
@@ -416,7 +416,7 @@ impl Desegmenter {
 					self.segment_apply_batch_size,
 				);
 				if segments.is_empty() {
-					debug!(
+					trace!(
 						"desegmenter: waiting for output segment idx {} (cache size {})",
 						next_output_idx,
 						self.output_segment_cache.len()
@@ -439,7 +439,7 @@ impl Desegmenter {
 					self.segment_apply_batch_size,
 				);
 				if segments.is_empty() {
-					debug!(
+					trace!(
 						"desegmenter: waiting for rangeproof segment idx {} (cache size {})",
 						next_rp_idx,
 						self.rangeproof_segment_cache.len()
@@ -462,7 +462,7 @@ impl Desegmenter {
 					self.segment_apply_batch_size,
 				);
 				if segments.is_empty() {
-					debug!(
+					trace!(
 						"desegmenter: waiting for kernel segment idx {} (cache size {})",
 						next_kernel_idx,
 						self.kernel_segment_cache.len()
