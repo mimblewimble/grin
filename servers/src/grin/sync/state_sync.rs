@@ -296,6 +296,12 @@ impl StateSync {
 			}
 		}
 
+		let progress_check_due = self
+			.last_pibd_progress_check
+			.map(|last| last.elapsed().as_secs() >= PIBD_PROGRESS_CHECK_SECS)
+			.unwrap_or(true);
+		let mut progress_check_done = false;
+
 		// Apply segments... TODO: figure out how this should be called, might
 		// need to be a separate thread.
 		if let Some(mut de) = desegmenter.try_write() {
@@ -314,16 +320,24 @@ impl StateSync {
 				}
 				self.sync_state
 					.update_pibd_leaf_progress(d.applied_leaf_count(), &archive_header);
+				if progress_check_due {
+					let progress_started = Instant::now();
+					self.last_pibd_progress_check = Some(Instant::now());
+					progress_check_done = true;
+					match d.check_progress(self.sync_state.clone()) {
+						Ok(true) => return true,
+						Ok(false) => trace!(
+							"state_sync: PIBD check_progress completed in {}ms",
+							progress_started.elapsed().as_millis()
+						),
+						Err(e) => error!("state_sync: PIBD check_progress error: {}", e),
+					}
+				}
 			}
 		}
 
 		let pending_segment_count = self.sync_state.pending_pibd_segment_count();
-		let progress_check_due = pending_segment_count == 0
-			&& self
-				.last_pibd_progress_check
-				.map(|last| last.elapsed().as_secs() >= PIBD_PROGRESS_CHECK_SECS)
-				.unwrap_or(true);
-		if progress_check_due {
+		if progress_check_due && !progress_check_done {
 			if let Some(mut de) = desegmenter.try_write() {
 				if let Some(d) = de.as_mut() {
 					let progress_started = Instant::now();
