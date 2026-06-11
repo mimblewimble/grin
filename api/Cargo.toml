@@ -6,7 +6,6 @@ description = "APIs for grin, a simple, private and scalable cryptocurrency impl
 license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
-workspace = ".."
 edition = "2021"
 
 [dependencies]
