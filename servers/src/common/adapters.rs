@@ -1017,7 +1017,8 @@ where
 					"PIBD receive queue full, dropping segment {:?} from {}",
 					segment_id, peer_info.addr
 				);
-				self.sync_state.remove_pibd_segment(&segment_id);
+				self.sync_state
+					.remove_pibd_segment_from(&segment_id, peer_info.addr.0);
 				Ok(true)
 			}
 			Err(mpsc::TrySendError::Disconnected(_)) => Err(chain::Error::Other(
