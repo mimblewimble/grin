@@ -382,7 +382,7 @@ impl MessageHandler for Protocol {
 					block_hash,
 					output_root
 				);
-				adapter.receive_bitmap_segment(block_hash, output_root, segment.into())?;
+				adapter.receive_bitmap_segment(block_hash, output_root, segment.into_segment()?)?;
 				Consumed::None
 			}
 			Message::OutputSegment(req) => {
