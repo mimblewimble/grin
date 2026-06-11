@@ -33,16 +33,6 @@ const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
 pub struct TUIStatusView;
 
 impl TUIStatusView {
-	fn header_sync_mode_label(sync_status: SyncStatus) -> Cow<'static, str> {
-		match sync_status {
-			SyncStatus::HeaderSync { sync_mode, .. } => match sync_mode {
-				HeaderSyncMode::Legacy => Cow::Borrowed("Legacy"),
-				HeaderSyncMode::Pihd => Cow::Borrowed("PIHD"),
-			},
-			_ => Cow::Borrowed("Inactive"),
-		}
-	}
-
 	pub fn update_sync_status(sync_status: SyncStatus) -> Cow<'static, str> {
 		match sync_status {
 			SyncStatus::Initial => Cow::Borrowed("Initializing"),
@@ -202,11 +192,6 @@ impl TUIStatusView {
 				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Header Sync:                  "))
-						.child(TextView::new("Inactive").with_name("basic_header_sync_mode")),
-				)
-				.child(
-					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Connected Peers:              "))
 						.child(TextView::new("0").with_name("connected_peers")),
 				)
@@ -311,16 +296,12 @@ impl TUIStatusView {
 impl TUIStatusListener for TUIStatusView {
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		let basic_status = TUIStatusView::update_sync_status(stats.sync_status);
-		let header_sync_mode = TUIStatusView::header_sync_mode_label(stats.sync_status);
 
 		c.call_on_name("basic_runtime_seconds", |t: &mut TextView| {
 			t.set_content(stats.uptime_seconds.to_string());
 		});
 		c.call_on_name("basic_current_status", |t: &mut TextView| {
 			t.set_content(basic_status);
-		});
-		c.call_on_name("basic_header_sync_mode", |t: &mut TextView| {
-			t.set_content(header_sync_mode);
 		});
 		c.call_on_name("connected_peers", |t: &mut TextView| {
 			t.set_content(stats.peer_count.to_string());

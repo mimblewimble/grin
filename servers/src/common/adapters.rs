@@ -112,7 +112,6 @@ impl PibdSegment {
 }
 
 struct QueuedPibdSegment {
-	received_at: Instant,
 	peer_info: PeerInfo,
 	segment: PibdSegment,
 }
@@ -127,17 +126,9 @@ fn spawn_pibd_segment_worker(
 		.spawn(move || {
 			while let Ok(queued_segment) = rx.recv() {
 				let segment_id = queued_segment.segment.segment_id();
-				let queued_ms = queued_segment.received_at.elapsed().as_millis();
-				let started = Instant::now();
 				if let Err(e) = process_queued_pibd_segment(&sync_state, &chain, queued_segment) {
 					error!("PIBD segment processing failed for {:?}: {}", segment_id, e);
 				}
-				trace!(
-					"PIBD segment {:?} processed after queued_ms={}, process_ms={}",
-					segment_id,
-					queued_ms,
-					started.elapsed().as_millis()
-				);
 			}
 			debug!("PIBD receive worker shutting down");
 		})
@@ -149,25 +140,14 @@ fn process_queued_pibd_segment(
 	chain: &Weak<chain::Chain>,
 	queued_segment: QueuedPibdSegment,
 ) -> Result<(), chain::Error> {
-	let total_started = Instant::now();
-	let queued_before_process_ms = queued_segment.received_at.elapsed().as_millis();
 	let peer_addr = queued_segment.peer_info.addr;
-	let chain_started = Instant::now();
 	let chain = chain
 		.upgrade()
 		.ok_or_else(|| chain::Error::Other("chain not available".to_owned()))?;
-	let chain_upgrade_ms = chain_started.elapsed().as_millis();
-	let archive_header_started = Instant::now();
 	let archive_header = chain.txhashset_archive_header_header_only()?;
-	let archive_header_ms = archive_header_started.elapsed().as_millis();
 	let segment_id = queued_segment.segment.segment_id();
-	let desegmenter_started = Instant::now();
 	let desegmenter = chain.desegmenter(&archive_header)?;
-	let desegmenter_lookup_ms = desegmenter_started.elapsed().as_millis();
-	let lock_started = Instant::now();
 	let mut desegmenter = desegmenter.write();
-	let lock_wait_ms = lock_started.elapsed().as_millis();
-	let validate_started = Instant::now();
 	let res = if let Some(d) = desegmenter.as_mut() {
 		match queued_segment.segment {
 			PibdSegment::Bitmap {
@@ -222,31 +202,15 @@ fn process_queued_pibd_segment(
 	} else {
 		Ok(())
 	};
-	let validate_cache_ms = validate_started.elapsed().as_millis();
-	let remove_pending_ms = if res.is_ok() {
-		let remove_started = Instant::now();
+	if res.is_ok() {
 		sync_state.remove_pibd_segment(&segment_id);
-		remove_started.elapsed().as_millis()
 	} else {
 		warn!(
 			"PIBD segment {:?} from peer {} failed validation and remains pending for retry",
 			segment_id, peer_addr
 		);
 		sync_state.reject_pibd_segment_from(&segment_id, peer_addr.0);
-		0
-	};
-	trace!(
-		"PIBD segment {:?} timing queued_before_process_ms={}, chain_upgrade_ms={}, archive_header_ms={}, desegmenter_lookup_ms={}, lock_wait_ms={}, validate_cache_ms={}, remove_pending_ms={}, total_process_ms={}",
-		segment_id,
-		queued_before_process_ms,
-		chain_upgrade_ms,
-		archive_header_ms,
-		desegmenter_lookup_ms,
-		lock_wait_ms,
-		validate_cache_ms,
-		remove_pending_ms,
-		total_started.elapsed().as_millis()
-	);
+	}
 	res
 }
 
@@ -1006,7 +970,6 @@ where
 			return Ok(true);
 		}
 		let queued = QueuedPibdSegment {
-			received_at: Instant::now(),
 			peer_info: peer_info.clone(),
 			segment,
 		};
