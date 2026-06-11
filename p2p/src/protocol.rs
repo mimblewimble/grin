@@ -417,7 +417,7 @@ impl MessageHandler for Protocol {
 				adapter.receive_bitmap_segment(
 					block_hash,
 					output_root,
-					segment.into(),
+					segment.into_segment()?,
 					&self.peer_info,
 				)?;
 				Consumed::None
