@@ -43,3 +43,17 @@ jobs:
           name: grin-snap
           path: "*.snap"
           if-no-files-found: error
+
+  telegram-notify:
+    name: Telegram Notification
+    needs: [build-snap]
+    if: always()
+    uses: ./.github/workflows/telegram.yaml
+    secrets: inherit
+    with:
+      title: Grin Snap
+      status: ${{ needs.build-snap.result }}
+      details: |
+        <b>Package:</b> ${{ needs.build-snap.result }}
+      artifact_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      commit_message: ${{ github.event.head_commit.message }}
