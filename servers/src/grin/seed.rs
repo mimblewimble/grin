@@ -200,8 +200,9 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	}
 
 	let default_peers = PeerAddrs::default();
+	let enough_outbound = peers.enough_outbound_peers();
 
-	if !peers.enough_outbound_peers() {
+	if !enough_outbound {
 		// loop over connected peers that can provide peer lists
 		// ask them for their list of peers
 		let mut connected_peers: Vec<PeerAddr> = vec![];
@@ -248,7 +249,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		.filter(|p| {
 			!peers_deny.contains(&p.addr)
 				&& peers.get_connected_peer(p.addr).is_none()
-				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+				&& (!enough_outbound
+					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
@@ -280,7 +282,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		.iter()
 		.filter(|p| {
 			!peers_deny.contains(&p.addr)
-				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+				&& (!enough_outbound
+					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
@@ -288,7 +291,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	}
 
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
-	if !peers.enough_outbound_peers() {
+	if !enough_outbound {
 		for addr in seed_list(&config) {
 			if !peers_deny.contains(&addr) && !new_peers.contains(&addr) {
 				new_peers.push(addr);

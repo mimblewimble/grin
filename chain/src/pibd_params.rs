@@ -48,4 +48,4 @@ pub const SYNC_PEER_HEIGHT_SLACK_BLOCKS: u64 = 2;
 
 /// If the syncer hasn't seen a max work peer that supports PIBD in this number of seconds
 /// give up and revert back to the txhashset.zip download method
-pub const TXHASHSET_ZIP_FALLBACK_TIME_SECS: i64 = 60;
+pub const TXHASHSET_ZIP_FALLBACK_TIME_SECS: i64 = 660;
