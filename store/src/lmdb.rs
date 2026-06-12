@@ -189,18 +189,12 @@ impl Store {
 		if !has_env {
 			let env = unsafe {
 				let mut options = EnvOpenOptions::new().read_txn_without_tls();
-				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(24);
+				let mut env_options = options.max_dbs(24);
 				if let Some(max_readers) = max_readers {
 					env_options = env_options.max_readers(max_readers);
 				}
 				env_options.open(&full_path)?
 			};
-			let (resize, new_size) = needs_resize(&env, alloc_chunk_size);
-			if resize {
-				unsafe {
-					env.resize(new_size)?;
-				};
-			}
 			debug!("DB Mapsize is {}", env.info().map_size);
 			let mut w_env_map = env_map.write();
 			w_env_map.insert(
@@ -328,15 +322,20 @@ impl Store {
 
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
-			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(24);
+			let env_options = options.max_dbs(24);
 			env_options.open(from_path)?
 		};
-		let (resize, new_size) = needs_resize(&from_env, self.alloc_chunk_size);
-		if resize {
-			// We are sure there are no active txs, cause migration is called on database creation.
+		let from_used = env_size(&from_env);
+		let to_used = env_size(&self.env);
+		let to_map_size = self.env.info().map_size;
+
+		// Leave headroom so the migrated env is not immediately above the resize threshold.
+		let required = ((to_used + from_used) as f32 / RESIZE_MIN_TARGET_PERCENT) as usize;
+		let required = round_size_to_chunk(required, self.alloc_chunk_size);
+
+		if required > to_map_size {
 			unsafe {
-				from_env.resize(new_size)?;
-				self.env.resize(new_size)?;
+				self.env.resize(required)?;
 			}
 		}
 		let db_from = {
@@ -974,11 +973,27 @@ where
 	}
 }
 
+/// Get environment size.
+fn env_size(env: &Env<WithoutTls>) -> usize {
+	let info = env.info();
+	let stat = env.stat();
+	stat.page_size as usize * info.last_page_number
+}
+
+/// Round size proportionally to chunk size.
+fn round_size_to_chunk(size: usize, chunk_size: usize) -> usize {
+	let rem = size % chunk_size;
+	if rem == 0 {
+		size
+	} else {
+		size + (chunk_size - rem)
+	}
+}
+
 /// Determines whether the environment needs a resize based on a simple percentage threshold.
 pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, usize) {
 	let env_info = env.info();
-	let stat = env.stat();
-	let size_used = stat.page_size as usize * env_info.last_page_number;
+	let size_used = env_size(env);
 	trace!("DB map size: {}", env_info.map_size);
 	trace!("Space used: {}", size_used);
 	trace!("Space remaining: {}", env_info.map_size - size_used);
