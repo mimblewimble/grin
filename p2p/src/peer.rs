@@ -13,14 +13,13 @@
 // limitations under the License.
 
 use crate::util::{Mutex, RwLock};
+use lru_cache::LruCache;
 use std::fmt;
 use std::fs::File;
 use std::net::{Shutdown, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-
-use lru_cache::LruCache;
 
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
