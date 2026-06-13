@@ -99,7 +99,7 @@ static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
 struct EnvState {
 	env: Env<WithoutTls>,
 	open_txs_count: AtomicU32,
-	resize_pending: AtomicBool,
+	resizing: AtomicBool,
 	resize_checking: AtomicBool,
 	stores_count: AtomicU32,
 }
@@ -202,7 +202,7 @@ impl Store {
 				EnvState {
 					env,
 					open_txs_count: AtomicU32::new(0),
-					resize_pending: AtomicBool::new(false),
+					resizing: AtomicBool::new(false),
 					resize_checking: AtomicBool::new(false),
 					stores_count: AtomicU32::new(1),
 				},
@@ -420,15 +420,15 @@ impl Store {
 	}
 
 	/// Set flag if environment is waiting for resize.
-	fn set_resize_pending(&self, resize_pending: bool) {
+	fn set_resizing(&self, resizing: bool) {
 		ENV_MAP
 			.get()
 			.unwrap()
 			.write()
 			.get_mut(&self.env_path)
 			.unwrap()
-			.resize_pending
-			.store(resize_pending, Ordering::Relaxed);
+			.resizing
+			.store(resizing, Ordering::Relaxed);
 	}
 
 	/// Resize database environment if needed.
@@ -443,25 +443,56 @@ impl Store {
 			self.set_resize_checking(false);
 			return;
 		}
-		// Stop new top-level transactions first.
-		self.set_resize_pending(true);
-		while {
-			let count = self.open_txs_count();
-			debug!("Wait {} opened txs to resize", count);
-			count != 0
-		} {
-			thread::sleep(Duration::from_millis(10));
-		}
 
-		unsafe {
-			match self.env.resize(new_size) {
-				Ok(_) => debug!("End resizing DB {}", self.env_path),
-				Err(e) => error!("Resize DB {} error: {:?}", self.env_path, e),
+		let env_path = self.env_path.clone();
+		let env = self.env.clone();
+
+		self.set_resizing(true);
+
+		// Resize immediately or at another thread to not interrupt current
+		// transaction waiting all open transactions to be closed.
+		if self.open_txs_count() != 0 {
+			debug!("Waiting txs to be closed before DB {} resize", env_path);
+			thread::spawn(move || {
+				loop {
+					let txs_count = ENV_MAP
+						.get()
+						.unwrap()
+						.read()
+						.get(&env_path)
+						.unwrap()
+						.open_txs_count
+						.load(Ordering::Relaxed);
+					if txs_count == 0 {
+						debug!("Start resizing DB {}", env_path);
+						break;
+					}
+					thread::sleep(Duration::from_millis(100));
+				}
+
+				unsafe {
+					match env.resize(new_size) {
+						Ok(_) => debug!("End resizing DB {}", env_path),
+						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
+					}
+				}
+
+				let mut w_env_map = ENV_MAP.get().unwrap().write();
+				let env_state = w_env_map.get_mut(&env_path).unwrap();
+				env_state.resizing.store(false, Ordering::Relaxed);
+				env_state.resize_checking.store(false, Ordering::Relaxed);
+			});
+		} else {
+			debug!("Start immediate resizing DB {}", env_path);
+			unsafe {
+				match env.resize(new_size) {
+					Ok(_) => debug!("End resizing DB {}", env_path),
+					Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
+				}
 			}
+			self.set_resizing(false);
+			self.set_resize_checking(false);
 		}
-
-		self.set_resize_pending(false);
-		self.set_resize_checking(false);
 	}
 
 	/// Clear all data from database environment.
@@ -606,8 +637,8 @@ impl Store {
 		loop {
 			let mut map = ENV_MAP.get().unwrap().write();
 			let state = map.get_mut(&self.env_path).unwrap();
-			if state.open_txs_count.load(Ordering::Relaxed) > 0
-				|| !state.resize_pending.load(Ordering::Acquire)
+			if !state.resizing.load(Ordering::Acquire)
+				|| state.open_txs_count.load(Ordering::Relaxed) > 0
 			{
 				state.open_txs_count.fetch_add(1, Ordering::Relaxed);
 				return TxCounter {
