@@ -99,7 +99,7 @@ static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
 struct EnvState {
 	env: Env<WithoutTls>,
 	open_txs_count: AtomicU32,
-	resizing: AtomicBool,
+	resize_pending: AtomicBool,
 	resize_checking: AtomicBool,
 	stores_count: AtomicU32,
 }
@@ -202,7 +202,7 @@ impl Store {
 				EnvState {
 					env,
 					open_txs_count: AtomicU32::new(0),
-					resizing: AtomicBool::new(false),
+					resize_pending: AtomicBool::new(false),
 					resize_checking: AtomicBool::new(false),
 					stores_count: AtomicU32::new(1),
 				},
@@ -419,97 +419,48 @@ impl Store {
 			.store(resize_checking, Ordering::Relaxed);
 	}
 
-	/// Wait while database is resizing.
-	fn wait_for_resize(&self) {
-		loop {
-			if ENV_MAP
-				.get()
-				.unwrap()
-				.read()
-				.get(&self.env_path)
-				.unwrap()
-				.resizing
-				.load(Ordering::Relaxed)
-				&& self.open_txs_count() == 0
-			{
-				debug!("Wait on resizing DB {}", self.env_path);
-				thread::sleep(Duration::from_millis(100));
-				continue;
-			}
-			break;
-		}
+	/// Set flag if environment is waiting for resize.
+	fn set_resize_pending(&self, resize_pending: bool) {
+		ENV_MAP
+			.get()
+			.unwrap()
+			.write()
+			.get_mut(&self.env_path)
+			.unwrap()
+			.resize_pending
+			.store(resize_pending, Ordering::Relaxed);
 	}
 
 	/// Resize database environment if needed.
 	fn maybe_resize(&self) {
-		self.wait_for_resize();
-
-		// Check only one resize requirement per time to avoid multiple resizes.
 		if self.resize_checking() {
 			return;
-		} else {
-			self.set_resize_checking(true);
 		}
+		self.set_resize_checking(true);
 
 		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
-		if resize {
-			let env_path = self.env_path.clone();
-			let env = self.env.clone();
+		if !resize {
+			self.set_resize_checking(false);
+			return;
+		}
+		// Stop new top-level transactions first.
+		self.set_resize_pending(true);
+		while {
+			let count = self.open_txs_count();
+			debug!("Wait {} opened txs to resize", count);
+			count != 0
+		} {
+			thread::sleep(Duration::from_millis(10));
+		}
 
-			{
-				let mut w_env_map = ENV_MAP.get().unwrap().write();
-				let env_state = w_env_map.get_mut(&env_path).unwrap();
-				env_state.resizing.store(true, Ordering::Relaxed);
-			}
-
-			// Resize immediately or at another thread to not interrupt current
-			// transaction waiting all open transactions to be closed.
-			if self.open_txs_count() != 0 {
-				debug!("Waiting txs to be closed before DB {} resize", env_path);
-				thread::spawn(move || {
-					loop {
-						let txs_count = ENV_MAP
-							.get()
-							.unwrap()
-							.read()
-							.get(&env_path)
-							.unwrap()
-							.open_txs_count
-							.load(Ordering::Relaxed);
-						if txs_count == 0 {
-							debug!("Start resizing DB {}", env_path);
-							break;
-						}
-						thread::sleep(Duration::from_millis(100));
-					}
-
-					unsafe {
-						match env.resize(new_size) {
-							Ok(_) => debug!("End resizing DB {}", env_path),
-							Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
-						}
-					}
-
-					let mut w_env_map = ENV_MAP.get().unwrap().write();
-					let env_state = w_env_map.get_mut(&env_path).unwrap();
-					env_state.resizing.store(false, Ordering::Relaxed);
-					env_state.resize_checking.store(false, Ordering::Relaxed);
-				});
-				return;
-			} else {
-				debug!("Start immediate resizing DB {}", env_path);
-				unsafe {
-					match env.resize(new_size) {
-						Ok(_) => debug!("End resizing DB {}", env_path),
-						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
-					}
-				}
-				let mut w_env_map = ENV_MAP.get().unwrap().write();
-				let env_state = w_env_map.get_mut(&env_path).unwrap();
-				env_state.resizing.store(false, Ordering::Relaxed);
+		unsafe {
+			match self.env.resize(new_size) {
+				Ok(_) => debug!("End resizing DB {}", self.env_path),
+				Err(e) => error!("Resize DB {} error: {:?}", self.env_path, e),
 			}
 		}
 
+		self.set_resize_pending(false);
 		self.set_resize_checking(false);
 	}
 
@@ -571,9 +522,8 @@ impl Store {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		self.wait_for_resize();
+		let _ = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			let d = match deser_mode {
 				Some(d) => d,
@@ -586,15 +536,13 @@ impl Store {
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		TxCounter::on_change_tx_count(&self.env_path, false);
 		res
 	}
 
 	/// Whether the key exists at the provided database key.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
-		self.wait_for_resize();
+		let _ = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			match self.env.read_txn() {
 				Ok(read) => {
@@ -613,7 +561,6 @@ impl Store {
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		TxCounter::on_change_tx_count(&self.env_path, false);
 		res
 	}
 
@@ -626,68 +573,66 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.wait_for_resize();
+		let tx_counter = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			match self.env.clone().static_read_txn() {
 				Ok(read) => {
 					let db_res = self.get_db(db_key);
 					match db_res {
-						Ok(db) => {
-							DatabaseIterator::new(self, Arc::new(db.clone()), read, deserialize)
-						}
+						Ok(db) => DatabaseIterator::new(
+							Arc::new(db.clone()),
+							Some(tx_counter),
+							read,
+							deserialize,
+						),
 						Err(e) => Err(Error::from(e)),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.env_path, false);
-		}
 		res
 	}
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		self.maybe_resize();
+		Batch::new(self)
+	}
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
-		let res = { Batch::new(self) };
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.env_path, false);
+	/// Creates tx counter incrementing if resize is not pending.
+	fn enter_tx(&self) -> TxCounter {
+		loop {
+			let mut map = ENV_MAP.get().unwrap().write();
+			let state = map.get_mut(&self.env_path).unwrap();
+			if state.open_txs_count.load(Ordering::Relaxed) > 0
+				|| !state.resize_pending.load(Ordering::Acquire)
+			{
+				state.open_txs_count.fetch_add(1, Ordering::Relaxed);
+				return TxCounter {
+					env_path: self.env_path.clone(),
+				};
+			}
+			drop(map);
+			thread::sleep(Duration::from_millis(10));
 		}
-		res
 	}
 }
 
 /// Environment transactions counter, allows to decrement value on drop.
-struct TxCounter {
+pub struct TxCounter {
 	env_path: String,
 }
 
 impl Drop for TxCounter {
 	fn drop(&mut self) {
-		Self::on_change_tx_count(&self.env_path, false);
-	}
-}
-
-impl TxCounter {
-	/// Increment or decrement active transactions count for current environment.
-	fn on_change_tx_count(env_path: &String, inc: bool) {
 		let mut w_env_map = ENV_MAP.get().unwrap().write();
-		let env_state = w_env_map.get_mut(env_path).unwrap();
+		let env_state = w_env_map.get_mut(&self.env_path).unwrap();
 		let open_txs_count = env_state.open_txs_count.load(Ordering::Relaxed);
-		if inc {
-			env_state
-				.open_txs_count
-				.store(open_txs_count + 1, Ordering::Relaxed);
-		} else {
-			env_state
-				.open_txs_count
-				.store(open_txs_count - 1, Ordering::Relaxed);
-		}
+		env_state
+			.open_txs_count
+			.store(open_txs_count - 1, Ordering::Relaxed);
 	}
 }
 
@@ -696,19 +641,18 @@ pub struct Batch<'a> {
 	store: &'a Store,
 	write: RwTxn<'a>,
 	#[allow(dead_code)]
-	tx_counter: TxCounter,
+	tx_counter: Option<TxCounter>,
 }
 
 impl<'a> Batch<'a> {
 	/// Creates a new batch for provided store.
 	pub fn new(store: &'a Store) -> Result<Batch<'a>, Error> {
+		let tx_counter = store.enter_tx();
 		let write = store.env.write_txn()?;
 		Ok(Batch {
 			store,
 			write,
-			tx_counter: TxCounter {
-				env_path: store.env_path.clone(),
-			},
+			tx_counter: Some(tx_counter),
 		})
 	}
 
@@ -785,29 +729,20 @@ impl<'a> Batch<'a> {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.store.wait_for_resize();
-
-		TxCounter::on_change_tx_count(&self.store.env_path, true);
 		let res = {
 			match self.write.nested_read_txn() {
 				Ok(read) => {
 					let db_res = self.store.get_db(db_key);
 					match db_res {
-						Ok(db) => DatabaseIterator::new(
-							self.store,
-							Arc::new(db.clone()),
-							read,
-							deserialize,
-						),
+						Ok(db) => {
+							DatabaseIterator::new(Arc::new(db.clone()), None, read, deserialize)
+						}
 						Err(e) => Err(Error::from(e)),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.store.env_path, false);
-		}
 		res
 	}
 
@@ -846,22 +781,16 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
-		TxCounter::on_change_tx_count(&self.store.env_path, true);
 		let res = {
 			match self.store.env.nested_write_txn(&mut self.write) {
 				Ok(write) => Ok(Batch {
 					store: self.store,
 					write,
-					tx_counter: TxCounter {
-						env_path: self.store.env_path.clone(),
-					},
+					tx_counter: None,
 				}),
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.store.env_path, false);
-		}
 		res
 	}
 }
@@ -880,7 +809,7 @@ where
 	done: bool,
 	deserialize: F,
 	#[allow(dead_code)]
-	tx_counter: TxCounter,
+	tx_counter: Option<TxCounter>,
 }
 
 impl<F, T> Iterator for DatabaseIterator<'_, F, T>
@@ -930,8 +859,8 @@ where
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		store: &Store,
 		db: Arc<Database<Bytes, Bytes>>,
+		tx_counter: Option<TxCounter>,
 		read: RoTxn<'a, WithoutTls>,
 		deserialize: F,
 	) -> Result<DatabaseIterator<'a, F, T>, Error> {
@@ -946,9 +875,7 @@ where
 			skip_total: 0,
 			done,
 			deserialize,
-			tx_counter: TxCounter {
-				env_path: store.env_path.clone(),
-			},
+			tx_counter,
 		})
 	}
 
