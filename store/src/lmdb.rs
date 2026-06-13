@@ -16,8 +16,11 @@
 
 use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::time::Duration;
@@ -94,6 +97,10 @@ pub const PREFIX_KEY_SEPARATOR: u8 = b':';
 
 /// Mapping of database path to environment state.
 static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
+
+thread_local! {
+	static THREAD_TX_COUNTS: RefCell<HashMap<String, u32>> = RefCell::new(HashMap::new());
+}
 
 /// State of active database environment.
 struct EnvState {
@@ -189,18 +196,12 @@ impl Store {
 		if !has_env {
 			let env = unsafe {
 				let mut options = EnvOpenOptions::new().read_txn_without_tls();
-				let mut env_options = options.map_size(alloc_chunk_size).max_dbs(24);
+				let mut env_options = options.max_dbs(24);
 				if let Some(max_readers) = max_readers {
 					env_options = env_options.max_readers(max_readers);
 				}
 				env_options.open(&full_path)?
 			};
-			let (resize, new_size) = needs_resize(&env, alloc_chunk_size);
-			if resize {
-				unsafe {
-					env.resize(new_size)?;
-				};
-			}
 			debug!("DB Mapsize is {}", env.info().map_size);
 			let mut w_env_map = env_map.write();
 			w_env_map.insert(
@@ -328,15 +329,20 @@ impl Store {
 
 		let from_env = unsafe {
 			let mut options = EnvOpenOptions::new().read_txn_without_tls();
-			let env_options = options.map_size(self.alloc_chunk_size).max_dbs(24);
+			let env_options = options.max_dbs(24);
 			env_options.open(from_path)?
 		};
-		let (resize, new_size) = needs_resize(&from_env, self.alloc_chunk_size);
-		if resize {
-			// We are sure there are no active txs, cause migration is called on database creation.
+		let from_used = env_size(&from_env);
+		let to_used = env_size(&self.env);
+		let to_map_size = self.env.info().map_size;
+
+		// Leave headroom so the migrated env is not immediately above the resize threshold.
+		let required = ((to_used + from_used) as f32 / RESIZE_MIN_TARGET_PERCENT) as usize;
+		let required = round_size_to_chunk(required, self.alloc_chunk_size);
+
+		if required > to_map_size {
 			unsafe {
-				from_env.resize(new_size)?;
-				self.env.resize(new_size)?;
+				self.env.resize(required)?;
 			}
 		}
 		let db_from = {
@@ -396,8 +402,8 @@ impl Store {
 			.load(Ordering::Relaxed)
 	}
 
-	/// Check if requirement for environment resize is checking.
-	fn resize_checking(&self) -> bool {
+	/// Try to acquire the resize check guard.
+	fn start_resize_checking(&self) -> bool {
 		ENV_MAP
 			.get()
 			.unwrap()
@@ -405,113 +411,95 @@ impl Store {
 			.get(&self.env_path)
 			.unwrap()
 			.resize_checking
-			.load(Ordering::Relaxed)
+			.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+			.is_ok()
 	}
 
-	/// Set flag if requirement for environment resize is checking.
-	fn set_resize_checking(&self, resize_checking: bool) {
+	/// Release the resize check guard.
+	fn finish_resize_checking(&self) {
 		ENV_MAP
 			.get()
 			.unwrap()
-			.write()
-			.get_mut(&self.env_path)
+			.read()
+			.get(&self.env_path)
 			.unwrap()
 			.resize_checking
-			.store(resize_checking, Ordering::Relaxed);
+			.store(false, Ordering::Release);
 	}
 
-	/// Wait while database is resizing.
-	fn wait_for_resize(&self) {
-		loop {
-			if ENV_MAP
-				.get()
-				.unwrap()
-				.read()
-				.get(&self.env_path)
-				.unwrap()
-				.resizing
-				.load(Ordering::Relaxed)
-				&& self.open_txs_count() == 0
-			{
-				debug!("Wait on resizing DB {}", self.env_path);
-				thread::sleep(Duration::from_millis(100));
-				continue;
-			}
-			break;
-		}
+	/// Set flag if environment is waiting for resize.
+	fn set_resizing(&self, resizing: bool) {
+		ENV_MAP
+			.get()
+			.unwrap()
+			.read()
+			.get(&self.env_path)
+			.unwrap()
+			.resizing
+			.store(resizing, Ordering::Release);
 	}
 
 	/// Resize database environment if needed.
 	fn maybe_resize(&self) {
-		self.wait_for_resize();
-
-		// Check only one resize requirement per time to avoid multiple resizes.
-		if self.resize_checking() {
+		if !self.start_resize_checking() {
 			return;
-		} else {
-			self.set_resize_checking(true);
 		}
 
 		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
-		if resize {
-			let env_path = self.env_path.clone();
-			let env = self.env.clone();
+		if !resize {
+			self.finish_resize_checking();
+			return;
+		}
 
-			{
-				let mut w_env_map = ENV_MAP.get().unwrap().write();
-				let env_state = w_env_map.get_mut(&env_path).unwrap();
-				env_state.resizing.store(true, Ordering::Relaxed);
-			}
+		let env_path = self.env_path.clone();
+		let env = self.env.clone();
 
-			// Resize immediately or at another thread to not interrupt current
-			// transaction waiting all open transactions to be closed.
-			if self.open_txs_count() != 0 {
-				debug!("Waiting txs to be closed before DB {} resize", env_path);
-				thread::spawn(move || {
-					loop {
-						let txs_count = ENV_MAP
-							.get()
-							.unwrap()
-							.read()
-							.get(&env_path)
-							.unwrap()
-							.open_txs_count
-							.load(Ordering::Relaxed);
-						if txs_count == 0 {
-							debug!("Start resizing DB {}", env_path);
-							break;
-						}
-						thread::sleep(Duration::from_millis(100));
+		self.set_resizing(true);
+
+		// Resize immediately or at another thread to not interrupt current
+		// transaction waiting all open transactions to be closed.
+		if self.open_txs_count() != 0 {
+			debug!("Waiting txs to be closed before DB {} resize", env_path);
+			thread::spawn(move || {
+				loop {
+					let txs_count = ENV_MAP
+						.get()
+						.unwrap()
+						.read()
+						.get(&env_path)
+						.unwrap()
+						.open_txs_count
+						.load(Ordering::Relaxed);
+					if txs_count == 0 {
+						debug!("Start resizing DB {}", env_path);
+						break;
 					}
+					thread::sleep(Duration::from_millis(100));
+				}
 
-					unsafe {
-						match env.resize(new_size) {
-							Ok(_) => debug!("End resizing DB {}", env_path),
-							Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
-						}
-					}
-
-					let mut w_env_map = ENV_MAP.get().unwrap().write();
-					let env_state = w_env_map.get_mut(&env_path).unwrap();
-					env_state.resizing.store(false, Ordering::Relaxed);
-					env_state.resize_checking.store(false, Ordering::Relaxed);
-				});
-				return;
-			} else {
-				debug!("Start immediate resizing DB {}", env_path);
 				unsafe {
 					match env.resize(new_size) {
 						Ok(_) => debug!("End resizing DB {}", env_path),
 						Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
 					}
 				}
+
 				let mut w_env_map = ENV_MAP.get().unwrap().write();
 				let env_state = w_env_map.get_mut(&env_path).unwrap();
-				env_state.resizing.store(false, Ordering::Relaxed);
+				env_state.resizing.store(false, Ordering::Release);
+				env_state.resize_checking.store(false, Ordering::Release);
+			});
+		} else {
+			debug!("Start immediate resizing DB {}", env_path);
+			unsafe {
+				match env.resize(new_size) {
+					Ok(_) => debug!("End resizing DB {}", env_path),
+					Err(e) => error!("Resize DB {} error: {:?}", env_path, e),
+				}
 			}
+			self.set_resizing(false);
+			self.finish_resize_checking();
 		}
-
-		self.set_resize_checking(false);
 	}
 
 	/// Clear all data from database environment.
@@ -572,9 +560,8 @@ impl Store {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		self.wait_for_resize();
+		let _tx_counter = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			let d = match deser_mode {
 				Some(d) => d,
@@ -587,15 +574,13 @@ impl Store {
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		TxCounter::on_change_tx_count(&self.env_path, false);
 		res
 	}
 
 	/// Whether the key exists at the provided database key.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
-		self.wait_for_resize();
+		let _tx_counter = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			match self.env.read_txn() {
 				Ok(read) => {
@@ -614,7 +599,6 @@ impl Store {
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		TxCounter::on_change_tx_count(&self.env_path, false);
 		res
 	}
 
@@ -627,68 +611,84 @@ impl Store {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.wait_for_resize();
+		let tx_counter = self.enter_tx();
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
 		let res = {
 			match self.env.clone().static_read_txn() {
 				Ok(read) => {
 					let db_res = self.get_db(db_key);
 					match db_res {
-						Ok(db) => {
-							DatabaseIterator::new(self, Arc::new(db.clone()), read, deserialize)
-						}
+						Ok(db) => DatabaseIterator::new(
+							Arc::new(db.clone()),
+							Some(tx_counter),
+							read,
+							deserialize,
+						),
 						Err(e) => Err(Error::from(e)),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.env_path, false);
-		}
 		res
 	}
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		self.maybe_resize();
+		Batch::new(self)
+	}
 
-		TxCounter::on_change_tx_count(&self.env_path, true);
-		let res = { Batch::new(self) };
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.env_path, false);
+	/// Increment the open-tx counter, blocking during resize unless this thread already holds a tx.
+	fn enter_tx(&self) -> TxCounter {
+		loop {
+			let mut map = ENV_MAP.get().unwrap().write();
+			let state = map.get_mut(&self.env_path).unwrap();
+			let nested_tx = THREAD_TX_COUNTS.with(|txs| {
+				txs.borrow()
+					.get(&self.env_path)
+					.is_some_and(|count| *count > 0)
+			});
+			if !state.resizing.load(Ordering::Acquire) || nested_tx {
+				state.open_txs_count.fetch_add(1, Ordering::Relaxed);
+				THREAD_TX_COUNTS.with(|txs| {
+					let mut txs = txs.borrow_mut();
+					*txs.entry(self.env_path.clone()).or_insert(0) += 1;
+				});
+				return TxCounter {
+					env_path: self.env_path.clone(),
+					_not_send: PhantomData,
+				};
+			}
+			drop(map);
+			thread::sleep(Duration::from_millis(10));
 		}
-		res
 	}
 }
 
 /// Environment transactions counter, allows to decrement value on drop.
-struct TxCounter {
+pub struct TxCounter {
 	env_path: String,
+	_not_send: PhantomData<Rc<()>>,
 }
 
 impl Drop for TxCounter {
 	fn drop(&mut self) {
-		Self::on_change_tx_count(&self.env_path, false);
-	}
-}
-
-impl TxCounter {
-	/// Increment or decrement active transactions count for current environment.
-	fn on_change_tx_count(env_path: &String, inc: bool) {
+		THREAD_TX_COUNTS.with(|txs| {
+			let mut txs = txs.borrow_mut();
+			if let Some(count) = txs.get_mut(&self.env_path) {
+				*count -= 1;
+				if *count == 0 {
+					txs.remove(&self.env_path);
+				}
+			}
+		});
 		let mut w_env_map = ENV_MAP.get().unwrap().write();
-		let env_state = w_env_map.get_mut(env_path).unwrap();
+		let env_state = w_env_map.get_mut(&self.env_path).unwrap();
 		let open_txs_count = env_state.open_txs_count.load(Ordering::Relaxed);
-		if inc {
-			env_state
-				.open_txs_count
-				.store(open_txs_count + 1, Ordering::Relaxed);
-		} else {
-			env_state
-				.open_txs_count
-				.store(open_txs_count - 1, Ordering::Relaxed);
-		}
+		env_state
+			.open_txs_count
+			.store(open_txs_count - 1, Ordering::Relaxed);
 	}
 }
 
@@ -697,19 +697,18 @@ pub struct Batch<'a> {
 	store: &'a Store,
 	write: RwTxn<'a>,
 	#[allow(dead_code)]
-	tx_counter: TxCounter,
+	tx_counter: Option<TxCounter>,
 }
 
 impl<'a> Batch<'a> {
 	/// Creates a new batch for provided store.
 	pub fn new(store: &'a Store) -> Result<Batch<'a>, Error> {
+		let tx_counter = store.enter_tx();
 		let write = store.env.write_txn()?;
 		Ok(Batch {
 			store,
 			write,
-			tx_counter: TxCounter {
-				env_path: store.env_path.clone(),
-			},
+			tx_counter: Some(tx_counter),
 		})
 	}
 
@@ -786,29 +785,20 @@ impl<'a> Batch<'a> {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		self.store.wait_for_resize();
-
-		TxCounter::on_change_tx_count(&self.store.env_path, true);
 		let res = {
 			match self.write.nested_read_txn() {
 				Ok(read) => {
 					let db_res = self.store.get_db(db_key);
 					match db_res {
-						Ok(db) => DatabaseIterator::new(
-							self.store,
-							Arc::new(db.clone()),
-							read,
-							deserialize,
-						),
+						Ok(db) => {
+							DatabaseIterator::new(Arc::new(db.clone()), None, read, deserialize)
+						}
 						Err(e) => Err(Error::from(e)),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.store.env_path, false);
-		}
 		res
 	}
 
@@ -847,22 +837,16 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
-		TxCounter::on_change_tx_count(&self.store.env_path, true);
 		let res = {
 			match self.store.env.nested_write_txn(&mut self.write) {
 				Ok(write) => Ok(Batch {
 					store: self.store,
 					write,
-					tx_counter: TxCounter {
-						env_path: self.store.env_path.clone(),
-					},
+					tx_counter: None,
 				}),
 				Err(e) => Err(Error::from(e)),
 			}
 		};
-		if res.is_err() {
-			TxCounter::on_change_tx_count(&self.store.env_path, false);
-		}
 		res
 	}
 }
@@ -881,7 +865,7 @@ where
 	done: bool,
 	deserialize: F,
 	#[allow(dead_code)]
-	tx_counter: TxCounter,
+	tx_counter: Option<TxCounter>,
 }
 
 impl<F, T> Iterator for DatabaseIterator<'_, F, T>
@@ -931,8 +915,8 @@ where
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		store: &Store,
 		db: Arc<Database<Bytes, Bytes>>,
+		tx_counter: Option<TxCounter>,
 		read: RoTxn<'a, WithoutTls>,
 		deserialize: F,
 	) -> Result<DatabaseIterator<'a, F, T>, Error> {
@@ -947,9 +931,7 @@ where
 			skip_total: 0,
 			done,
 			deserialize,
-			tx_counter: TxCounter {
-				env_path: store.env_path.clone(),
-			},
+			tx_counter,
 		})
 	}
 
@@ -974,11 +956,27 @@ where
 	}
 }
 
+/// Get environment size.
+fn env_size(env: &Env<WithoutTls>) -> usize {
+	let info = env.info();
+	let stat = env.stat();
+	stat.page_size as usize * info.last_page_number
+}
+
+/// Round size proportionally to chunk size.
+fn round_size_to_chunk(size: usize, chunk_size: usize) -> usize {
+	let rem = size % chunk_size;
+	if rem == 0 {
+		size
+	} else {
+		size + (chunk_size - rem)
+	}
+}
+
 /// Determines whether the environment needs a resize based on a simple percentage threshold.
 pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, usize) {
 	let env_info = env.info();
-	let stat = env.stat();
-	let size_used = stat.page_size as usize * env_info.last_page_number;
+	let size_used = env_size(env);
 	trace!("DB map size: {}", env_info.map_size);
 	trace!("Space used: {}", size_used);
 	trace!("Space remaining: {}", env_info.map_size - size_used);

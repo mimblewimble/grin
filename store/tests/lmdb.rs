@@ -27,6 +27,9 @@ use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, WithoutTls};
 use std::fs;
 use std::path::Path;
+use std::sync::{mpsc, Arc};
+use std::thread;
+use std::time::Duration;
 
 const WRITE_CHUNK_SIZE: usize = 20;
 const TEST_ALLOC_SIZE: usize = store::lmdb::ALLOC_CHUNK_SIZE_DEFAULT / 8 / WRITE_CHUNK_SIZE;
@@ -306,6 +309,61 @@ fn test_migration() -> Result<(), store::Error> {
 		assert_eq!(data, Some(test_data_3.to_vec()));
 	}
 
+	clean_output_dir(test_dir);
+	Ok(())
+}
+
+#[test]
+fn resize_batch_waits_for_open_read_iterator() -> Result<(), store::Error> {
+	let test_dir = "target/open_read_iterator_resize";
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	util::init_test_logger();
+	clean_output_dir(test_dir);
+
+	let prefix = b'P';
+	let store = Arc::new(Store::new(
+		test_dir,
+		Some("test1"),
+		None,
+		vec![prefix],
+		None,
+		None,
+	)?);
+	let value = vec![1u8; 32 * 1024];
+	let mut saw_waiting_resize = false;
+
+	for i in 0..80u32 {
+		let mut batch = store.batch()?;
+		batch.put(Some(prefix), &i.to_be_bytes(), &value)?;
+		batch.commit()?;
+
+		let held_iter = store.iter(Some(prefix), |_, v| Ok(v.to_vec()))?;
+		let (tx, rx) = mpsc::channel();
+		let writer_store = store.clone();
+		let writer = thread::spawn(move || {
+			let res = writer_store.batch().map(|_| ());
+			tx.send(res).unwrap();
+		});
+
+		match rx.recv_timeout(Duration::from_millis(100)) {
+			Ok(writer_res) => writer_res?,
+			Err(mpsc::RecvTimeoutError::Timeout) => {
+				saw_waiting_resize = true;
+				drop(held_iter);
+				let writer_res = rx
+					.recv_timeout(Duration::from_secs(2))
+					.expect("batch did not continue after the read iterator was closed");
+				writer_res?;
+				writer.join().unwrap();
+				continue;
+			}
+			Err(e) => panic!("batch thread disconnected: {:?}", e),
+		}
+		drop(held_iter);
+		writer.join().unwrap();
+	}
+
+	assert!(saw_waiting_resize);
 	clean_output_dir(test_dir);
 	Ok(())
 }
