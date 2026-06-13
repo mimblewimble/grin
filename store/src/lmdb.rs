@@ -522,7 +522,7 @@ impl Store {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		let _ = self.enter_tx();
+		let _tx_counter = self.enter_tx();
 
 		let res = {
 			let d = match deser_mode {
@@ -541,7 +541,7 @@ impl Store {
 
 	/// Whether the key exists at the provided database key.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
-		let _ = self.enter_tx();
+		let _tx_counter = self.enter_tx();
 
 		let res = {
 			match self.env.read_txn() {
