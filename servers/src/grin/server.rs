@@ -73,6 +73,7 @@ pub struct Server {
 	pub stop_state: Arc<StopState>,
 	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
 	lock_file: Arc<File>,
+	start_time: time::Instant,
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
@@ -149,6 +150,7 @@ impl Server {
 	) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
+		let start_time = time::Instant::now();
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
@@ -338,6 +340,7 @@ impl Server {
 			},
 			stop_state,
 			lock_file,
+			start_time,
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
@@ -513,6 +516,7 @@ impl Server {
 			stem_pool_kernels: pool.stempool.kernel_count(),
 		});
 
+		let sync_status = self.sync_state.status();
 		let head = self.chain.head_header()?;
 		let head_stats = ChainStats {
 			latest_timestamp: head.timestamp,
@@ -521,13 +525,23 @@ impl Server {
 			total_difficulty: head.total_difficulty(),
 		};
 
-		let header_head = self.chain.header_head()?;
-		let header = self.chain.get_block_header(&header_head.hash())?;
-		let header_stats = ChainStats {
-			latest_timestamp: header.timestamp,
-			height: header.height,
-			last_block_h: header.hash(),
-			total_difficulty: header.total_difficulty(),
+		let header_stats = match sync_status {
+			SyncStatus::HeaderSync { sync_head, .. } => ChainStats {
+				latest_timestamp: head.timestamp,
+				height: sync_head.height,
+				last_block_h: sync_head.last_block_h,
+				total_difficulty: sync_head.total_difficulty,
+			},
+			_ => {
+				let header_head = self.chain.header_head()?;
+				let header = self.chain.get_block_header(&header_head.hash())?;
+				ChainStats {
+					latest_timestamp: header.timestamp,
+					height: header.height,
+					last_block_h: header.hash(),
+					total_difficulty: header.total_difficulty(),
+				}
+			}
 		};
 
 		let disk_usage_bytes = WalkDir::new(&self.config.db_root)
@@ -542,10 +556,11 @@ impl Server {
 		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000_f64));
 
 		Ok(ServerStats {
+			uptime_seconds: self.start_time.elapsed().as_secs(),
 			peer_count: self.peer_count(),
 			chain_stats: head_stats,
 			header_stats: header_stats,
-			sync_status: self.sync_state.status(),
+			sync_status,
 			disk_usage_gb: disk_usage_gb,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,

@@ -94,6 +94,8 @@ enum_from_primitive! {
 		RangeProofSegment = 26,
 		GetKernelSegment = 27,
 		KernelSegment = 28,
+		GetHeaderSegment = 29,
+		HeaderSegment = 30,
 	}
 }
 
@@ -139,6 +141,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::RangeProofSegment => 2 * max_block_size(),
 		Type::GetKernelSegment => 41,
 		Type::KernelSegment => 2 * max_block_size(),
+		Type::GetHeaderSegment => 9,
+		Type::HeaderSegment => 11 + 365 * MAX_BLOCK_HEADERS as u64,
 	}
 }
 
@@ -649,6 +653,42 @@ impl Writeable for Headers {
 	}
 }
 
+/// Serializable wrapper for a deterministic header segment.
+pub struct HeaderSegment {
+	pub identifier: SegmentIdentifier,
+	pub headers: Vec<BlockHeader>,
+}
+
+impl Readable for HeaderSegment {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderSegment, ser::Error> {
+		let identifier = SegmentIdentifier::read(reader)?;
+		let len = reader.read_u16()?;
+		if len > (MAX_BLOCK_HEADERS as u16) {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut headers = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			let header: UntrustedBlockHeader = Readable::read(reader)?;
+			headers.push(header.into());
+		}
+		Ok(HeaderSegment {
+			identifier,
+			headers,
+		})
+	}
+}
+
+impl Writeable for HeaderSegment {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.identifier.write(writer)?;
+		writer.write_u16(self.headers.len() as u16)?;
+		for h in &self.headers {
+			h.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
 pub struct Ping {
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
@@ -926,6 +966,8 @@ pub enum Message {
 	RangeProofSegment(SegmentResponse<RangeProof>),
 	GetKernelSegment(SegmentRequest),
 	KernelSegment(SegmentResponse<TxKernel>),
+	GetHeaderSegment(SegmentIdentifier),
+	HeaderSegment(HeaderSegment),
 }
 
 /// We receive 512 headers from a peer.
@@ -970,6 +1012,8 @@ impl fmt::Display for Message {
 			Message::RangeProofSegment(_) => write!(f, "range proof segment"),
 			Message::GetKernelSegment(_) => write!(f, "get kernel segment"),
 			Message::KernelSegment(_) => write!(f, "kernel segment"),
+			Message::GetHeaderSegment(_) => write!(f, "get header segment"),
+			Message::HeaderSegment(_) => write!(f, "header segment"),
 		}
 	}
 }

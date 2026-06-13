@@ -50,20 +50,20 @@ fn test_capabilities() {
 	);
 	assert_eq!(
 		p2p::types::Capabilities::from_bits_truncate(0b10000000 as u32),
-		p2p::types::Capabilities::UNKNOWN
+		p2p::types::Capabilities::PIHD_HIST
 	);
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b1011111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b11011111 as u32),
 	);
 
 	assert_eq!(
 		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b11011111 as u32),
 	);
 
-	assert!(p2p::types::Capabilities::from_bits_truncate(0b01011111 as u32).contains(expected));
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b11011111 as u32).contains(expected));
 
 	assert!(
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)

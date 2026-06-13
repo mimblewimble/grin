@@ -131,9 +131,28 @@ impl<T: PMMRable> PMMRHandle<T> {
 impl PMMRHandle<BlockHeader> {
 	/// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
 	pub fn init_head(&mut self, head: &Tip) -> Result<(), Error> {
-		let head_hash = self.head_hash()?;
-		let expected_hash = self.get_header_hash_by_height(head.height)?;
+		let original_size = self.size;
+		let size = pmmr::insertion_to_pmmr_index(head.height + 1);
+
+		if size > original_size {
+			error!(
+				"header PMMR inconsistent: size {} smaller than req. size {} at height {}",
+				original_size, size, head.height
+			);
+			return Err(Error::Other("header PMMR inconsistent".to_string()));
+		}
+
+		// Recover from a crash or restart during header sync where the header PMMR files
+		self.size = size;
+		let expected_hash = match self.get_header_hash_by_height(head.height) {
+			Ok(hash) => hash,
+			Err(e) => {
+				self.size = original_size;
+				return Err(e);
+			}
+		};
 		if head.hash() != expected_hash {
+			self.size = original_size;
 			error!(
 				"header PMMR inconsistent: {} vs {} at {}",
 				expected_hash,
@@ -143,13 +162,9 @@ impl PMMRHandle<BlockHeader> {
 			return Err(Error::Other("header PMMR inconsistent".to_string()));
 		}
 
-		// use next header pos to find our size.
-		let next_height = head.height + 1;
-		let size = pmmr::insertion_to_pmmr_index(next_height);
-
 		debug!(
-			"init_head: header PMMR: current head {} at pos {}",
-			head_hash, self.size
+			"init_head: header PMMR: validated head {} from original pos {}",
+			expected_hash, original_size
 		);
 		debug!(
 			"init_head: header PMMR: resetting to {} at pos {} (height {})",
@@ -2250,4 +2265,46 @@ fn apply_kernel_rules(
 		_ => {}
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::time::{SystemTime, UNIX_EPOCH};
+
+	fn test_dir(name: &str) -> PathBuf {
+		let nanos = SystemTime::now()
+			.duration_since(UNIX_EPOCH)
+			.expect("system time")
+			.as_nanos();
+		std::env::temp_dir().join(format!("grin_txhashset_{}_{}", name, nanos))
+	}
+
+	#[test]
+	fn init_head_recovers_from_advanced_header_pmmr_size() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+
+		let dir = test_dir("header_pmmr_init_head");
+		let genesis = global::get_genesis_block().header;
+		let mut handle =
+			PMMRHandle::<BlockHeader>::new(&dir, false, ProtocolVersion(1), None).unwrap();
+
+		{
+			let mut pmmr = PMMR::at(&mut handle.backend, handle.size);
+			pmmr.push(&genesis).unwrap();
+			handle.size = pmmr.unpruned_size();
+		}
+		handle.backend.sync().unwrap();
+
+		let committed_size = handle.size;
+		handle.size = committed_size + 2;
+
+		assert!(handle.head_hash().is_err());
+		handle.init_head(&Tip::from_header(&genesis)).unwrap();
+
+		assert_eq!(handle.size, committed_size);
+		assert_eq!(handle.head_hash().unwrap(), genesis.hash());
+
+		fs::remove_dir_all(dir).unwrap();
+	}
 }

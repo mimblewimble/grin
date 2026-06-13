@@ -19,7 +19,9 @@ use chrono::Duration;
 use std::net::SocketAddr;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
+use crate::core::core::{
+	pmmr, Block, BlockHeader, HeaderVersion, SegmentIdentifier, SegmentTypeIdentifier,
+};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::Error;
@@ -39,6 +41,15 @@ bitflags! {
 	}
 }
 
+/// Header sync implementation currently being used.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub enum HeaderSyncMode {
+	/// Legacy locator-based header sync.
+	Legacy,
+	/// Parallel Initial Header Download.
+	Pihd,
+}
+
 /// Various status sync can be in, whether it's fast sync or archival.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum SyncStatus {
@@ -53,6 +64,8 @@ pub enum SyncStatus {
 	HeaderSync {
 		/// current sync head
 		sync_head: Tip,
+		/// active header sync implementation
+		sync_mode: HeaderSyncMode,
 		/// height of the most advanced peer
 		highest_height: u64,
 		/// diff of the most advanced peer
@@ -171,6 +184,44 @@ impl PIBDSegmentContainer {
 	}
 }
 
+/// Recently rejected PIBD segment from a specific peer.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RejectedPIBDSegment {
+	/// Segment+Type Identifier
+	pub identifier: SegmentTypeIdentifier,
+	/// Peer that provided invalid data for this segment
+	pub peer_addr: SocketAddr,
+	/// Time at which this segment was rejected
+	pub reject_time: DateTime<Utc>,
+}
+
+const MAX_REJECTED_PIBD_SEGMENTS: usize = 1024;
+
+/// Container for pending PIHD header segment requests.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PIHDHeaderSegmentContainer {
+	/// Header segment identifier
+	pub identifier: SegmentIdentifier,
+	/// Time at which this request was made
+	pub request_time: DateTime<Utc>,
+	/// Peer that received this request
+	pub peer_addr: SocketAddr,
+	/// Highest header height advertised by the peer when requested
+	pub target_height: u64,
+}
+
+impl PIHDHeaderSegmentContainer {
+	/// Return container with timestamp
+	pub fn new(identifier: SegmentIdentifier, peer_addr: SocketAddr, target_height: u64) -> Self {
+		Self {
+			identifier,
+			request_time: Utc::now(),
+			peer_addr,
+			target_height,
+		}
+	}
+}
+
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
@@ -182,6 +233,8 @@ pub struct SyncState {
 	/// available where it will be needed (both in the adapter
 	/// and the sync loop)
 	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
+	rejected_pibd_segments: RwLock<Vec<RejectedPIBDSegment>>,
+	requested_pihd_header_segments: RwLock<Vec<PIHDHeaderSegmentContainer>>,
 }
 
 impl SyncState {
@@ -191,6 +244,8 @@ impl SyncState {
 			current: RwLock::new(SyncStatus::Initial),
 			sync_error: RwLock::new(None),
 			requested_pibd_segments: RwLock::new(vec![]),
+			rejected_pibd_segments: RwLock::new(vec![]),
+			requested_pihd_header_segments: RwLock::new(vec![]),
 		}
 	}
 
@@ -281,12 +336,45 @@ impl SyncState {
 		};
 	}
 
+	/// Update lightweight PIBD leaf progress for TUI/API display.
+	pub fn update_pibd_leaf_progress(&self, completed_leaves: u64, archive_header: &BlockHeader) {
+		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
+			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
+		let status: &mut SyncStatus = &mut self.current.write();
+		match status {
+			SyncStatus::TxHashsetPibd {
+				completed_leaves: current_completed_leaves,
+				leaves_required: current_leaves_required,
+				required_height,
+				..
+			} => {
+				*current_completed_leaves = completed_leaves;
+				*current_leaves_required = leaves_required;
+				*required_height = archive_header.height;
+			}
+			_ => {
+				*status = SyncStatus::TxHashsetPibd {
+					aborted: false,
+					errored: false,
+					completed_leaves,
+					leaves_required,
+					completed_to_height: 0,
+					required_height: archive_header.height,
+				};
+			}
+		}
+	}
+
 	/// Update PIBD segment list
 	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
 		debug!("sync_state: tracking PIBD request for {:?}", id);
-		self.requested_pibd_segments
-			.write()
-			.push(PIBDSegmentContainer::new(id.clone(), Some(peer_addr)));
+		let mut requested_segments = self.requested_pibd_segments.write();
+		if let Some(existing) = requested_segments.iter_mut().find(|i| &i.identifier == id) {
+			existing.request_time = Utc::now();
+			existing.last_peer = Some(peer_addr);
+		} else {
+			requested_segments.push(PIBDSegmentContainer::new(id.clone(), Some(peer_addr)));
+		}
 	}
 
 	/// Remove segment from list
@@ -295,6 +383,18 @@ impl SyncState {
 		self.requested_pibd_segments
 			.write()
 			.retain(|i| &i.identifier != id);
+	}
+
+	/// Remove segment from list only if it is still pending for the given peer.
+	pub fn remove_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+		trace!(
+			"sync_state: removing PIBD request tracking for {:?} from {}",
+			id,
+			peer_addr
+		);
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| &i.identifier != id || i.last_peer != Some(peer_addr));
 	}
 
 	/// Remove segments with request timestamps less than cutoff time
@@ -316,22 +416,124 @@ impl SyncState {
 		removed_segments
 	}
 
-	/// Drop all tracked PIBD requests, returning how many entries were removed.
-	pub fn clear_pibd_requests(&self) -> usize {
-		let mut requests = self.requested_pibd_segments.write();
-		let cleared = requests.len();
-		if cleared > 0 {
-			requests.clear();
-		}
-		cleared
-	}
-
 	/// Check whether segment is in request list
 	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
 		self.requested_pibd_segments
 			.read()
 			.iter()
 			.any(|i| &i.identifier == id)
+	}
+
+	/// Check whether segment is in request list for the given peer.
+	pub fn contains_pibd_segment_from(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+	) -> bool {
+		self.requested_pibd_segments
+			.read()
+			.iter()
+			.any(|i| &i.identifier == id && i.last_peer == Some(peer_addr))
+	}
+
+	/// Mark a requested PIBD segment as rejected for this peer.
+	pub fn reject_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+		self.remove_pibd_segment_from(id, peer_addr);
+		let mut rejected = self.rejected_pibd_segments.write();
+		rejected.retain(|i| &i.identifier != id || i.peer_addr != peer_addr);
+		rejected.push(RejectedPIBDSegment {
+			identifier: id.clone(),
+			peer_addr,
+			reject_time: Utc::now(),
+		});
+		if rejected.len() > MAX_REJECTED_PIBD_SEGMENTS {
+			rejected.remove(0);
+		}
+	}
+
+	/// Check whether this peer recently provided invalid data for this PIBD segment.
+	pub fn rejected_pibd_segment_from(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+		reject_seconds: i64,
+	) -> bool {
+		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
+		let mut rejected = self.rejected_pibd_segments.write();
+		rejected.retain(|i| i.reject_time > cutoff_time);
+		rejected
+			.iter()
+			.any(|i| &i.identifier == id && i.peer_addr == peer_addr)
+	}
+
+	/// Number of currently pending PIBD segment requests
+	pub fn pending_pibd_segment_count(&self) -> usize {
+		self.requested_pibd_segments.read().len()
+	}
+
+	/// Track a pending PIHD header segment request.
+	pub fn add_pihd_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+		target_height: u64,
+	) {
+		let mut requested_segments = self.requested_pihd_header_segments.write();
+		if let Some(existing) = requested_segments
+			.iter_mut()
+			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+		{
+			existing.request_time = Utc::now();
+			existing.target_height = target_height;
+		} else {
+			requested_segments.push(PIHDHeaderSegmentContainer::new(
+				id,
+				peer_addr,
+				target_height,
+			));
+		}
+	}
+
+	/// Remove a pending PIHD header segment request.
+	pub fn remove_pihd_header_segment(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+		self.requested_pihd_header_segments
+			.write()
+			.retain(|i| i.identifier != id || i.peer_addr != peer_addr);
+	}
+
+	/// Check whether a PIHD header segment was requested from the given peer.
+	pub fn contains_pihd_header_segment_from(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+	) -> bool {
+		self.requested_pihd_header_segments
+			.read()
+			.iter()
+			.any(|i| i.identifier == id && i.peer_addr == peer_addr)
+	}
+
+	/// Highest header height expected for a pending PIHD header segment request.
+	pub fn pihd_header_segment_target_height(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<u64> {
+		self.requested_pihd_header_segments
+			.read()
+			.iter()
+			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+			.map(|i| i.target_height)
+	}
+
+	/// Remove completed or stale PIHD header segment requests.
+	pub fn retain_pihd_header_segments<F>(&self, mut keep: F)
+	where
+		F: FnMut(&PIHDHeaderSegmentContainer) -> bool,
+	{
+		self.requested_pihd_header_segments
+			.write()
+			.retain(|i| keep(i));
 	}
 
 	/// Communicate sync error
@@ -669,5 +871,34 @@ impl BlockStatus {
 			BlockStatus::Reorg { .. } => true,
 			_ => false,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::core::core::{SegmentIdentifier, SegmentType};
+	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+	#[test]
+	fn rejected_pibd_segment_tracking_is_bounded() {
+		let sync_state = SyncState::new();
+
+		for idx in 0..(MAX_REJECTED_PIBD_SEGMENTS + 10) {
+			let id = SegmentTypeIdentifier::new(
+				SegmentType::Kernel,
+				SegmentIdentifier {
+					height: 9,
+					idx: idx as u64,
+				},
+			);
+			let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000 + idx as u16);
+			sync_state.reject_pibd_segment_from(&id, peer_addr);
+		}
+
+		assert_eq!(
+			sync_state.rejected_pibd_segments.read().len(),
+			MAX_REJECTED_PIBD_SEGMENTS
+		);
 	}
 }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::utils::w;
-use crate::chain::{Chain, SyncState, SyncStatus};
+use crate::chain::{Chain, HeaderSyncMode, SyncState, SyncStatus};
 use crate::p2p;
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
@@ -81,11 +81,19 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 		SyncStatus::AwaitingPeers(_) => ("awaiting_peers".to_string(), None),
 		SyncStatus::HeaderSync {
 			sync_head,
+			sync_mode,
 			highest_height,
 			..
 		} => (
 			"header_sync".to_string(),
-			Some(json!({ "current_height": sync_head.height, "highest_height": highest_height })),
+			Some(json!({
+				"current_height": sync_head.height,
+				"highest_height": highest_height,
+				"header_sync_type": match sync_mode {
+					HeaderSyncMode::Legacy => "legacy",
+					HeaderSyncMode::Pihd => "pihd",
+				}
+			})),
 		),
 		SyncStatus::TxHashsetPibd {
 			aborted,
@@ -149,7 +157,5 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
 		),
 		SyncStatus::Shutdown => ("shutdown".to_string(), None),
-		// any other status is considered syncing (should be unreachable)
-		_ => ("syncing".to_string(), None),
 	}
 }

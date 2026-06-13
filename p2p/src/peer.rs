@@ -35,8 +35,8 @@ use crate::msg::{
 };
 use crate::protocol::Protocol;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead,
 };
 use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::{DateTime, Utc};
@@ -328,6 +328,11 @@ impl Peer {
 		self.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
+	/// Sends a request for a deterministic header segment.
+	pub fn send_header_segment_request(&self, identifier: SegmentIdentifier) -> Result<(), Error> {
+		self.send(&identifier, msg::Type::GetHeaderSegment)
+	}
+
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(
 			"Requesting tx (kernel hash) {} from peer {}.",
@@ -569,6 +574,14 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.locate_headers(locator)
 	}
 
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		self.adapter.locate_header_segment(id, peer_info)
+	}
+
 	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
 		self.adapter.get_block(h, peer_info)
 	}
@@ -649,9 +662,10 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_bitmap_segment(block_hash, output_root, segment)
+			.receive_bitmap_segment(block_hash, output_root, segment, peer_info)
 	}
 
 	fn receive_output_segment(
@@ -659,25 +673,39 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_output_segment(block_hash, bitmap_root, segment)
+			.receive_output_segment(block_hash, bitmap_root, segment, peer_info)
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_rangeproof_segment(block_hash, segment)
+		self.adapter
+			.receive_rangeproof_segment(block_hash, segment, peer_info)
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_kernel_segment(block_hash, segment)
+		self.adapter
+			.receive_kernel_segment(block_hash, segment, peer_info)
+	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		self.adapter.receive_header_segment(id, headers, peer_info)
 	}
 }
 

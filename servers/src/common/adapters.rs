@@ -16,9 +16,11 @@
 //! events to consumers of those events.
 
 use crate::util::RwLock;
+use std::collections::HashMap;
 use std::fs::File;
+use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
@@ -38,7 +40,7 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
-use crate::p2p::types::PeerInfo;
+use crate::p2p::types::{HeaderSegmentAcceptance, PeerInfo};
 use crate::pool::{self, BlockChain, PoolAdapter};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
@@ -51,6 +53,166 @@ const KERNEL_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
+const MAX_CACHED_HEADER_BATCHES: usize = 16;
+const PIBD_SEGMENT_QUEUE_CAP: usize = 64;
+const REJECTED_PIBD_SEGMENT_SECS: i64 = 600;
+const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
+const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 1000;
+const HEADER_BATCH_CACHE_LOOKAHEAD: u64 =
+	MAX_CACHED_HEADER_BATCHES as u64 * p2p::MAX_BLOCK_HEADERS as u64;
+
+#[derive(Clone)]
+struct HeaderBatch {
+	headers: Vec<BlockHeader>,
+	peer_info: PeerInfo,
+}
+
+enum PibdSegment {
+	Bitmap {
+		block_hash: Hash,
+		output_root: Hash,
+		segment: Segment<BitmapChunk>,
+	},
+	Output {
+		block_hash: Hash,
+		bitmap_root: Hash,
+		segment: Segment<OutputIdentifier>,
+	},
+	RangeProof {
+		block_hash: Hash,
+		segment: Segment<RangeProof>,
+	},
+	Kernel {
+		block_hash: Hash,
+		segment: Segment<TxKernel>,
+	},
+}
+
+impl PibdSegment {
+	fn segment_id(&self) -> SegmentTypeIdentifier {
+		match self {
+			PibdSegment::Bitmap { segment, .. } => SegmentTypeIdentifier {
+				segment_type: SegmentType::Bitmap,
+				identifier: segment.identifier().clone(),
+			},
+			PibdSegment::Output { segment, .. } => SegmentTypeIdentifier {
+				segment_type: SegmentType::Output,
+				identifier: segment.identifier().clone(),
+			},
+			PibdSegment::RangeProof { segment, .. } => SegmentTypeIdentifier {
+				segment_type: SegmentType::RangeProof,
+				identifier: segment.identifier().clone(),
+			},
+			PibdSegment::Kernel { segment, .. } => SegmentTypeIdentifier {
+				segment_type: SegmentType::Kernel,
+				identifier: segment.identifier().clone(),
+			},
+		}
+	}
+}
+
+struct QueuedPibdSegment {
+	peer_info: PeerInfo,
+	segment: PibdSegment,
+}
+
+fn spawn_pibd_segment_worker(
+	sync_state: Arc<SyncState>,
+	chain: Weak<chain::Chain>,
+	rx: mpsc::Receiver<QueuedPibdSegment>,
+) {
+	thread::Builder::new()
+		.name("pibd_receive".to_string())
+		.spawn(move || {
+			while let Ok(queued_segment) = rx.recv() {
+				let segment_id = queued_segment.segment.segment_id();
+				if let Err(e) = process_queued_pibd_segment(&sync_state, &chain, queued_segment) {
+					error!("PIBD segment processing failed for {:?}: {}", segment_id, e);
+				}
+			}
+			debug!("PIBD receive worker shutting down");
+		})
+		.expect("failed to spawn PIBD receive worker");
+}
+
+fn process_queued_pibd_segment(
+	sync_state: &Arc<SyncState>,
+	chain: &Weak<chain::Chain>,
+	queued_segment: QueuedPibdSegment,
+) -> Result<(), chain::Error> {
+	let peer_addr = queued_segment.peer_info.addr;
+	let chain = chain
+		.upgrade()
+		.ok_or_else(|| chain::Error::Other("chain not available".to_owned()))?;
+	let archive_header = chain.txhashset_archive_header_header_only()?;
+	let segment_id = queued_segment.segment.segment_id();
+	let desegmenter = chain.desegmenter(&archive_header)?;
+	let mut desegmenter = desegmenter.write();
+	let res = if let Some(d) = desegmenter.as_mut() {
+		match queued_segment.segment {
+			PibdSegment::Bitmap {
+				block_hash,
+				output_root,
+				segment,
+			} => {
+				debug!(
+					"Received bitmap segment {} for block_hash: {}, output_root: {}",
+					segment.identifier().idx,
+					block_hash,
+					output_root
+				);
+				d.add_bitmap_segment(segment, output_root)
+			}
+			PibdSegment::Output {
+				block_hash,
+				bitmap_root,
+				segment,
+			} => {
+				debug!(
+					"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+					segment.identifier().idx,
+					block_hash,
+					bitmap_root,
+				);
+				d.add_output_segment(segment, Some(bitmap_root))
+			}
+			PibdSegment::RangeProof {
+				block_hash,
+				segment,
+			} => {
+				debug!(
+					"Received proof segment {} for block_hash: {}",
+					segment.identifier().idx,
+					block_hash,
+				);
+				d.add_rangeproof_segment(segment)
+			}
+			PibdSegment::Kernel {
+				block_hash,
+				segment,
+			} => {
+				debug!(
+					"Received kernel segment {} for block_hash: {}",
+					segment.identifier().idx,
+					block_hash,
+				);
+				d.add_kernel_segment(segment)
+			}
+		}
+	} else {
+		Ok(())
+	};
+	if res.is_ok() {
+		sync_state.remove_pibd_segment(&segment_id);
+	} else {
+		warn!(
+			"PIBD segment {:?} from peer {} failed validation and remains pending for retry",
+			segment_id, peer_addr
+		);
+		sync_state.reject_pibd_segment_from(&segment_id, peer_addr.0);
+	}
+	res
+}
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -66,6 +228,9 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+	header_batch_cache: RwLock<Vec<HeaderBatch>>,
+	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
+	pibd_segment_tx: mpsc::SyncSender<QueuedPibdSegment>,
 }
 
 impl<B, P> p2p::ChainAdapter for NetToChainAdapter<B, P>
@@ -329,27 +494,7 @@ where
 			}
 		};
 
-		match self
-			.chain()
-			.sync_block_headers(bhs, sync_head, chain::Options::SYNC)
-		{
-			Ok(sync_head) => {
-				// If we have an updated sync_head after processing this batch of headers
-				// then update our sync_state so we can request relevant headers in the next batch.
-				if let Some(sync_head) = sync_head {
-					self.sync_state.update_header_sync(sync_head);
-				}
-				Ok(true)
-			}
-			Err(e) => {
-				debug!("Block headers refused by chain: {:?}", e);
-				if e.is_bad_data() {
-					Ok(false)
-				} else {
-					Err(e)
-				}
-			}
-		}
+		self.cache_and_process_header_batch(bhs, peer_info, sync_head)
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -385,6 +530,60 @@ where
 		debug!("returning headers: {}", headers.len());
 
 		Ok(headers)
+	}
+
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		if !peer_info
+			.capabilities
+			.contains(p2p::Capabilities::PIHD_HIST)
+			|| id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT
+		{
+			return Ok(None);
+		}
+		if !self.header_segment_request_allowed(peer_info.addr.0) {
+			warn!(
+				"throttling PIHD header segment request {:?} from {}",
+				id, peer_info.addr
+			);
+			return Ok(None);
+		}
+
+		let segment_capacity = id.segment_capacity();
+		let start_height = match id
+			.idx
+			.checked_mul(segment_capacity)
+			.and_then(|height| height.checked_add(1))
+		{
+			Some(height) => height,
+			None => return Ok(None),
+		};
+		let max_height = self.chain().header_head()?.height;
+		let end_height = match start_height
+			.checked_add(segment_capacity)
+			.and_then(|height| height.checked_sub(1))
+		{
+			Some(height) => std::cmp::min(height, max_height),
+			None => max_height,
+		};
+		if start_height > end_height {
+			return Ok(Some(vec![]));
+		}
+
+		let header_pmmr = self.chain().header_pmmr();
+		let header_pmmr = header_pmmr.read();
+		let mut headers = vec![];
+		for h in start_height..=end_height {
+			if let Ok(hash) = header_pmmr.get_header_hash_by_height(h) {
+				headers.push(self.chain().get_block_header(&hash)?);
+			} else {
+				break;
+			}
+		}
+		Ok(Some(headers))
 	}
 
 	/// Gets a full block by its hash.
@@ -566,34 +765,16 @@ where
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received bitmap segment {} for block_hash: {}, output_root: {}",
-			segment.identifier().idx,
-			block_hash,
-			output_root
-		);
-		// TODO: Entire process needs to be restarted if the horizon block
-		// has changed (perhaps not here, NB this has to go somewhere)
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_bitmap_segment(segment, output_root);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Bitmap,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(
+			PibdSegment::Bitmap {
+				block_hash,
+				output_root,
+				segment,
+			},
+			peer_info,
+		)
 	}
 
 	fn receive_output_segment(
@@ -601,94 +782,116 @@ where
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
-			segment.identifier().idx,
-			block_hash,
-			bitmap_root,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_output_segment(segment, Some(bitmap_root));
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming output segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Output,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(
+			PibdSegment::Output {
+				block_hash,
+				bitmap_root,
+				segment,
+			},
+			peer_info,
+		)
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received proof segment {} for block_hash: {}",
-			segment.identifier().idx,
-			block_hash,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_rangeproof_segment(segment);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::RangeProof,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(
+			PibdSegment::RangeProof {
+				block_hash,
+				segment,
+			},
+			peer_info,
+		)
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received kernel segment {} for block_hash: {}",
-			segment.identifier().idx,
-			block_hash,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_kernel_segment(segment);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
+		self.queue_pibd_segment(
+			PibdSegment::Kernel {
+				block_hash,
+				segment,
+			},
+			peer_info,
+		)
+	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
+			return Ok(HeaderSegmentAcceptance::Ban);
 		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Kernel,
-			identifier,
-		});
-		retval
+		if !self
+			.sync_state
+			.contains_pihd_header_segment_from(id, peer_info.addr.0)
+		{
+			debug!(
+				"ignoring unsolicited PIHD header segment {:?} from {}",
+				id, peer_info.addr
+			);
+			return Ok(HeaderSegmentAcceptance::Accepted);
+		}
+		let expected_first_height = match id
+			.idx
+			.checked_mul(id.segment_capacity())
+			.and_then(|height| height.checked_add(1))
+		{
+			Some(height) => height,
+			None => return Ok(HeaderSegmentAcceptance::Ban),
+		};
+		let target_height = self
+			.sync_state
+			.pihd_header_segment_target_height(id, peer_info.addr.0)
+			.unwrap_or(0);
+		if headers.is_empty() {
+			if expected_first_height > target_height {
+				self.sync_state
+					.remove_pihd_header_segment(id, peer_info.addr.0);
+				return Ok(HeaderSegmentAcceptance::Accepted);
+			}
+			return Ok(HeaderSegmentAcceptance::Ban);
+		}
+		if headers[0].height != expected_first_height {
+			return Ok(HeaderSegmentAcceptance::Ban);
+		}
+		if !headers.windows(2).all(|w| w[1].height == w[0].height + 1) {
+			return Ok(HeaderSegmentAcceptance::Ban);
+		}
+		if headers
+			.last()
+			.map(|h| h.height >= target_height)
+			.unwrap_or(false)
+		{
+			self.sync_state
+				.remove_pihd_header_segment(id, peer_info.addr.0);
+		}
+
+		let sync_head = match self.sync_state.status() {
+			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+			_ => return Ok(HeaderSegmentAcceptance::Accepted),
+		};
+		let res = self.cache_and_process_header_batch(headers, peer_info, sync_head);
+		if res.as_ref().map(|accepted| *accepted).unwrap_or(false) {
+			self.sync_state
+				.remove_pihd_header_segment(id, peer_info.addr.0);
+		}
+		match res {
+			Ok(true) => Ok(HeaderSegmentAcceptance::Accepted),
+			Ok(false) => Ok(HeaderSegmentAcceptance::Ban),
+			Err(e) => Err(e),
+		}
 	}
 }
 
@@ -705,6 +908,8 @@ where
 		config: ServerConfig,
 		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> Self {
+		let (pibd_segment_tx, pibd_segment_rx) = mpsc::sync_channel(PIBD_SEGMENT_QUEUE_CAP);
+		spawn_pibd_segment_worker(sync_state.clone(), Arc::downgrade(&chain), pibd_segment_rx);
 		NetToChainAdapter {
 			sync_state,
 			chain: Arc::downgrade(&chain),
@@ -712,6 +917,9 @@ where
 			peers: OneTime::new(),
 			config,
 			hooks,
+			header_batch_cache: RwLock::new(vec![]),
+			header_segment_requests: RwLock::new(HashMap::new()),
+			pibd_segment_tx,
 		}
 	}
 
@@ -732,6 +940,70 @@ where
 		self.chain
 			.upgrade()
 			.expect("Failed to upgrade weak ref to our chain.")
+	}
+
+	fn queue_pibd_segment(
+		&self,
+		segment: PibdSegment,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		let segment_id = segment.segment_id();
+		if self.sync_state.rejected_pibd_segment_from(
+			&segment_id,
+			peer_info.addr.0,
+			REJECTED_PIBD_SEGMENT_SECS,
+		) {
+			debug!(
+				"ignoring rejected PIBD segment {:?} from {}",
+				segment_id, peer_info.addr
+			);
+			return Ok(false);
+		}
+		if !self
+			.sync_state
+			.contains_pibd_segment_from(&segment_id, peer_info.addr.0)
+		{
+			debug!(
+				"ignoring unsolicited PIBD segment {:?} from {}",
+				segment_id, peer_info.addr
+			);
+			return Ok(true);
+		}
+		let queued = QueuedPibdSegment {
+			peer_info: peer_info.clone(),
+			segment,
+		};
+		match self.pibd_segment_tx.try_send(queued) {
+			Ok(()) => Ok(true),
+			Err(mpsc::TrySendError::Full(_)) => {
+				warn!(
+					"PIBD receive queue full, dropping segment {:?} from {}",
+					segment_id, peer_info.addr
+				);
+				self.sync_state
+					.remove_pibd_segment_from(&segment_id, peer_info.addr.0);
+				Ok(true)
+			}
+			Err(mpsc::TrySendError::Disconnected(_)) => Err(chain::Error::Other(
+				"PIBD receive queue disconnected".to_owned(),
+			)),
+		}
+	}
+
+	fn header_segment_request_allowed(&self, peer_addr: SocketAddr) -> bool {
+		let now = Utc::now();
+		let cutoff = now - Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS);
+		let mut requests = self.header_segment_requests.write();
+		requests.retain(|_, (window_start, _)| *window_start > cutoff);
+		let entry = requests.entry(peer_addr).or_insert((now, 0));
+		if now > entry.0 + Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS) {
+			*entry = (now, 0);
+		}
+		if entry.1 >= MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW {
+			return false;
+		}
+		entry.1 += 1;
+		true
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
@@ -913,6 +1185,105 @@ where
 				"send_block_request_to_peer: failed to check block exists: {:?}",
 				e
 			),
+		}
+	}
+
+	fn cache_and_process_header_batch(
+		&self,
+		headers: &[BlockHeader],
+		peer_info: &PeerInfo,
+		sync_head: chain::Tip,
+	) -> Result<bool, chain::Error> {
+		let headers = headers
+			.iter()
+			.skip_while(|h| h.height <= sync_head.height)
+			.cloned()
+			.collect::<Vec<_>>();
+		if headers.is_empty() {
+			return Ok(true);
+		}
+		if headers
+			.first()
+			.map(|h| {
+				h.height
+					> sync_head
+						.height
+						.saturating_add(HEADER_BATCH_CACHE_LOOKAHEAD)
+			})
+			.unwrap_or(false)
+		{
+			debug!(
+				"ignoring far-future header batch starting at height {} while sync head is {}",
+				headers[0].height, sync_head.height
+			);
+			return Ok(true);
+		}
+
+		{
+			let mut cache = self.header_batch_cache.write();
+			let first = headers.first().map(|h| h.hash());
+			let last = headers.last().map(|h| h.hash());
+			if !cache.iter().any(|b| {
+				b.headers.first().map(|h| h.hash()) == first
+					|| b.headers.last().map(|h| h.hash()) == last
+			}) {
+				if cache.len() >= MAX_CACHED_HEADER_BATCHES {
+					cache.remove(0);
+				}
+				cache.push(HeaderBatch {
+					headers,
+					peer_info: peer_info.clone(),
+				});
+			}
+		}
+
+		self.process_ready_header_batches(peer_info)
+	}
+
+	fn process_ready_header_batches(&self, current_peer: &PeerInfo) -> Result<bool, chain::Error> {
+		loop {
+			let sync_head = match self.sync_state.status() {
+				SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+				_ => return Ok(true),
+			};
+			let batch = {
+				let mut cache = self.header_batch_cache.write();
+				cache.sort_by_key(|b| b.headers.first().map(|h| h.height).unwrap_or(u64::MAX));
+				let pos = cache.iter().position(|b| {
+					b.headers.first().map(|h| h.height) == Some(sync_head.height + 1)
+				});
+				match pos {
+					Some(pos) => cache.remove(pos),
+					None => return Ok(true),
+				}
+			};
+
+			match self
+				.chain()
+				.sync_block_headers(&batch.headers, sync_head, chain::Options::SYNC)
+			{
+				Ok(sync_head) => {
+					if let Some(sync_head) = sync_head {
+						self.sync_state.update_header_sync(sync_head);
+					}
+				}
+				Err(e) => {
+					debug!("Block headers refused by chain: {:?}", e);
+					if e.is_bad_data() {
+						if batch.peer_info.addr == current_peer.addr {
+							return Ok(false);
+						}
+						if let Err(e) = self.peers().ban_peer(
+							batch.peer_info.addr,
+							p2p::types::ReasonForBan::BadBlockHeader,
+						) {
+							error!("failed to ban peer {}: {:?}", batch.peer_info.addr, e);
+						}
+					} else {
+						return Err(e);
+					}
+				}
+			}
 		}
 	}
 }

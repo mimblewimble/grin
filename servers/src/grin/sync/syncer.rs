@@ -243,7 +243,9 @@ impl SyncRunner {
 	/// Whether we're currently syncing the chain or we're fully caught up and
 	/// just receiving blocks through gossip.
 	fn needs_syncing(&self) -> Result<(bool, u64), chain::Error> {
-		let local_diff = self.chain.head()?.total_difficulty;
+		let head = self.chain.head()?;
+		let header_head = self.chain.header_head()?;
+		let local_diff = head.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
 
 		// Find a peer with greatest known difficulty.
@@ -274,12 +276,19 @@ impl SyncRunner {
 		// difficulty than us
 		if is_syncing {
 			if peer_info.total_difficulty() <= local_diff {
-				let ch = self.chain.head()?;
+				if header_head.height > head.height || header_head.total_difficulty > local_diff {
+					debug!(
+						"sync: body head {} @ {} is behind header head {} @ {}, staying in sync",
+						head.height, local_diff, header_head.height, header_head.total_difficulty
+					);
+					return Ok((true, peer_info.height().max(header_head.height)));
+				}
+
 				info!(
 					"synchronized at {} @ {} [{}]",
 					local_diff.to_num(),
-					ch.height,
-					ch.last_block_h
+					head.height,
+					head.last_block_h
 				);
 				is_syncing = false;
 			}

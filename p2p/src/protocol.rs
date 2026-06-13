@@ -17,8 +17,9 @@ use crate::conn::MessageHandler;
 use crate::core::core::{hash::Hashed, CompactBlock};
 
 use crate::msg::{
-	Consumed, Headers, Message, Msg, OutputBitmapSegmentResponse, OutputSegmentResponse, PeerAddrs,
-	Pong, SegmentRequest, SegmentResponse, TxHashSetArchive, Type,
+	Consumed, HeaderSegment, Headers, Message, Msg, OutputBitmapSegmentResponse,
+	OutputSegmentResponse, PeerAddrs, Pong, SegmentRequest, SegmentResponse, TxHashSetArchive,
+	Type,
 };
 use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
 use chrono::prelude::Utc;
@@ -192,6 +193,28 @@ impl MessageHandler for Protocol {
 				)?)
 			}
 
+			Message::GetHeaderSegment(identifier) => {
+				if !self
+					.peer_info
+					.capabilities
+					.contains(crate::types::Capabilities::PIHD_HIST)
+				{
+					return Ok(Consumed::None);
+				}
+				if let Some(headers) = adapter.locate_header_segment(identifier, &self.peer_info)? {
+					Consumed::Response(Msg::new(
+						Type::HeaderSegment,
+						HeaderSegment {
+							identifier,
+							headers,
+						},
+						self.peer_info.version,
+					)?)
+				} else {
+					Consumed::None
+				}
+			}
+
 			// "header first" block propagation - if we have not yet seen this block
 			// we can go request it from some of our peers
 			Message::Header(header) => {
@@ -201,6 +224,15 @@ impl MessageHandler for Protocol {
 
 			Message::Headers(data) => {
 				adapter.headers_received(&data.headers, &self.peer_info)?;
+				Consumed::None
+			}
+
+			Message::HeaderSegment(segment) => {
+				adapter.receive_header_segment(
+					segment.identifier,
+					&segment.headers,
+					&self.peer_info,
+				)?;
 				Consumed::None
 			}
 
@@ -382,7 +414,12 @@ impl MessageHandler for Protocol {
 					block_hash,
 					output_root
 				);
-				adapter.receive_bitmap_segment(block_hash, output_root, segment.into_segment()?)?;
+				adapter.receive_bitmap_segment(
+					block_hash,
+					output_root,
+					segment.into_segment()?,
+					&self.peer_info,
+				)?;
 				Consumed::None
 			}
 			Message::OutputSegment(req) => {
@@ -399,6 +436,7 @@ impl MessageHandler for Protocol {
 					response.block_hash,
 					output_bitmap_root,
 					response.segment.into(),
+					&self.peer_info,
 				)?;
 				Consumed::None
 			}
@@ -408,7 +446,7 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Rangeproof Segment: bh: {}", block_hash);
-				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
+				adapter.receive_rangeproof_segment(block_hash, segment.into(), &self.peer_info)?;
 				Consumed::None
 			}
 			Message::KernelSegment(req) => {
@@ -417,11 +455,93 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Kernel Segment: bh: {}", block_hash);
-				adapter.receive_kernel_segment(block_hash, segment.into())?;
+				adapter.receive_kernel_segment(block_hash, segment.into(), &self.peer_info)?;
 				Consumed::None
 			}
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::conn::Tracker;
+	use crate::core::core::SegmentIdentifier;
+	use crate::core::global;
+	use crate::core::pow::Difficulty;
+	use crate::core::ser::ProtocolVersion;
+	use crate::msg::{read_message, write_message};
+	use crate::serv::DummyAdapter;
+	use crate::types::{
+		Capabilities, Direction, PeerAddr, PeerLiveInfo, PIHD_HEADER_SEGMENT_HEIGHT,
+	};
+	use crate::util::RwLock;
+	use std::io::Cursor;
+	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+	use std::sync::atomic::AtomicBool;
+
+	fn test_peer_info(capabilities: Capabilities) -> PeerInfo {
+		PeerInfo {
+			capabilities,
+			user_agent: "test".to_owned(),
+			version: ProtocolVersion::local(),
+			addr: PeerAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10000)),
+			direction: Direction::Outbound,
+			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(Difficulty::zero()))),
+		}
+	}
+
+	#[test]
+	fn get_header_segment_returns_header_segment_response() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		let protocol = Protocol::new(
+			Arc::new(DummyAdapter {}),
+			test_peer_info(Capabilities::default()),
+			Arc::new(AtomicBool::new(false)),
+		);
+		let identifier = SegmentIdentifier {
+			height: PIHD_HEADER_SEGMENT_HEIGHT,
+			idx: 2,
+		};
+
+		let consumed = protocol
+			.consume(Message::GetHeaderSegment(identifier))
+			.expect("get header segment response");
+		let response = match consumed {
+			Consumed::Response(response) => response,
+			other => panic!("expected response, got {:?}", other),
+		};
+
+		let mut bytes = vec![];
+		write_message(&mut bytes, &response, Arc::new(Tracker::new())).expect("write response");
+		let segment: HeaderSegment = read_message(
+			&mut Cursor::new(bytes),
+			ProtocolVersion::local(),
+			Type::HeaderSegment,
+		)
+		.expect("read header segment response");
+
+		assert_eq!(segment.identifier, identifier);
+		assert!(segment.headers.is_empty());
+	}
+
+	#[test]
+	fn get_header_segment_requires_pihd_capability() {
+		let protocol = Protocol::new(
+			Arc::new(DummyAdapter {}),
+			test_peer_info(Capabilities::HEADER_HIST),
+			Arc::new(AtomicBool::new(false)),
+		);
+
+		let consumed = protocol
+			.consume(Message::GetHeaderSegment(SegmentIdentifier {
+				height: PIHD_HEADER_SEGMENT_HEIGHT,
+				idx: 0,
+			}))
+			.expect("get header segment handling");
+
+		assert!(matches!(consumed, Consumed::None));
 	}
 }
