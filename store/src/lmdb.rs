@@ -16,8 +16,11 @@
 
 use heed::types::Bytes;
 use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, OnceLock};
 use std::time::Duration;
@@ -94,6 +97,10 @@ pub const PREFIX_KEY_SEPARATOR: u8 = b':';
 
 /// Mapping of database path to environment state.
 static ENV_MAP: OnceLock<RwLock<HashMap<String, EnvState>>> = OnceLock::new();
+
+thread_local! {
+	static THREAD_TX_COUNTS: RefCell<HashMap<String, u32>> = RefCell::new(HashMap::new());
+}
 
 /// State of active database environment.
 struct EnvState {
@@ -395,8 +402,8 @@ impl Store {
 			.load(Ordering::Relaxed)
 	}
 
-	/// Check if requirement for environment resize is checking.
-	fn resize_checking(&self) -> bool {
+	/// Try to acquire the resize check guard.
+	fn start_resize_checking(&self) -> bool {
 		ENV_MAP
 			.get()
 			.unwrap()
@@ -404,19 +411,20 @@ impl Store {
 			.get(&self.env_path)
 			.unwrap()
 			.resize_checking
-			.load(Ordering::Relaxed)
+			.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+			.is_ok()
 	}
 
-	/// Set flag if requirement for environment resize is checking.
-	fn set_resize_checking(&self, resize_checking: bool) {
+	/// Release the resize check guard.
+	fn finish_resize_checking(&self) {
 		ENV_MAP
 			.get()
 			.unwrap()
-			.write()
-			.get_mut(&self.env_path)
+			.read()
+			.get(&self.env_path)
 			.unwrap()
 			.resize_checking
-			.store(resize_checking, Ordering::Relaxed);
+			.store(false, Ordering::Release);
 	}
 
 	/// Set flag if environment is waiting for resize.
@@ -424,23 +432,22 @@ impl Store {
 		ENV_MAP
 			.get()
 			.unwrap()
-			.write()
-			.get_mut(&self.env_path)
+			.read()
+			.get(&self.env_path)
 			.unwrap()
 			.resizing
-			.store(resizing, Ordering::Relaxed);
+			.store(resizing, Ordering::Release);
 	}
 
 	/// Resize database environment if needed.
 	fn maybe_resize(&self) {
-		if self.resize_checking() {
+		if !self.start_resize_checking() {
 			return;
 		}
-		self.set_resize_checking(true);
 
 		let (resize, new_size) = needs_resize(&self.env, self.alloc_chunk_size);
 		if !resize {
-			self.set_resize_checking(false);
+			self.finish_resize_checking();
 			return;
 		}
 
@@ -479,8 +486,8 @@ impl Store {
 
 				let mut w_env_map = ENV_MAP.get().unwrap().write();
 				let env_state = w_env_map.get_mut(&env_path).unwrap();
-				env_state.resizing.store(false, Ordering::Relaxed);
-				env_state.resize_checking.store(false, Ordering::Relaxed);
+				env_state.resizing.store(false, Ordering::Release);
+				env_state.resize_checking.store(false, Ordering::Release);
 			});
 		} else {
 			debug!("Start immediate resizing DB {}", env_path);
@@ -491,7 +498,7 @@ impl Store {
 				}
 			}
 			self.set_resizing(false);
-			self.set_resize_checking(false);
+			self.finish_resize_checking();
 		}
 	}
 
@@ -632,17 +639,25 @@ impl Store {
 		Batch::new(self)
 	}
 
-	/// Creates tx counter incrementing if resize is not pending.
+	/// Increment the open-tx counter, blocking during resize unless this thread already holds a tx.
 	fn enter_tx(&self) -> TxCounter {
 		loop {
 			let mut map = ENV_MAP.get().unwrap().write();
 			let state = map.get_mut(&self.env_path).unwrap();
-			if !state.resizing.load(Ordering::Acquire)
-				|| state.open_txs_count.load(Ordering::Relaxed) > 0
-			{
+			let nested_tx = THREAD_TX_COUNTS.with(|txs| {
+				txs.borrow()
+					.get(&self.env_path)
+					.is_some_and(|count| *count > 0)
+			});
+			if !state.resizing.load(Ordering::Acquire) || nested_tx {
 				state.open_txs_count.fetch_add(1, Ordering::Relaxed);
+				THREAD_TX_COUNTS.with(|txs| {
+					let mut txs = txs.borrow_mut();
+					*txs.entry(self.env_path.clone()).or_insert(0) += 1;
+				});
 				return TxCounter {
 					env_path: self.env_path.clone(),
+					_not_send: PhantomData,
 				};
 			}
 			drop(map);
@@ -654,10 +669,20 @@ impl Store {
 /// Environment transactions counter, allows to decrement value on drop.
 pub struct TxCounter {
 	env_path: String,
+	_not_send: PhantomData<Rc<()>>,
 }
 
 impl Drop for TxCounter {
 	fn drop(&mut self) {
+		THREAD_TX_COUNTS.with(|txs| {
+			let mut txs = txs.borrow_mut();
+			if let Some(count) = txs.get_mut(&self.env_path) {
+				*count -= 1;
+				if *count == 0 {
+					txs.remove(&self.env_path);
+				}
+			}
+		});
 		let mut w_env_map = ENV_MAP.get().unwrap().write();
 		let env_state = w_env_map.get_mut(&self.env_path).unwrap();
 		let open_txs_count = env_state.open_txs_count.load(Ordering::Relaxed);
