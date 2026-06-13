@@ -329,10 +329,10 @@ fn resize_batch_waits_for_open_read_iterator() -> Result<(), store::Error> {
 		None,
 		None,
 	)?);
-	let value = vec![1u8; 128 * 1024];
+	let value = vec![1u8; 32 * 1024];
 	let mut saw_waiting_resize = false;
 
-	for i in 0..40u32 {
+	for i in 0..80u32 {
 		let mut batch = store.batch()?;
 		batch.put(Some(prefix), &i.to_be_bytes(), &value)?;
 		batch.commit()?;
