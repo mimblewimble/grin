@@ -895,18 +895,9 @@ impl Desegmenter {
 		}
 	}
 
-	/// Adds a output segment
-	pub fn add_output_segment(
-		&mut self,
-		segment: Segment<OutputIdentifier>,
-		_bitmap_root: Option<Hash>,
-	) -> Result<(), Error> {
+	/// Add an output segment.
+	pub fn add_output_segment(&mut self, segment: Segment<OutputIdentifier>) -> Result<(), Error> {
 		trace!("pibd_desegmenter: add output segment");
-		// TODO: This, something very wrong, probably need to reset entire body sync
-		// check bitmap root matches what we already have
-		/*if bitmap_root != Some(self.bitmap_accumulator.root()) {
-
-		}*/
 		segment.validate_with(
 			self.archive_header.output_mmr_size, // Last MMR pos at the height being validated
 			self.bitmap_cache.as_ref(),

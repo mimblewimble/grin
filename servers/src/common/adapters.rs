@@ -174,7 +174,7 @@ fn process_queued_pibd_segment(
 					block_hash,
 					bitmap_root,
 				);
-				d.add_output_segment(segment, Some(bitmap_root))
+				d.add_output_segment(segment)
 			}
 			PibdSegment::RangeProof {
 				block_hash,

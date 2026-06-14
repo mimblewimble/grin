@@ -275,6 +275,7 @@ impl StateSync {
 			for (seg_id, peer_addr) in stale_segments.iter() {
 				if let Some(peer_addr) = peer_addr {
 					let peer_addr = PeerAddr(*peer_addr);
+					// TODO: Consider retry-only exclusion first, and block after repeated PIBD timeouts.
 					let _ = self.peers.block_peer(peer_addr, "PIBD segment timeout");
 					let is_outbound = self.peers.iter().outbound().by_addr(peer_addr).is_some();
 					if is_outbound {

@@ -16,7 +16,7 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain::{self, pibd_params, HeaderSyncMode, SyncState, SyncStatus};
+use crate::chain::{self, pibd_params, pihd_params, HeaderSyncMode, SyncState, SyncStatus};
 use crate::common::types::Error;
 use crate::core::core::hash::Hash;
 use crate::core::core::SegmentIdentifier;
@@ -24,15 +24,6 @@ use crate::core::pow::Difficulty;
 use crate::p2p::{
 	self, types::PeerAddr, types::ReasonForBan, Capabilities, Peer, PIHD_HEADER_SEGMENT_HEIGHT,
 };
-
-const PIHD_MAX_IN_FLIGHT_SEGMENTS: usize = 8;
-const PIHD_MAX_REQUESTS_PER_TICK: usize = 8;
-const PIHD_MAX_IN_FLIGHT_SEGMENTS_PER_PEER: usize = 2;
-const HEADER_REQUEST_TIMEOUT_SECS: i64 = 10;
-const PIHD_MAX_TIMED_OUT_SEGMENTS: usize = 3;
-const PIHD_DISABLE_SECS: i64 = 120;
-const PIHD_PEER_TIMEOUT_COOLDOWN_SECS: i64 = 30;
-const PIHD_STALL_FALLBACK_SECS: i64 = 120;
 
 struct PihdHeaderRequest {
 	identifier: SegmentIdentifier,
@@ -201,7 +192,8 @@ impl HeaderSync {
 				.min(req.target_height);
 			let connected = peers.get_connected_peer(req.peer_addr).is_some();
 			let complete = header_head.height >= completed_height;
-			let timeout = now > req.requested_at + Duration::seconds(HEADER_REQUEST_TIMEOUT_SECS);
+			let timeout = now
+				> req.requested_at + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			if !complete && connected && timeout {
 				failed += 1;
 				failed_peers.push(req.peer_addr);
@@ -221,7 +213,8 @@ impl HeaderSync {
 			let completed_height = completed_height.min(req.target_height);
 			let connected = peers.get_connected_peer(PeerAddr(req.peer_addr)).is_some();
 			let complete = header_head.height >= completed_height;
-			let timeout = now > req.request_time + Duration::seconds(HEADER_REQUEST_TIMEOUT_SECS);
+			let timeout = now
+				> req.request_time + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			!complete && connected && !timeout
 		});
 		if failed > 0 {
@@ -234,12 +227,16 @@ impl HeaderSync {
 			}
 			let pihd_stalled = self
 				.pihd_stalling_ts
-				.map(|stalling_ts| now > stalling_ts + Duration::seconds(PIHD_STALL_FALLBACK_SECS))
+				.map(|stalling_ts| {
+					now > stalling_ts + Duration::seconds(pihd_params::STALL_FALLBACK_SECS)
+				})
 				.unwrap_or(false);
-			if self.pihd_failure_count >= PIHD_MAX_TIMED_OUT_SEGMENTS && pihd_stalled {
+			if self.pihd_failure_count >= pihd_params::MAX_TIMED_OUT_SEGMENTS && pihd_stalled {
 				info!(
 					"sync: disabling PIHD for {} seconds after {} failed header segment request(s) and {} seconds without header progress",
-					PIHD_DISABLE_SECS, self.pihd_failure_count, PIHD_STALL_FALLBACK_SECS
+					pihd_params::DISABLE_SECS,
+					self.pihd_failure_count,
+					pihd_params::STALL_FALLBACK_SECS
 				);
 				if self.pihd_active {
 					info!(
@@ -253,14 +250,15 @@ impl HeaderSync {
 				self.sync_state.retain_pihd_header_segments(|_| false);
 				self.pihd_failure_count = 0;
 				self.pihd_stalling_ts = None;
-				self.pihd_disabled_until = Some(now + Duration::seconds(PIHD_DISABLE_SECS));
+				self.pihd_disabled_until = Some(now + Duration::seconds(pihd_params::DISABLE_SECS));
 			}
 		}
 
 		if let Some(req) = &self.pending_legacy {
 			let connected = self.peers.get_connected_peer(req.peer_addr).is_some();
 			let complete = header_head.height > req.height;
-			let timed_out = now > req.requested_at + Duration::seconds(HEADER_REQUEST_TIMEOUT_SECS);
+			let timed_out = now
+				> req.requested_at + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			if complete || timed_out || !connected {
 				self.pending_legacy = None;
 			}
@@ -272,7 +270,7 @@ impl HeaderSync {
 			.retain(|(addr, until)| *addr != peer_addr && *until > now);
 		self.pihd_peer_timeout_until.push((
 			peer_addr,
-			now + Duration::seconds(PIHD_PEER_TIMEOUT_COOLDOWN_SECS),
+			now + Duration::seconds(pihd_params::PEER_TIMEOUT_COOLDOWN_SECS),
 		));
 	}
 
@@ -431,13 +429,13 @@ impl HeaderSync {
 		} else {
 			preferred_peers
 		};
-		if self.pending_pihd.len() >= PIHD_MAX_IN_FLIGHT_SEGMENTS {
+		if self.pending_pihd.len() >= pihd_params::MAX_IN_FLIGHT_SEGMENTS {
 			return;
 		}
 		let mut sent = 0;
 		let mut segment_idx = sync_head.height / (p2p::MAX_BLOCK_HEADERS as u64);
-		while self.pending_pihd.len() < PIHD_MAX_IN_FLIGHT_SEGMENTS
-			&& sent < PIHD_MAX_REQUESTS_PER_TICK
+		while self.pending_pihd.len() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
+			&& sent < pihd_params::MAX_REQUESTS_PER_TICK
 		{
 			let identifier = SegmentIdentifier {
 				height: PIHD_HEADER_SEGMENT_HEIGHT,
@@ -463,7 +461,7 @@ impl HeaderSync {
 							.pending_pihd
 							.iter()
 							.filter(|req| req.peer_addr == peer.info.addr)
-							.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS_PER_PEER
+							.count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER
 				})
 				.or_else(|| {
 					peers.iter().find(|peer| {
@@ -472,7 +470,7 @@ impl HeaderSync {
 								.pending_pihd
 								.iter()
 								.filter(|req| req.peer_addr == peer.info.addr)
-								.count() < PIHD_MAX_IN_FLIGHT_SEGMENTS
+								.count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
 					})
 				}) {
 				Some(peer) => peer.clone(),
