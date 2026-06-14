@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -272,26 +273,27 @@ impl StateSync {
 			.sync_state
 			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
 		if !stale_segments.is_empty() {
-			for (seg_id, peer_addr) in stale_segments.iter() {
-				if let Some(peer_addr) = peer_addr {
-					let peer_addr = PeerAddr(*peer_addr);
-					// TODO: Consider retry-only exclusion first, and block after repeated PIBD timeouts.
-					let _ = self.peers.block_peer(peer_addr, "PIBD segment timeout");
-					let is_outbound = self.peers.iter().outbound().by_addr(peer_addr).is_some();
-					if is_outbound {
+			let stale_peers: HashSet<_> = stale_segments
+				.iter()
+				.filter_map(|(_, peer_addr)| peer_addr.map(PeerAddr))
+				.collect();
+			for peer_addr in stale_peers {
+				// TODO: Consider retry-only exclusion first, and block after repeated PIBD timeouts.
+				let _ = self.peers.block_peer(peer_addr, "PIBD segment timeout");
+				let is_outbound = self.peers.iter().outbound().by_addr(peer_addr).is_some();
+				if is_outbound {
+					debug!(
+						"state_sync: disconnecting outbound peer {} after PIBD timeout",
+						peer_addr
+					);
+					if let Err(e) = self
+						.peers
+						.disconnect_peer(peer_addr, "PIBD segment timeout")
+					{
 						debug!(
-							"state_sync: disconnecting outbound peer {} after PIBD timeout for {:?}",
-							peer_addr, seg_id
+							"state_sync: failed to disconnect timed-out peer {}: {:?}",
+							peer_addr, e
 						);
-						if let Err(e) = self
-							.peers
-							.disconnect_peer(peer_addr, "PIBD segment timeout")
-						{
-							debug!(
-								"state_sync: failed to disconnect timed-out peer {}: {:?}",
-								peer_addr, e
-							);
-						}
 					}
 				}
 			}
