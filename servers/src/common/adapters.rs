@@ -831,7 +831,7 @@ where
 		peer_info: &PeerInfo,
 	) -> Result<HeaderSegmentAcceptance, chain::Error> {
 		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
-			return Ok(HeaderSegmentAcceptance::Ban);
+			return Ok(self.ban_bad_header_segment_peer(peer_info, "invalid PIHD segment height"));
 		}
 		if !self
 			.sync_state
@@ -849,7 +849,11 @@ where
 			.and_then(|height| height.checked_add(1))
 		{
 			Some(height) => height,
-			None => return Ok(HeaderSegmentAcceptance::Ban),
+			None => {
+				return Ok(
+					self.ban_bad_header_segment_peer(peer_info, "invalid PIHD segment index")
+				);
+			}
 		};
 		let target_height = self
 			.sync_state
@@ -861,13 +865,13 @@ where
 					.remove_pihd_header_segment(id, peer_info.addr.0);
 				return Ok(HeaderSegmentAcceptance::Accepted);
 			}
-			return Ok(HeaderSegmentAcceptance::Ban);
+			return Ok(self.ban_bad_header_segment_peer(peer_info, "empty PIHD segment"));
 		}
 		if headers[0].height != expected_first_height {
-			return Ok(HeaderSegmentAcceptance::Ban);
+			return Ok(self.ban_bad_header_segment_peer(peer_info, "unexpected PIHD segment start"));
 		}
 		if !headers.windows(2).all(|w| w[1].height == w[0].height + 1) {
-			return Ok(HeaderSegmentAcceptance::Ban);
+			return Ok(self.ban_bad_header_segment_peer(peer_info, "non-contiguous PIHD segment"));
 		}
 		if headers
 			.last()
@@ -889,7 +893,7 @@ where
 		}
 		match res {
 			Ok(true) => Ok(HeaderSegmentAcceptance::Accepted),
-			Ok(false) => Ok(HeaderSegmentAcceptance::Ban),
+			Ok(false) => Ok(self.ban_bad_header_segment_peer(peer_info, "invalid PIHD headers")),
 			Err(e) => Err(e),
 		}
 	}
@@ -934,6 +938,23 @@ where
 			.borrow()
 			.upgrade()
 			.expect("Failed to upgrade weak ref to our peers.")
+	}
+
+	fn ban_bad_header_segment_peer(
+		&self,
+		peer_info: &PeerInfo,
+		reason: &str,
+	) -> HeaderSegmentAcceptance {
+		if let Err(e) = self
+			.peers()
+			.ban_peer(peer_info.addr, p2p::types::ReasonForBan::BadBlockHeader)
+		{
+			error!(
+				"failed to ban peer {} for bad PIHD header segment ({}): {:?}",
+				peer_info.addr, reason, e
+			);
+		}
+		HeaderSegmentAcceptance::Ban
 	}
 
 	fn chain(&self) -> Arc<chain::Chain> {
