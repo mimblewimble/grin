@@ -52,6 +52,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 				genesis.clone(),
 				pow::verify_size,
 				false,
+				None,
 			)
 			.unwrap(),
 		);

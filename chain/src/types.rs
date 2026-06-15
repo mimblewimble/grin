@@ -316,6 +316,16 @@ impl SyncState {
 		removed_segments
 	}
 
+	/// Drop all tracked PIBD requests, returning how many entries were removed.
+	pub fn clear_pibd_requests(&self) -> usize {
+		let mut requests = self.requested_pibd_segments.write();
+		let cleared = requests.len();
+		if cleared > 0 {
+			requests.clear();
+		}
+		cleared
+	}
+
 	/// Check whether segment is in request list
 	pub fn contains_pibd_segment(&self, id: &SegmentTypeIdentifier) -> bool {
 		self.requested_pibd_segments
