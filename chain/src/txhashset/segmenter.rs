@@ -113,10 +113,10 @@ impl Segmenter {
 		id: SegmentIdentifier,
 	) -> Result<(Segment<OutputIdentifier>, Hash), Error> {
 		let now = Instant::now();
-		let bitmap = self.bitmap_snapshot.as_bitmap().ok();
+		let bitmap = self.bitmap_snapshot.as_bitmap()?;
 		let txhashset = self.txhashset.read();
 		let output_pmmr = txhashset.output_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &output_pmmr, bitmap.as_ref())?;
+		let segment = Segment::from_pmmr(id, &output_pmmr, Some(&bitmap))?;
 		let bitmap_root = self.bitmap_root()?;
 		debug!(
 			"output_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
@@ -133,10 +133,10 @@ impl Segmenter {
 	/// Create a rangeproof segment.
 	pub fn rangeproof_segment(&self, id: SegmentIdentifier) -> Result<Segment<RangeProof>, Error> {
 		let now = Instant::now();
-		let bitmap = self.bitmap_snapshot.as_bitmap().ok();
+		let bitmap = self.bitmap_snapshot.as_bitmap()?;
 		let txhashset = self.txhashset.read();
 		let pmmr = txhashset.rangeproof_pmmr_at(&self.header);
-		let segment = Segment::from_pmmr(id, &pmmr, bitmap.as_ref())?;
+		let segment = Segment::from_pmmr(id, &pmmr, Some(&bitmap))?;
 		debug!(
 			"rangeproof_segment: id: ({}, {}), leaves: {}, hashes: {}, proof hashes: {}, took {}ms",
 			segment.id().height,
