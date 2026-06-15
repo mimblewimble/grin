@@ -831,7 +831,7 @@ where
 		peer_info: &PeerInfo,
 	) -> Result<HeaderSegmentAcceptance, chain::Error> {
 		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
-			return Ok(self.ban_bad_header_segment_peer(peer_info, "invalid PIHD segment height"));
+			return Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment height"));
 		}
 		if !self
 			.sync_state
@@ -851,7 +851,7 @@ where
 			Some(height) => height,
 			None => {
 				return Ok(
-					self.ban_bad_header_segment_peer(peer_info, "invalid PIHD segment index")
+					self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment index")
 				);
 			}
 		};
@@ -865,13 +865,15 @@ where
 					.remove_pihd_header_segment(id, peer_info.addr.0);
 				return Ok(HeaderSegmentAcceptance::Accepted);
 			}
-			return Ok(self.ban_bad_header_segment_peer(peer_info, "empty PIHD segment"));
+			return Ok(self.block_bad_header_segment_peer(peer_info, "empty PIHD segment"));
 		}
 		if headers[0].height != expected_first_height {
-			return Ok(self.ban_bad_header_segment_peer(peer_info, "unexpected PIHD segment start"));
+			return Ok(
+				self.block_bad_header_segment_peer(peer_info, "unexpected PIHD segment start")
+			);
 		}
 		if !headers.windows(2).all(|w| w[1].height == w[0].height + 1) {
-			return Ok(self.ban_bad_header_segment_peer(peer_info, "non-contiguous PIHD segment"));
+			return Ok(self.block_bad_header_segment_peer(peer_info, "non-contiguous PIHD segment"));
 		}
 		if headers
 			.last()
@@ -893,7 +895,7 @@ where
 		}
 		match res {
 			Ok(true) => Ok(HeaderSegmentAcceptance::Accepted),
-			Ok(false) => Ok(self.ban_bad_header_segment_peer(peer_info, "invalid PIHD headers")),
+			Ok(false) => Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD headers")),
 			Err(e) => Err(e),
 		}
 	}
@@ -940,19 +942,20 @@ where
 			.expect("Failed to upgrade weak ref to our peers.")
 	}
 
-	fn ban_bad_header_segment_peer(
+	fn block_bad_header_segment_peer(
 		&self,
 		peer_info: &PeerInfo,
 		reason: &str,
 	) -> HeaderSegmentAcceptance {
-		if let Err(e) = self
-			.peers()
-			.ban_peer(peer_info.addr, p2p::types::ReasonForBan::BadBlockHeader)
-		{
+		let peers = self.peers();
+		if let Err(e) = peers.block_peer(peer_info.addr, reason) {
 			error!(
-				"failed to ban peer {} for bad PIHD header segment ({}): {:?}",
+				"failed to block peer {} for bad PIHD header segment ({}): {:?}",
 				peer_info.addr, reason, e
 			);
+		}
+		if peers.iter().outbound().by_addr(peer_info.addr).is_some() {
+			let _ = peers.disconnect_peer(peer_info.addr, reason);
 		}
 		HeaderSegmentAcceptance::Ban
 	}
