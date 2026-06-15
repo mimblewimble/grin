@@ -131,15 +131,12 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 		let resolved_dns_entries = resolve_dns_to_addrs(&vec![format!("{}:{}", s, port)]);
 		if resolved_dns_entries.is_empty() {
 			info!("FAIL - No dns entries found for {}", s);
-			eprintln!("  FAIL dns: no records found");
 			result.push(seed_result);
 			continue;
 		}
 		seed_result.dns_resolutions_found = true;
-		eprintln!("  DNS records: {}", resolved_dns_entries.len());
 		// Check backwards, last contains the latest (at least on my machine!)
 		for r in resolved_dns_entries.iter().rev() {
-			eprintln!("  Trying {}", r);
 			let res = check_seed_health(*r, is_testnet, &peers);
 			if let Ok(p) = res {
 				let user_agent = p.info.user_agent.clone();
@@ -147,10 +144,6 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 				info!(
 					"SUCCESS - Performed Handshake with seed for {} at {}. {} - {:?}",
 					s, r, user_agent, p.info.capabilities
-				);
-				eprintln!(
-					"    OK handshake: {} - {:?}",
-					user_agent, p.info.capabilities
 				);
 				p.stop();
 				p.wait();
@@ -166,7 +159,6 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 						error: None,
 					});
 			} else if let Err(e) = res {
-				eprintln!("    FAIL handshake: {}", e);
 				seed_result
 					.unsuccessful_attempts
 					.push(SeedCheckConnectAttempt {
@@ -184,7 +176,6 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 				"FAIL - Unable to handshake at any known DNS resolutions for {}",
 				s
 			);
-			eprintln!("  FAIL seed: no successful handshakes");
 		}
 
 		result.push(seed_result);
@@ -215,14 +206,12 @@ fn check_seed_health(
 		true => genesis::genesis_test().hash(),
 		false => genesis::genesis_main().hash(),
 	};
-	eprintln!("    Using genesis hash {}", genesis_hash);
 
 	let handshake = p2p::handshake::Handshake::new(genesis_hash, config.clone());
 
 	match TcpStream::connect_timeout(&addr.0, Duration::from_secs(5)) {
 		Ok(stream) => {
 			let self_addr = p2p::PeerAddr::from_ip(config.host);
-			eprintln!("    Advertising self addr {}", self_addr);
 			let total_diff = Difficulty::from_num(1);
 
 			let peer = p2p::Peer::connect(
