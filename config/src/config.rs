@@ -22,6 +22,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 
+use p2p::types::{TESTNET_PEER_PORT, USERNET_PEER_PORT};
+
 use crate::comments::insert_comments;
 use crate::core::global;
 use crate::p2p;
@@ -42,10 +44,7 @@ pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
-	let mut grin_path = match dirs::home_dir() {
-		Some(p) => p,
-		None => PathBuf::new(),
-	};
+	let mut grin_path = dirs::home_dir().unwrap_or_else(|| PathBuf::new());
 	grin_path.push(GRIN_HOME);
 	grin_path.push(chain_type.shortname());
 	// Create if the default path doesn't exist
@@ -113,7 +112,7 @@ fn check_api_secret_files(
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
 	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
 	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
-	// Use config file if current directory if it exists, .grin home otherwise
+	// Use config file in current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
 	} else {
@@ -168,7 +167,7 @@ impl GlobalConfig {
 			global::ChainTypes::Mainnet => {}
 			global::ChainTypes::Testnet => {
 				defaults.api_http_addr = "127.0.0.1:13413".to_owned();
-				defaults.p2p_config.port = 13414;
+				defaults.p2p_config.port = TESTNET_PEER_PORT;
 				defaults
 					.stratum_mining_config
 					.as_mut()
@@ -182,7 +181,7 @@ impl GlobalConfig {
 			}
 			global::ChainTypes::UserTesting => {
 				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
-				defaults.p2p_config.port = 23414;
+				defaults.p2p_config.port = USERNET_PEER_PORT;
 				defaults.p2p_config.seeding_type = p2p::Seeding::None;
 				defaults
 					.stratum_mining_config
@@ -234,14 +233,12 @@ impl GlobalConfig {
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
-				return Ok(self);
+				Ok(self)
 			}
-			Err(e) => {
-				return Err(ConfigError::ParseError(
-					self.config_file_path.unwrap().to_str().unwrap().to_string(),
-					format!("{}", e),
-				));
-			}
+			Err(e) => Err(ConfigError::ParseError(
+				self.config_file_path.unwrap().to_str().unwrap().to_string(),
+				format!("{}", e),
+			)),
 		}
 	}
 
@@ -275,8 +272,7 @@ impl GlobalConfig {
 
 	/// Enable mining
 	pub fn stratum_enabled(&mut self) -> bool {
-		return self
-			.members
+		self.members
 			.as_mut()
 			.unwrap()
 			.server
@@ -284,7 +280,7 @@ impl GlobalConfig {
 			.as_mut()
 			.unwrap()
 			.enable_stratum_server
-			.unwrap();
+			.unwrap()
 	}
 
 	/// Serialize config
@@ -292,10 +288,8 @@ impl GlobalConfig {
 		let encoded: Result<String, toml::ser::Error> =
 			toml::to_string(self.members.as_mut().unwrap());
 		match encoded {
-			Ok(enc) => return Ok(enc),
-			Err(e) => {
-				return Err(ConfigError::SerializationError(format!("{}", e)));
-			}
+			Ok(enc) => Ok(enc),
+			Err(e) => Err(ConfigError::SerializationError(format!("{}", e))),
 		}
 	}
 

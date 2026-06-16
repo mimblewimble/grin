@@ -37,6 +37,13 @@ use crate::msg::PeerAddrs;
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
 
+/// Default main network peer port.
+pub const MAINNET_PEER_PORT: u16 = 3414;
+/// Default test network peer port.
+pub const TESTNET_PEER_PORT: u16 = 13414;
+/// Default user network peer port.
+pub const USERNET_PEER_PORT: u16 = 23414;
+
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
 
@@ -284,17 +291,19 @@ fn is_private_ip(ip: &IpAddr) -> bool {
 
 impl Eq for PeerAddr {}
 
-impl std::fmt::Display for PeerAddr {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for PeerAddr {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
 }
-
 impl PeerAddr {
-	/// Convenient way of constructing a new peer_addr from an ip_addr
-	/// defaults to port 3414 on mainnet and 13414 on testnet.
+	/// Convenient way of constructing a new peer address from an ip address.
 	pub fn from_ip(addr: IpAddr) -> PeerAddr {
-		let port = if global::is_testnet() { 13414 } else { 3414 };
+		let port = if global::is_testnet() {
+			TESTNET_PEER_PORT
+		} else {
+			MAINNET_PEER_PORT
+		};
 		PeerAddr(SocketAddr::new(addr, port))
 	}
 
@@ -348,7 +357,7 @@ impl Default for P2PConfig {
 		let ipaddr = "::".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
-			port: 3414,
+			port: MAINNET_PEER_PORT,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
