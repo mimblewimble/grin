@@ -1006,7 +1006,7 @@ pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, us
 			alloc_chunk_size
 		} else {
 			let mut tot = env_info.map_size - (env_info.map_size % alloc_chunk_size);
-			while size_used as f32 / tot as f32 > (RESIZE_MIN_TARGET_PERCENT / 100) as f32 {
+			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT as f32 / 100.0 {
 				tot += alloc_chunk_size;
 			}
 			tot
