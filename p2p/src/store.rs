@@ -138,7 +138,7 @@ impl PeerStore {
 		batch.commit()
 	}
 
-	pub fn save_peers(&self, p: Vec<PeerData>) -> Result<(), Error> {
+	pub fn save_peers(&self, p: Vec<&PeerData>) -> Result<(), Error> {
 		let mut batch = self.db.batch()?;
 		for pd in p {
 			debug!("save_peers: {:?} marked {:?}", pd.addr, pd.flags);
@@ -231,6 +231,13 @@ impl<'a> PeersIterBatch<'a> {
 			.map(|p| p.ok().unwrap())
 			.collect();
 		Ok(peers)
+	}
+
+	/// Delete a peer by provided address.
+	pub fn delete_peer(&mut self, peer_addr: PeerAddr) -> Result<(), Error> {
+		let key = peer_addr.as_key();
+		self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
+		Ok(())
 	}
 
 	/// Deletes peers from the storage that satisfy some condition `predicate`

@@ -239,7 +239,7 @@ impl PartialEq for PeerAddr {
 
 /// Check if IP address is private.
 /// Implementation taken from `core::net:ip_addr` while `is_global` is unstable.
-fn is_private_ip(ip: &IpAddr) -> bool {
+pub fn is_private_ip(ip: &IpAddr) -> bool {
 	match ip {
 		IpAddr::V4(ip) => {
 			ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_documentation()
