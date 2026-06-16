@@ -252,7 +252,7 @@ impl Controller {
 	/// Server UI after initialization.
 	pub fn server(&mut self, server: &Server) {
 		if let Ok(stats) = server.get_server_stats() {
-			self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+			let _ = self.ui.ui_tx.send(UIMessage::UpdateStatus(stats));
 		}
 	}
 
@@ -300,7 +300,7 @@ impl Controller {
 				next_stat_update = Utc::now().timestamp() + stat_update_interval;
 				if let Some(server) = &self.server {
 					if let Ok(stats) = server.get_server_stats() {
-						self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
+						let _ = self.ui.ui_tx.send(UIMessage::UpdateStatus(stats));
 					}
 				}
 			}
