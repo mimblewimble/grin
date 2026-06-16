@@ -14,7 +14,7 @@ easy-jsonrpc-mw = "0.5.4"
 hyper = { version = "0.14", features = ["full"] }
 lazy_static = "1"
 regex = "1"
-ring = "0.16"
+ring = "0.17"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
