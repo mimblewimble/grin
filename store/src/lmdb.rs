@@ -38,7 +38,7 @@ pub const ALLOC_CHUNK_SIZE_DEFAULT_TEST: usize = 1_048_576; //1 MB
 const RESIZE_PERCENT: f32 = 0.9;
 /// Want to ensure that each resize gives us at least this %
 /// of total space free
-const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
+const RESIZE_MIN_TARGET_PERCENT: u128 = 65;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, thiserror::Error)]
@@ -337,9 +337,8 @@ impl Store {
 		let to_map_size = self.env.info().map_size;
 
 		// Leave headroom so the migrated env is not immediately above the resize threshold.
-		let required = ((to_used.saturating_add(from_used) as u128 * 100
-			+ (RESIZE_MIN_TARGET_PERCENT * 100.0 - 1.0) as u128)
-			/ (RESIZE_MIN_TARGET_PERCENT * 100.0) as u128)
+		let used = to_used.saturating_add(from_used) as u128;
+		let required = ((used * 100 + RESIZE_MIN_TARGET_PERCENT - 1) / RESIZE_MIN_TARGET_PERCENT)
 			.min(usize::MAX as u128) as usize;
 		let required = round_size_to_chunk(required, self.alloc_chunk_size);
 
@@ -1007,7 +1006,7 @@ pub fn needs_resize(env: &Env<WithoutTls>, alloc_chunk_size: usize) -> (bool, us
 			alloc_chunk_size
 		} else {
 			let mut tot = env_info.map_size - (env_info.map_size % alloc_chunk_size);
-			while size_used as f32 / tot as f32 > RESIZE_MIN_TARGET_PERCENT {
+			while size_used as f32 / tot as f32 > (RESIZE_MIN_TARGET_PERCENT / 100) as f32 {
 				tot += alloc_chunk_size;
 			}
 			tot
