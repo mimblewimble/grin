@@ -240,11 +240,7 @@ impl PartialEq for PeerAddr {
 /// Check if IP address is private.
 /// Implementation taken from `core::net:ip_addr` while `is_global` is unstable.
 fn is_private_ip(ip: &IpAddr) -> bool {
-	let shared = match ip {
-		IpAddr::V4(ip) => ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000),
-		IpAddr::V6(ip) => ip.is_loopback(),
-	};
-	let private = match ip {
+	match ip {
 		IpAddr::V4(ip) => {
 			ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_documentation()
 			// addresses reserved for future protocols (`192.0.0.0/24`)
@@ -252,6 +248,9 @@ fn is_private_ip(ip: &IpAddr) -> bool {
 			|| (
 			ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0
 				&& ip.octets()[3] != 9 && ip.octets()[3] != 10
+			// this address is part of the Shared Address Space defined in
+			// [IETF RFC 6598] (`100.64.0.0/10`).
+			|| ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000)
 		)
 		}
 		IpAddr::V6(ip) => {
@@ -285,8 +284,7 @@ fn is_private_ip(ip: &IpAddr) -> bool {
 			|| ip.is_unique_local()
 			|| ip.is_unicast_link_local()
 		}
-	};
-	shared || private
+	}
 }
 
 impl Eq for PeerAddr {}
