@@ -51,7 +51,7 @@ fn gen_tx_corpus() -> Result<(), Error> {
 			inputs.clone(),
 			outputs.clone(),
 			KernelFeatures::HeightLocked {
-				fee: 100u64,
+				fee: 100.into(),
 				lock_height: 42u64,
 			},
 		),
@@ -63,7 +63,7 @@ fn gen_tx_corpus() -> Result<(), Error> {
 			inputs.clone(),
 			outputs.clone(),
 			KernelFeatures::NoRecentDuplicate {
-				fee: 100u64,
+				fee: 100.into(),
 				relative_height: NRDRelativeHeight::new(42u64).unwrap(),
 			},
 		),
@@ -107,8 +107,12 @@ fuzz_target!(|data: &[u8]| {
 
 	for &i in [true, false].iter() {
 		// deserialize tx from fuzzer data
-		let tx: Result<Transaction, ser::Error> =
-			ser::deserialize(&mut data.clone(), ser::ProtocolVersion(2));
+		let mut reader = data;
+		let tx: Result<Transaction, ser::Error> = ser::deserialize(
+			&mut reader,
+			ser::ProtocolVersion(2),
+			ser::DeserializationMode::default(),
+		);
 		// we only care about inputs that pass
 		if tx.is_ok() {
 			// attempt to add fuzzed tx to the transaction pool
