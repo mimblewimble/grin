@@ -207,10 +207,10 @@ impl<'de> Deserialize<'de> for PeerAddrs {
 }
 
 impl std::hash::Hash for PeerAddr {
-	/// If loopback address then we care about ip and port.
+	/// If private address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		if self.0.ip().is_loopback() {
+		if is_private_ip(&self.0.ip()) {
 			self.0.hash(state);
 		} else {
 			self.0.ip().hash(state);
@@ -219,10 +219,67 @@ impl std::hash::Hash for PeerAddr {
 }
 
 impl PartialEq for PeerAddr {
-	/// We care about ip and port for IP address.
+	/// If private address then we care about ip and port.
+	/// If regular address then we only care about the ip and ignore the port.
 	fn eq(&self, other: &PeerAddr) -> bool {
-		self.0 == other.0
+		if is_private_ip(&self.0.ip()) {
+			self.0 == other.0
+		} else {
+			self.0.ip() == other.0.ip()
+		}
 	}
+}
+
+/// Check if IP address is private.
+/// Implementation taken from `core::net:ip_addr` while `is_global` is unstable.
+fn is_private_ip(ip: &IpAddr) -> bool {
+	let shared = match ip {
+		IpAddr::V4(ip) => ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000),
+		IpAddr::V6(ip) => ip.is_loopback(),
+	};
+	let private = match ip {
+		IpAddr::V4(ip) => {
+			ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_documentation()
+			// addresses reserved for future protocols (`192.0.0.0/24`)
+			// .9 and .10 are documented as globally reachable so they're excluded
+			|| (
+			ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0
+				&& ip.octets()[3] != 9 && ip.octets()[3] != 10
+		)
+		}
+		IpAddr::V6(ip) => {
+			ip.is_loopback() || ip.is_unspecified()
+			// IPv4-mapped Address (`::ffff:0:0/96`)
+			|| matches!(ip.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
+			// IPv4-IPv6 Translat. (`64:ff9b:1::/48`)
+			|| matches!(ip.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
+			// Discard-Only Address Block (`100::/64`)
+			|| matches!(ip.segments(), [0x100, 0, 0, 0, _, _, _, _])
+			// IETF Protocol Assignments (`2001::/23`)
+			|| (matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b < 0x200)
+			&& !(
+			// Port Control Protocol Anycast (`2001:1::1`)
+			u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
+				// Traversal Using Relays around NAT Anycast (`2001:1::2`)
+				|| u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
+				// AMT (`2001:3::/32`)
+				|| matches!(ip.segments(), [0x2001, 3, _, _, _, _, _, _])
+				// AS112-v6 (`2001:4:112::/48`)
+				|| matches!(ip.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
+				// ORCHIDv2 (`2001:20::/28`)
+				// Drone Remote ID Protocol Entity Tags (DETs) Prefix (`2001:30::/28`)`
+				|| matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x3F)
+		))
+			// 6to4 (`2002::/16`) – it's not explicitly documented as globally reachable,
+			// IANA says N/A.
+			|| matches!(ip.segments(), [0x2002, _, _, _, _, _, _, _])
+			// Segment Routing (SRv6) SIDs (`5f00::/16`)
+			|| matches!(ip.segments(), [0x5f00, ..])
+			|| ip.is_unique_local()
+			|| ip.is_unicast_link_local()
+		}
+	};
+	shared || private
 }
 
 impl Eq for PeerAddr {}
@@ -241,10 +298,10 @@ impl PeerAddr {
 		PeerAddr(SocketAddr::new(addr, port))
 	}
 
-	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
-	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
+	/// If the ip is private then our key is "ip:port".
+	/// Otherwise, we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
-		if self.0.ip().is_loopback() {
+		if is_private_ip(&self.0.ip()) {
 			format!("{}:{}", self.0.ip(), self.0.port())
 		} else {
 			format!("{}", self.0.ip())
@@ -312,42 +369,31 @@ impl Default for P2PConfig {
 impl P2PConfig {
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {
-		match self.ban_window {
-			Some(n) => n,
-			None => BAN_WINDOW,
-		}
+		self.ban_window.unwrap_or_else(|| BAN_WINDOW)
 	}
 
 	/// return maximum inbound peer connections count
 	pub fn peer_max_inbound_count(&self) -> u32 {
-		match self.peer_max_inbound_count {
-			Some(n) => n,
-			None => PEER_MAX_INBOUND_COUNT,
-		}
+		self.peer_max_inbound_count
+			.unwrap_or_else(|| PEER_MAX_INBOUND_COUNT)
 	}
 
 	/// return maximum outbound peer connections count
 	pub fn peer_max_outbound_count(&self) -> u32 {
-		match self.peer_max_outbound_count {
-			Some(n) => n,
-			None => PEER_MAX_OUTBOUND_COUNT,
-		}
+		self.peer_max_outbound_count
+			.unwrap_or_else(|| PEER_MAX_OUTBOUND_COUNT)
 	}
 
 	/// return minimum preferred outbound peer count
 	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
-		match self.peer_min_preferred_outbound_count {
-			Some(n) => n,
-			None => PEER_MIN_PREFERRED_OUTBOUND_COUNT,
-		}
+		self.peer_min_preferred_outbound_count
+			.unwrap_or_else(|| PEER_MIN_PREFERRED_OUTBOUND_COUNT)
 	}
 
 	/// return peer buffer count for listener
 	pub fn peer_listener_buffer_count(&self) -> u32 {
-		match self.peer_listener_buffer_count {
-			Some(n) => n,
-			None => PEER_LISTENER_BUFFER_COUNT,
-		}
+		self.peer_listener_buffer_count
+			.unwrap_or_else(|| PEER_LISTENER_BUFFER_COUNT)
 	}
 }
 
