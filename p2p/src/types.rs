@@ -219,14 +219,9 @@ impl std::hash::Hash for PeerAddr {
 }
 
 impl PartialEq for PeerAddr {
-	/// If loopback address then we care about ip and port.
-	/// If regular address then we only care about the ip and ignore the port.
+	/// We care about ip and port for IP address.
 	fn eq(&self, other: &PeerAddr) -> bool {
-		if self.0.ip().is_loopback() {
-			self.0 == other.0
-		} else {
-			self.0.ip() == other.0.ip()
-		}
+		self.0 == other.0
 	}
 }
 
