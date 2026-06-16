@@ -209,7 +209,7 @@ impl Controller {
 	/// Server initialization status.
 	pub fn init_status(&mut self, text: &str, pop: bool) {
 		if pop {
-			self.ui.cursive.pop_layer();
+			self.pop_dialog();
 		}
 		let content = StyledString::styled(text, Color::Light(BaseColor::Green));
 		self.ui
@@ -220,6 +220,7 @@ impl Controller {
 
 	/// Server initialization error.
 	pub fn init_error(&mut self, e: Error) {
+		self.pop_dialog();
 		let content = StyledString::styled(format!("{:?}", e), Color::Light(BaseColor::Red));
 		self.ui.cursive.add_layer(
 			CircularFocus::new(Dialog::around(TextView::new(content)).button("Exit", |s| {
@@ -228,6 +229,24 @@ impl Controller {
 			.wrap_tab(),
 		);
 		self.ui.show_dialog.store(true, Ordering::Relaxed);
+	}
+
+	fn pop_dialog(&mut self) {
+		if self.ui.show_dialog.swap(false, Ordering::Relaxed) {
+			self.ui.cursive.pop_layer();
+		}
+	}
+
+	/// Stop a fully initialized server, including one queued by the startup thread.
+	pub fn stop_server(&mut self) {
+		if let Some(s) = self.server.take() {
+			s.stop();
+		}
+		while let Ok(message) = self.serv_rx.try_recv() {
+			if let ServerInitStatus::FinishedLoading(s) = message {
+				s.stop();
+			}
+		}
 	}
 
 	/// Server UI after initialization.
@@ -251,9 +270,7 @@ impl Controller {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
 						self.ui.stop();
-						if let Some(s) = self.server.take() {
-							s.stop();
-						}
+						self.stop_server();
 						exit_code
 					}
 				};
@@ -265,8 +282,7 @@ impl Controller {
 					ServerInitStatus::StartSync => self.init_status("Start syncing...", true),
 					ServerInitStatus::StartAPI => self.init_status("Starting API...", true),
 					ServerInitStatus::FinishedLoading(s) => {
-						self.ui.cursive.pop_layer();
-						self.ui.show_dialog.store(false, Ordering::Relaxed);
+						self.pop_dialog();
 						self.server = Some(s)
 					}
 					ServerInitStatus::ErrorLoading(e) => {
@@ -290,6 +306,7 @@ impl Controller {
 			}
 			thread::sleep(delay);
 		}
+		self.stop_server();
 		exit_code
 	}
 }
