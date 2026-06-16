@@ -337,7 +337,10 @@ impl Store {
 		let to_map_size = self.env.info().map_size;
 
 		// Leave headroom so the migrated env is not immediately above the resize threshold.
-		let required = ((to_used + from_used) as f32 / RESIZE_MIN_TARGET_PERCENT) as usize;
+		let required = ((to_used.saturating_add(from_used) as u128 * 100
+			+ (RESIZE_MIN_TARGET_PERCENT * 100.0 - 1.0) as u128)
+			/ (RESIZE_MIN_TARGET_PERCENT * 100.0) as u128)
+			.min(usize::MAX as u128) as usize;
 		let required = round_size_to_chunk(required, self.alloc_chunk_size);
 
 		if required > to_map_size {
