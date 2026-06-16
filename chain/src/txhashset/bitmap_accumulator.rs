@@ -551,7 +551,11 @@ impl Readable for BitmapBlock {
 				let mut inner = BitVec::from_elem(n_bits, false);
 				let n = reader.read_u16()?;
 				for _ in 0..n {
-					inner.set(reader.read_u16()? as usize, true);
+					let pos = reader.read_u16()? as usize;
+					if pos >= n_bits {
+						return Err(ser::Error::CorruptedData);
+					}
+					inner.set(pos, true);
 				}
 				inner
 			}
@@ -560,7 +564,11 @@ impl Readable for BitmapBlock {
 				let mut inner = BitVec::from_elem(n_bits, true);
 				let n = reader.read_u16()?;
 				for _ in 0..n {
-					inner.set(reader.read_u16()? as usize, false);
+					let pos = reader.read_u16()? as usize;
+					if pos >= n_bits {
+						return Err(ser::Error::CorruptedData);
+					}
+					inner.set(pos, false);
 				}
 				inner
 			}
@@ -679,5 +687,19 @@ mod tests {
 		let entries =
 			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, true, 2, 4 + 2 * entries, 61);
+	}
+
+	#[test]
+	fn block_ser_rejects_bad_indices() {
+		for mode in [1, 2] {
+			let mut cursor = Cursor::new(vec![1, mode, 0, 1, 4, 0]);
+			let mut reader = BinReader::new(
+				&mut cursor,
+				ProtocolVersion(1),
+				DeserializationMode::default(),
+			);
+			let res: Result<BitmapBlock, _> = Readable::read(&mut reader);
+			assert!(matches!(res, Err(ser::Error::CorruptedData)));
+		}
 	}
 }
