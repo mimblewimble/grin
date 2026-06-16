@@ -14,17 +14,15 @@
 
 //! Configuration file management
 
-use grin_p2p::types::MAINNET_PEER_PORT;
-use grin_util::secp::rand::Rng;
-use p2p::types::{TESTNET_PEER_PORT, USERNET_PEER_PORT};
 use rand::distributions::{Alphanumeric, Distribution};
 use rand::thread_rng;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::net::TcpListener;
 use std::path::PathBuf;
+
+use p2p::types::{TESTNET_PEER_PORT, USERNET_PEER_PORT};
 
 use crate::comments::insert_comments;
 use crate::core::global;
@@ -166,12 +164,10 @@ impl GlobalConfig {
 		defaults.chain_type = chain_type.clone();
 
 		match *chain_type {
-			global::ChainTypes::Mainnet => {
-				defaults.p2p_config.port = Self::p2p_port_for_chain(chain_type);
-			}
+			global::ChainTypes::Mainnet => {}
 			global::ChainTypes::Testnet => {
 				defaults.api_http_addr = "127.0.0.1:13413".to_owned();
-				defaults.p2p_config.port = Self::p2p_port_for_chain(chain_type);
+				defaults.p2p_config.port = TESTNET_PEER_PORT;
 				defaults
 					.stratum_mining_config
 					.as_mut()
@@ -185,7 +181,7 @@ impl GlobalConfig {
 			}
 			global::ChainTypes::UserTesting => {
 				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
-				defaults.p2p_config.port = Self::p2p_port_for_chain(chain_type);
+				defaults.p2p_config.port = USERNET_PEER_PORT;
 				defaults.p2p_config.seeding_type = p2p::Seeding::None;
 				defaults
 					.stratum_mining_config
@@ -360,26 +356,6 @@ impl GlobalConfig {
 			.replace("INFO", "Info")
 			.replace("WARN", "Warning")
 			.replace("ERROR", "Error")
-	}
-
-	/// Generate random p2p port for provided chain type.
-	/// Return default after 5 unsuccessful attempts.
-	fn p2p_port_for_chain(chain_type: &global::ChainTypes) -> u16 {
-		let default_host = "::";
-		for _ in 0..5 {
-			let port = thread_rng().gen_range(1024, 49151);
-			match TcpListener::bind((default_host, port)) {
-				Ok(_) => {
-					return port;
-				}
-				Err(_) => continue,
-			};
-		}
-		match chain_type {
-			global::ChainTypes::Testnet => TESTNET_PEER_PORT,
-			global::ChainTypes::Mainnet => MAINNET_PEER_PORT,
-			_ => USERNET_PEER_PORT,
-		}
 	}
 }
 
