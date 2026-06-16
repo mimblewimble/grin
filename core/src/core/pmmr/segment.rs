@@ -361,11 +361,10 @@ where
 						}
 					};
 					if need_hash {
-						let hash = pmmr
-							.get_from_file(pos0)
-							.ok_or_else(|| SegmentError::MissingHash(pos0))?;
-						segment.hashes.push(hash);
-						segment.hash_pos.push(pos0);
+						if let Some(hash) = pmmr.get_from_file(pos0) {
+							segment.hashes.push(hash);
+							segment.hash_pos.push(pos0);
+						}
 					}
 				}
 			}
