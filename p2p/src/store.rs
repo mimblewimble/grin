@@ -234,9 +234,10 @@ impl<'a> PeersIterBatch<'a> {
 	}
 
 	/// Delete a peer by provided address.
-	pub fn delete_peer(&mut self, peer_addr: PeerAddr) -> Result<(), Error> {
+	pub fn delete_peer(mut self, peer_addr: PeerAddr) -> Result<(), Error> {
 		let key = peer_addr.as_key();
 		self.db.delete(Some(PEER_PREFIX), key.as_bytes())?;
+		self.db.commit()?;
 		Ok(())
 	}
 
