@@ -16,3 +16,5 @@
 mod seedcheck;
 
 pub use seedcheck::check_seeds;
+
+pub mod openapi;
