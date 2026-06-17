@@ -187,11 +187,11 @@ impl Peers {
 		if self.is_banned(peer_addr) {
 			// delete banned private peer
 			if is_private_ip(&peer_addr.0.ip()) {
-				if let Ok(mut batch) = self.store.iter_batch() {
-					batch.delete_peer(peer_addr)?;
-				}
+				let batch = self.store.iter_batch()?;
+				batch.delete_peer(peer_addr).map_err(|e| Error::Store(e))
+			} else {
+				self.update_state(peer_addr, State::Healthy)
 			}
-			self.update_state(peer_addr, State::Healthy)
 		} else {
 			Err(Error::PeerNotBanned)
 		}
