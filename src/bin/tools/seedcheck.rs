@@ -115,9 +115,10 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 
 	let config = p2p::types::P2PConfig::default();
 	let adapter = Arc::new(p2p::DummyAdapter {});
-	let tmp_root = format!(".__grintmp__/seedcheck-{}", std::process::id());
-	let tmp_root = PathBuf::from(tmp_root);
-	let peer_store_root = tmp_root.join("peer_store_root");
+	let tmp_root = ".__grintmp__";
+	let mut data_root = PathBuf::from(tmp_root);
+	data_root.push(format!("seedcheck-{}", std::process::id()));
+	let peer_store_root = data_root.join("peer_store_root");
 	let peers = Arc::new(p2p::Peers::new(
 		p2p::store::PeerStore::new(&peer_store_root.to_string_lossy()).unwrap(),
 		adapter,
