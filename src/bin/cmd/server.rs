@@ -50,7 +50,7 @@ pub fn start_server(
 		let serv_tx_clone = serv_tx.clone();
 		let stop_state = Arc::new(StopState::new());
 		let stop_state_clone = stop_state.clone();
-		thread::spawn(move || {
+		let server_thread = thread::spawn(move || {
 			match Server::start(
 				config,
 				Some(stop_state_clone.clone()),
@@ -71,6 +71,10 @@ pub fn start_server(
 		});
 		let exit_code = controller.run();
 		stop_state.stop();
+		if let Err(e) = server_thread.join() {
+			error!("Failed to join server startup thread: {:?}", e);
+		}
+		controller.stop_server();
 		exit_code
 	} else {
 		warn!("Starting GRIN w/o UI...");
