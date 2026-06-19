@@ -80,9 +80,8 @@ pub struct Server {
 }
 
 impl Server {
-	/// Instantiates and starts a new server. Optionally takes a callback
-	/// for the server to send an ARC copy of itself, to allow another process
-	/// to poll info about the server status
+	/// Instantiates and starts a new server, optionally sending initialization
+	/// status updates through the provided channel.
 	pub fn start(
 		config: ServerConfig,
 		stop_state: Option<Arc<StopState>>,
