@@ -32,8 +32,8 @@ use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead, MAX_PEER_ADDRS,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead, MAX_PEER_ADDRS,
 };
 use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::*;
@@ -662,6 +662,14 @@ impl ChainAdapter for Peers {
 		self.adapter.locate_headers(hs)
 	}
 
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		self.adapter.locate_header_segment(id, peer_info)
+	}
+
 	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
 		self.adapter.get_block(h, peer_info)
 	}
@@ -818,6 +826,25 @@ impl ChainAdapter for Peers {
 			Ok(false)
 		} else {
 			Ok(true)
+		}
+	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		match self
+			.adapter
+			.receive_header_segment(id, headers, peer_info)?
+		{
+			HeaderSegmentAcceptance::Accepted => Ok(HeaderSegmentAcceptance::Accepted),
+			HeaderSegmentAcceptance::Ban => {
+				self.ban_peer(peer_info.addr, ReasonForBan::BadBlockHeader)
+					.map_err(|e| chain::Error::Other(format!("ban peer error: {:?}", e)))?;
+				Ok(HeaderSegmentAcceptance::Ban)
+			}
 		}
 	}
 }

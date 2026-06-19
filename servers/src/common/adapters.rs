@@ -16,7 +16,9 @@
 //! events to consumers of those events.
 
 use crate::util::RwLock;
+use std::collections::HashMap;
 use std::fs::File;
+use std::net::SocketAddr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Weak};
@@ -41,7 +43,7 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
-use crate::p2p::types::PeerInfo;
+use crate::p2p::types::{HeaderSegmentAcceptance, PeerInfo};
 use crate::pool::{self, BlockChain, PoolAdapter};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
@@ -56,6 +58,17 @@ const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
+const MAX_CACHED_HEADER_BATCHES: usize = 16;
+const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
+const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 1000;
+const HEADER_BATCH_CACHE_LOOKAHEAD: u64 =
+	MAX_CACHED_HEADER_BATCHES as u64 * p2p::MAX_BLOCK_HEADERS as u64;
+
+#[derive(Clone)]
+struct HeaderBatch {
+	headers: Vec<BlockHeader>,
+	peer_info: PeerInfo,
+}
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -71,6 +84,8 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+	header_batch_cache: RwLock<Vec<HeaderBatch>>,
+	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -335,27 +350,7 @@ where
 			}
 		};
 
-		match self
-			.chain()
-			.sync_block_headers(bhs, sync_head, chain::Options::SYNC)
-		{
-			Ok(sync_head) => {
-				// If we have an updated sync_head after processing this batch of headers
-				// then update our sync_state so we can request relevant headers in the next batch.
-				if let Some(sync_head) = sync_head {
-					self.sync_state.update_header_sync(sync_head);
-				}
-				Ok(true)
-			}
-			Err(e) => {
-				debug!("Block headers refused by chain: {:?}", e);
-				if e.is_bad_data() {
-					Ok(false)
-				} else {
-					Err(e)
-				}
-			}
-		}
+		self.cache_and_process_header_batch(bhs, peer_info, sync_head)
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -391,6 +386,60 @@ where
 		debug!("returning headers: {}", headers.len());
 
 		Ok(headers)
+	}
+
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		if !peer_info
+			.capabilities
+			.contains(p2p::Capabilities::PIHD_HIST)
+			|| id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT
+		{
+			return Ok(None);
+		}
+		if !self.header_segment_request_allowed(peer_info.addr.0) {
+			warn!(
+				"throttling PIHD header segment request {:?} from {}",
+				id, peer_info.addr
+			);
+			return Ok(None);
+		}
+
+		let segment_capacity = id.segment_capacity();
+		let start_height = match id
+			.idx
+			.checked_mul(segment_capacity)
+			.and_then(|height| height.checked_add(1))
+		{
+			Some(height) => height,
+			None => return Ok(None),
+		};
+		let max_height = self.chain().header_head()?.height;
+		let end_height = match start_height
+			.checked_add(segment_capacity)
+			.and_then(|height| height.checked_sub(1))
+		{
+			Some(height) => std::cmp::min(height, max_height),
+			None => max_height,
+		};
+		if start_height > end_height {
+			return Ok(Some(vec![]));
+		}
+
+		let header_pmmr = self.chain().header_pmmr();
+		let header_pmmr = header_pmmr.read();
+		let mut headers = vec![];
+		for h in start_height..=end_height {
+			if let Ok(hash) = header_pmmr.get_header_hash_by_height(h) {
+				headers.push(self.chain().get_block_header(&hash)?);
+			} else {
+				break;
+			}
+		}
+		Ok(Some(headers))
 	}
 
 	/// Gets a full block by its hash.
@@ -610,6 +659,21 @@ where
 	) -> Result<bool, chain::Error> {
 		self.queue_pibd_segment(PIBDSegment::Kernel(block_hash, segment), peer_info)
 	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		debug!(
+			"ignoring PIHD header segment {:?} with {} headers from {}",
+			id,
+			headers.len(),
+			peer_info.addr
+		);
+		Ok(HeaderSegmentAcceptance::Accepted)
+	}
 }
 
 impl<B, P> NetToChainAdapter<B, P>
@@ -633,6 +697,8 @@ where
 			peers: OneTime::new(),
 			config,
 			hooks,
+			header_batch_cache: RwLock::new(vec![]),
+			header_segment_requests: RwLock::new(HashMap::new()),
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -768,6 +834,121 @@ where
 					"PIBD receive queue disconnected".to_owned(),
 				));
 				Ok(true)
+			}
+		}
+	}
+
+	fn header_segment_request_allowed(&self, peer_addr: SocketAddr) -> bool {
+		let now = Utc::now();
+		let cutoff = now - Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS);
+		let mut requests = self.header_segment_requests.write();
+		requests.retain(|_, (window_start, _)| *window_start > cutoff);
+		let entry = requests.entry(peer_addr).or_insert((now, 0));
+		if now > entry.0 + Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS) {
+			*entry = (now, 0);
+		}
+		if entry.1 >= MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW {
+			return false;
+		}
+		entry.1 += 1;
+		true
+	}
+
+	fn cache_and_process_header_batch(
+		&self,
+		headers: &[BlockHeader],
+		peer_info: &PeerInfo,
+		sync_head: chain::Tip,
+	) -> Result<bool, chain::Error> {
+		let headers = headers
+			.iter()
+			.skip_while(|h| h.height <= sync_head.height)
+			.cloned()
+			.collect::<Vec<_>>();
+		if headers.is_empty() {
+			return Ok(true);
+		}
+		if headers
+			.first()
+			.map(|h| {
+				h.height
+					> sync_head
+						.height
+						.saturating_add(HEADER_BATCH_CACHE_LOOKAHEAD)
+			})
+			.unwrap_or(false)
+		{
+			debug!(
+				"ignoring far-future header batch starting at height {} while sync head is {}",
+				headers[0].height, sync_head.height
+			);
+			return Ok(true);
+		}
+
+		{
+			let mut cache = self.header_batch_cache.write();
+			let first = headers.first().map(|h| h.hash());
+			let last = headers.last().map(|h| h.hash());
+			if !cache.iter().any(|b| {
+				b.headers.first().map(|h| h.hash()) == first
+					|| b.headers.last().map(|h| h.hash()) == last
+			}) {
+				if cache.len() >= MAX_CACHED_HEADER_BATCHES {
+					cache.remove(0);
+				}
+				cache.push(HeaderBatch {
+					headers,
+					peer_info: peer_info.clone(),
+				});
+			}
+		}
+
+		self.process_ready_header_batches(peer_info)
+	}
+
+	fn process_ready_header_batches(&self, current_peer: &PeerInfo) -> Result<bool, chain::Error> {
+		loop {
+			let sync_head = match self.sync_state.status() {
+				SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+				_ => return Ok(true),
+			};
+			let batch = {
+				let mut cache = self.header_batch_cache.write();
+				cache.sort_by_key(|b| b.headers.first().map(|h| h.height).unwrap_or(u64::MAX));
+				let pos = cache.iter().position(|b| {
+					b.headers.first().map(|h| h.height) == Some(sync_head.height + 1)
+				});
+				match pos {
+					Some(pos) => cache.remove(pos),
+					None => return Ok(true),
+				}
+			};
+
+			match self
+				.chain()
+				.sync_block_headers(&batch.headers, sync_head, chain::Options::SYNC)
+			{
+				Ok(sync_head) => {
+					if let Some(sync_head) = sync_head {
+						self.sync_state.update_header_sync(sync_head);
+					}
+				}
+				Err(e) => {
+					debug!("Block headers refused by chain: {:?}", e);
+					if e.is_bad_data() {
+						if batch.peer_info.addr == current_peer.addr {
+							return Ok(false);
+						}
+						if let Err(e) = self.peers().ban_peer(
+							batch.peer_info.addr,
+							p2p::types::ReasonForBan::BadBlockHeader,
+						) {
+							error!("failed to ban peer {}: {:?}", batch.peer_info.addr, e);
+						}
+					} else {
+						return Err(e);
+					}
+				}
 			}
 		}
 	}
