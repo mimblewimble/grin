@@ -13,5 +13,6 @@ wallet_data
 wallet/db
 .idea/
 .vscode/
+.venv/
 /node*
 result
