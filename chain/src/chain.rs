@@ -1739,9 +1739,17 @@ fn setup_head(
 					let head = batch.get_block_header(&head.last_block_h)?;
 					let pibd_tip = store.pibd_head()?;
 					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
+					let pibd_mmr_in_progress = !resetting_pibd
+						&& pibd_head.height >= head.height
+						&& (txhashset.output_mmr_size() > head.output_mmr_size
+							|| txhashset.rangeproof_mmr_size() > head.output_mmr_size
+							|| txhashset.kernel_mmr_size() > head.kernel_mmr_size);
 					if pibd_head.height > head.height && !resetting_pibd {
 						pibd_in_progress = true;
 						pibd_head
+					} else if pibd_mmr_in_progress {
+						pibd_in_progress = true;
+						head
 					} else {
 						head
 					}

@@ -382,7 +382,12 @@ impl MessageHandler for Protocol {
 					block_hash,
 					output_root
 				);
-				adapter.receive_bitmap_segment(block_hash, output_root, segment.into_segment()?)?;
+				adapter.receive_bitmap_segment(
+					block_hash,
+					output_root,
+					segment.into_segment()?,
+					&self.peer_info,
+				)?;
 				Consumed::None
 			}
 			Message::OutputSegment(req) => {
@@ -399,6 +404,7 @@ impl MessageHandler for Protocol {
 					response.block_hash,
 					output_bitmap_root,
 					response.segment.into(),
+					&self.peer_info,
 				)?;
 				Consumed::None
 			}
@@ -408,7 +414,7 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Rangeproof Segment: bh: {}", block_hash);
-				adapter.receive_rangeproof_segment(block_hash, segment.into())?;
+				adapter.receive_rangeproof_segment(block_hash, segment.into(), &self.peer_info)?;
 				Consumed::None
 			}
 			Message::KernelSegment(req) => {
@@ -417,7 +423,7 @@ impl MessageHandler for Protocol {
 					segment,
 				} = req;
 				trace!("Received Kernel Segment: bh: {}", block_hash);
-				adapter.receive_kernel_segment(block_hash, segment.into())?;
+				adapter.receive_kernel_segment(block_hash, segment.into(), &self.peer_info)?;
 				Consumed::None
 			}
 			Message::Unknown(_) => Consumed::None,

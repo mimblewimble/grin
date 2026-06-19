@@ -649,9 +649,10 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_bitmap_segment(block_hash, output_root, segment)
+			.receive_bitmap_segment(block_hash, output_root, segment, peer_info)
 	}
 
 	fn receive_output_segment(
@@ -659,25 +660,30 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_output_segment(block_hash, bitmap_root, segment)
+			.receive_output_segment(block_hash, bitmap_root, segment, peer_info)
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_rangeproof_segment(block_hash, segment)
+		self.adapter
+			.receive_rangeproof_segment(block_hash, segment, peer_info)
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_kernel_segment(block_hash, segment)
+		self.adapter
+			.receive_kernel_segment(block_hash, segment, peer_info)
 	}
 }
 

@@ -419,6 +419,7 @@ impl ChainAdapter for DummyAdapter {
 		_block_hash: Hash,
 		_output_root: Hash,
 		_segment: Segment<BitmapChunk>,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
@@ -428,6 +429,7 @@ impl ChainAdapter for DummyAdapter {
 		_block_hash: Hash,
 		_bitmap_root: Hash,
 		_segment: Segment<OutputIdentifier>,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
@@ -436,6 +438,7 @@ impl ChainAdapter for DummyAdapter {
 		&self,
 		_block_hash: Hash,
 		_segment: Segment<RangeProof>,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
@@ -444,6 +447,7 @@ impl ChainAdapter for DummyAdapter {
 		&self,
 		_block_hash: Hash,
 		_segment: Segment<TxKernel>,
+		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
 	}
