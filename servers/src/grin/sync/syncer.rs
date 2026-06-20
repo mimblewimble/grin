@@ -189,7 +189,6 @@ impl SyncRunner {
 
 			// if syncing is needed
 			let head = unwrap_or_restart_loop!(self.chain.head());
-			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
 			let header_head = unwrap_or_restart_loop!(self.chain.header_head());
 
 			// "sync_head" allows us to sync against a large fork on the header chain
@@ -229,13 +228,7 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
-				state_sync.check_run(
-					&header_head,
-					&head,
-					&tail,
-					highest_height,
-					self.stop_state.clone(),
-				);
+				state_sync.check_run(&header_head, highest_height, self.stop_state.clone());
 			}
 		}
 	}
