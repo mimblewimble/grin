@@ -455,7 +455,10 @@ impl StateSync {
 			// abort PIBD and fall back to txhashset download
 			// Waiting a minute helps ensures that the cancellation isn't simply due to a single non-PIBD enabled
 			// peer having the max difficulty
-			if available_pibd_peers().count() == 0 {
+			if available_pibd_peers()
+				.with_filter(|p| !peers.is_blocked(p.info.addr))
+				.count() == 0
+			{
 				if let None = self.earliest_zero_pibd_peer_time {
 					self.set_earliest_zero_pibd_peer_time(Some(Utc::now()));
 				}
@@ -507,12 +510,6 @@ impl StateSync {
 						})
 						.exclude(*excluded_peer)
 						.choose_random()
-						.or_else(|| {
-							// If all otherwise eligible peers are blocked, keep sync moving.
-							available_pibd_peers()
-								.exclude(*excluded_peer)
-								.choose_random()
-						})
 				});
 			if let Some(p) = peer {
 				// add to list of segments that are being tracked
