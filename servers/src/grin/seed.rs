@@ -40,6 +40,8 @@ pub const MAINNET_DNS_SEEDS: &[&str] = &[
 	"main.gri.mw",                      // admin@gri.mw
 	"mainnet.grinffindor.org",          // support@grinffindor.org
 	"main-seed.grin.money",             // support@grinily.com
+	"mainnet.grin-coffee.com",          // grin-coffee@proton.me
+	"main.seed.grin.raubritter.org",    // er@raubritter.org
 	"mainnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 /// DNS Seeds with contacts associated - Testnet
@@ -48,6 +50,8 @@ pub const TESTNET_DNS_SEEDS: &[&str] = &[
 	"test.gri.mw",                      // admin@gri.mw
 	"testnet.grinffindor.org",          // support@grinffindor.org
 	"test-seed.grin.money",             // support@grinily.com
+	"testnet.grin-coffee.com",          // grin-coffee@proton.me
+	"test.seed.grin.raubritter.org",    // er@raubritter.org
 	"testnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 
