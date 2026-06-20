@@ -52,7 +52,6 @@ const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 const PIBD_SEGMENT_QUEUE_CAP: usize = 64;
-const REJECTED_PIBD_SEGMENT_SECS: i64 = 600;
 
 enum PibdSegment {
 	Bitmap {
@@ -830,7 +829,7 @@ where
 		if self.sync_state.rejected_pibd_segment_from(
 			&segment_id,
 			peer_info.addr.0,
-			REJECTED_PIBD_SEGMENT_SECS,
+			chain::pibd_params::REJECTED_SEGMENT_RETRY_SECS,
 		) {
 			debug!(
 				"ignoring rejected PIBD segment {:?} from {}",

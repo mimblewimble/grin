@@ -492,7 +492,7 @@ impl StateSync {
 						&& !sync_state.rejected_pibd_segment_from(
 							seg_id,
 							p.info.addr.0,
-							pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS,
+							pibd_params::REJECTED_SEGMENT_RETRY_SECS,
 						)
 				})
 				.exclude(*excluded_peer)
@@ -505,7 +505,7 @@ impl StateSync {
 								&& !sync_state.rejected_pibd_segment_from(
 									seg_id,
 									p.info.addr.0,
-									pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS,
+									pibd_params::REJECTED_SEGMENT_RETRY_SECS,
 								)
 						})
 						.exclude(*excluded_peer)

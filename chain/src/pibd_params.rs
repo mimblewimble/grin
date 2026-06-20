@@ -38,6 +38,9 @@ pub const SEGMENT_APPLY_BATCH_SIZE: usize = 12;
 /// deciding the segment isn't going to arrive. The syncer will then re-request the segment
 pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 30;
 
+/// How long a peer is excluded from retrying a PIBD segment after serving invalid data.
+pub const REJECTED_SEGMENT_RETRY_SECS: i64 = 600;
+
 /// Number of simultaneous requests for segments we should make. Note this is currently
 /// divisible by 3 to try and evenly spread requests amount the 3 main MMRs (Bitmap segments
 /// will always be requested first)
