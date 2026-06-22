@@ -37,6 +37,8 @@ use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
+// These amounts are first created as spendable outputs from a deterministic
+// funding transaction, then reused as inputs for the generated corpus txs.
 pub const CORPUS_INPUT_VALUES: [u64; 8] = [10, 100, 1000, 10000, 100000, 200000, 400000, 800000];
 
 /// Build genesis block with reward (non-empty, like we have in mainnet).
