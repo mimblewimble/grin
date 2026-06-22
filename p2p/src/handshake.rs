@@ -16,7 +16,7 @@ use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{read_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
+use crate::msg::{read_message, user_agent, write_message, Hand, Msg, Shake, Type};
 use crate::peer::Peer;
 use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
 use crate::util::RwLock;
@@ -120,7 +120,7 @@ impl Handshake {
 			total_difficulty,
 			sender_addr: self_addr,
 			receiver_addr: peer_addr,
-			user_agent: USER_AGENT.to_string(),
+			user_agent: user_agent().to_string(),
 		};
 
 		// write and read the handshake response
@@ -225,7 +225,7 @@ impl Handshake {
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,
-			user_agent: USER_AGENT.to_string(),
+			user_agent: user_agent().to_string(),
 		};
 
 		let msg = Msg::new(Type::Shake, shake, negotiated_version)?;

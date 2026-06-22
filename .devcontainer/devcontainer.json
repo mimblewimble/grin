@@ -16,5 +16,6 @@
           "github.copilot-chat"
         ]
       }
-    }
+    },
+    "runArgs": ["--privileged", "-v", "/sys/fs/cgroup:/sys/fs/cgroup:ro", "-v", "/tmp:/tmp"]
   }

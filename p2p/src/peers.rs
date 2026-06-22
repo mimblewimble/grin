@@ -45,6 +45,7 @@ pub struct Peers {
 	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<PeerAddr, Arc<Peer>>>,
+	blocked: RwLock<HashMap<PeerAddr, (DateTime<Utc>, u32)>>,
 	config: P2PConfig,
 }
 
@@ -55,6 +56,7 @@ impl Peers {
 			store,
 			config,
 			peers: RwLock::new(HashMap::new()),
+			blocked: RwLock::new(HashMap::new()),
 		}
 	}
 
@@ -275,22 +277,33 @@ impl Peers {
 		}
 	}
 
-	/// Iterator over all peers we know about (stored in our db).
-	pub fn peer_data_iter(&self) -> Result<impl Iterator<Item = PeerData>, Error> {
-		self.store.peers_iter().map_err(From::from)
-	}
-
 	/// Convenience for reading all peer data from the db.
 	pub fn all_peer_data(&self) -> Vec<PeerData> {
-		self.peer_data_iter()
-			.map(|peers| peers.collect())
-			.unwrap_or(vec![])
+		match self.store.iter_batch() {
+			Ok(batch) => match batch.peers_iter() {
+				Ok(iter) => iter
+					.filter(|p| p.is_ok())
+					.map(|p| p.ok().unwrap())
+					.collect(),
+				Err(e) => {
+					error!("failed to get all peer data: {:?}", e);
+					vec![]
+				}
+			},
+			Err(e) => {
+				error!("failed to get all peer data: {:?}", e);
+				vec![]
+			}
+		}
 	}
 
 	/// Find peers in store (not necessarily connected) and return their data
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		match self.store.find_peers(state, cap, count) {
-			Ok(peers) => peers,
+		match self.store.iter_batch() {
+			Ok(batch) => batch.find_peers(state, cap, count).unwrap_or_else(|e| {
+				error!("failed to find peers: {:?}", e);
+				vec![]
+			}),
 			Err(e) => {
 				error!("failed to find peers: {:?}", e);
 				vec![]
@@ -434,6 +447,74 @@ impl Peers {
 		}
 	}
 
+	/// Disconnect a peer without banning it.
+	pub fn disconnect_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut peers = self.peers.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("disconnect_peer: failed to get peers lock");
+			Error::PeerException
+		})?;
+		match peers.remove(&peer_addr) {
+			Some(peer) => {
+				warn!("disconnecting peer {} ({})", peer_addr, reason);
+				peer.stop();
+				Ok(())
+			}
+			None => Err(Error::PeerNotFound),
+		}
+	}
+
+	/// Whether this peer has been blocked.
+	pub fn is_blocked(&self, peer_addr: PeerAddr) -> bool {
+		match self.blocked.try_read_for(LOCK_TIMEOUT) {
+			Some(peers) => match peers.get(&peer_addr) {
+				None => false,
+				Some((expiry, _)) => expiry > &Utc::now(),
+			},
+			None => {
+				error!("is_blocked: failed to get peers lock");
+				false
+			}
+		}
+	}
+
+	/// Temporary block a peer without banning it.
+	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("block_peer: failed to get blocked lock");
+			Error::PeerException
+		})?;
+
+		let times = {
+			match blocked.get(&peer_addr) {
+				Some((_, times)) => times + 1,
+				None => 1,
+			}
+		};
+		let duration = match times {
+			1 => 60,  // 1m
+			2 => 180, // 3m
+			_ => 600, // 10m
+		};
+		let expiry = Utc::now() + Duration::seconds(duration);
+		blocked.insert(peer_addr, (expiry, times));
+
+		warn!(
+			"state_sync: block peer {} ({}) for {} times: {}",
+			peer_addr, reason, duration, times
+		);
+		Ok(())
+	}
+
+	/// Unblock all blocked peers.
+	pub fn unblock_peers(&self) -> Result<(), Error> {
+		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
+			error!("unblock_peers: failed to get blocked lock");
+			Error::PeerException
+		})?;
+		blocked.clear();
+		Ok(())
+	}
+
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
 		self.iter().outbound().connected().count()
@@ -445,24 +526,26 @@ impl Peers {
 		let now = Utc::now();
 
 		// Delete defunct peers from storage
-		let _ = self.store.delete_peers(|peer| {
-			let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
+		if let Ok(batch) = self.store.iter_batch() {
+			let _ = batch.delete_peers(|peer| {
+				let diff = now - Utc.timestamp_opt(peer.last_connected, 0).unwrap();
 
-			let should_remove = peer.flags == State::Defunct
-				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
+				let should_remove = peer.flags == State::Defunct
+					&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
 
-			if should_remove {
-				debug!(
-					"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
-					peer.addr,
-					diff.num_days(),
-					diff.num_hours(),
-					diff.num_minutes()
-				);
-			}
+				if should_remove {
+					debug!(
+						"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
+						peer.addr,
+						diff.num_days(),
+						diff.num_hours(),
+						diff.num_minutes()
+					);
+				}
 
-			should_remove
-		});
+				should_remove
+			});
+		}
 	}
 }
 
@@ -816,6 +899,16 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
 		PeersIter {
 			iter: self.iter.filter(move |p| p.info.capabilities.contains(cap)),
+		}
+	}
+
+	/// Custom filter.
+	pub fn with_filter(
+		self,
+		f: impl Fn(&Arc<Peer>) -> bool,
+	) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
+		PeersIter {
+			iter: self.iter.filter(move |p| f(p)),
 		}
 	}
 

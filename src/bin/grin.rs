@@ -55,7 +55,7 @@ pub fn info_strings() -> (String, String) {
 		format!(
 			"This is Grin version {}{}, built for {} by {}.",
 			built_info::PKG_VERSION,
-			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
+			built_info::GIT_COMMIT_HASH.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
 		),
@@ -226,8 +226,8 @@ fn real_main() -> i32 {
 
 		// seedcheck command
 		("seedcheck", Some(seedcheck_args)) => {
-			let is_testnet = seedcheck_args.is_present("testnet");
-			let results = check_seeds(is_testnet);
+			let is_testnet = args.is_present("testnet") || seedcheck_args.is_present("testnet");
+			let results = check_seeds(is_testnet, seedcheck_args.value_of("seed"));
 			let output =
 				serde_json::to_string_pretty(&results).expect("Unable to serialize results");
 
