@@ -185,14 +185,16 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 
 	drop(peers);
 
-	// Clean up temporary files
-	if let Err(e) = fs::remove_dir_all(tmp_root) {
+	// Clean up temporary files for this process, then remove the common root
+	// only if no other seedcheck process is using it.
+	if let Err(e) = fs::remove_dir_all(&data_root) {
 		debug!("Unable to delete temporary seedcheck files: {:?}", e);
 		eprintln!(
 			"WARN cleanup: unable to delete temporary seedcheck files: {:?}",
 			e
 		);
 	}
+	let _ = fs::remove_dir(tmp_root);
 
 	result
 }
