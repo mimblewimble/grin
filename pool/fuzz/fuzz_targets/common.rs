@@ -252,6 +252,7 @@ impl PoolFuzzer {
 			genesis,
 			pow::verify_size,
 			false,
+			None,
 		)
 		.unwrap()
 	}
