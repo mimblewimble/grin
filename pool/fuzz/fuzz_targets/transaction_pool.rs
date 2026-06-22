@@ -29,45 +29,56 @@ fn gen_tx_corpus() -> Result<(), Error> {
 	let fuzzer = PoolFuzzer::new("fuzz/target/.transaction_pool_corpus");
 
 	// create arbitrary inputs and outputs
-	let inputs: Vec<u64> = vec![10, 100, 1000, 10000, 100000, 200000, 400000, 800000];
-	let outputs: Vec<u64> = vec![5, 50, 500, 5000, 50000, 100000, 200000, 400000];
+	let inputs: Vec<u64> = CORPUS_INPUT_VALUES.to_vec();
+	let outputs: Vec<u64> = vec![5, 50, 500, 5000, 50000, 150000, 250000, 450000];
+	let fee: u32 = inputs
+		.iter()
+		.sum::<u64>()
+		.checked_sub(outputs.iter().sum())
+		.expect("corpus inputs/outputs must yield a valid fee")
+		.try_into()
+		.expect("corpus fee must fit in FeeFields");
 	let mut txes: Vec<FuzzTx> = vec![];
 
 	// create valid txes of all supported types
 	if let Some(tx) = fuzzer.test_transaction_spending_coinbase(outputs.clone()) {
 		txes.push(FuzzTx {
-			version: 1u32,
+			version: ser::ProtocolVersion::local().value(),
 			name: "coinbase".into(),
 			tx,
 		});
+	} else {
+		eprintln!("WARN: skipping coinbase corpus seed with invalid fee");
 	}
 	if let Some(tx) = fuzzer.test_transaction(inputs.clone(), outputs.clone()) {
 		txes.push(FuzzTx {
-			version: 1u32,
+			version: ser::ProtocolVersion::local().value(),
 			name: "plain".into(),
 			tx,
 		});
+	} else {
+		eprintln!("WARN: skipping plain corpus seed with invalid fee");
 	}
 	txes.push(FuzzTx {
-		version: 2u32,
+		version: ser::ProtocolVersion::local().value(),
 		name: "height-locked".into(),
 		tx: fuzzer.test_transaction_with_kernel_features(
 			inputs.clone(),
 			outputs.clone(),
 			KernelFeatures::HeightLocked {
-				fee: 100.into(),
-				lock_height: 42u64,
+				fee: fee.into(),
+				lock_height: 4u64,
 			},
 		),
 	});
 	txes.push(FuzzTx {
-		version: 2u32,
+		version: ser::ProtocolVersion::local().value(),
 		name: "no-recent-duplicate".into(),
 		tx: fuzzer.test_transaction_with_kernel_features(
 			inputs.clone(),
 			outputs.clone(),
 			KernelFeatures::NoRecentDuplicate {
-				fee: 100.into(),
+				fee: fee.into(),
 				relative_height: NRDRelativeHeight::new(42u64).unwrap(),
 			},
 		),
@@ -95,6 +106,8 @@ fuzz_target!(|data: &[u8]| {
 
 	grin_util::init_test_logger();
 	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	global::set_local_accept_fee_base(1);
+	global::set_local_nrd_enabled(true);
 
 	// check for corpus generation arguments
 	// only generate corpus once, skipping on every other run
@@ -114,7 +127,7 @@ fuzz_target!(|data: &[u8]| {
 		let mut reader = data;
 		let tx: Result<Transaction, ser::Error> = ser::deserialize(
 			&mut reader,
-			ser::ProtocolVersion(2),
+			ser::ProtocolVersion::local(),
 			ser::DeserializationMode::default(),
 		);
 		// we only care about inputs that pass
@@ -126,6 +139,7 @@ fuzz_target!(|data: &[u8]| {
 				.pool
 				.add_to_pool(fuzz_tx_source(data[0]), tx.unwrap(), i, &header)
 			{
+				Ok(_) if i => assert!(fuzzer.pool.stempool.size() >= 1),
 				Ok(_) => assert!(fuzzer.pool.total_size() >= 1),
 				Err(_) => continue,
 			}

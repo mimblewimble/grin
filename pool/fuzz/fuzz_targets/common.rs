@@ -37,6 +37,8 @@ use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
 
+pub const CORPUS_INPUT_VALUES: [u64; 8] = [10, 100, 1000, 10000, 100000, 200000, 400000, 800000];
+
 /// Build genesis block with reward (non-empty, like we have in mainnet).
 // Same as from pool/tests/common.rs
 pub fn genesis_block<K>(keychain: &K) -> Block
@@ -132,7 +134,7 @@ pub struct PoolFuzzer {
 
 impl PoolFuzzer {
 	pub fn new(db_root: &str) -> Self {
-		let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
+		let keychain: ExtKeychain = Keychain::from_seed(b"grin_pool_fuzz_keychain", false).unwrap();
 
 		clean_output_dir(db_root.into());
 
@@ -150,7 +152,12 @@ impl PoolFuzzer {
 			pool,
 		};
 
-		ret.add_some_blocks(3);
+		ret.add_some_blocks(3 * consensus::TESTING_HARD_FORK_INTERVAL);
+
+		let funding_tx = ret
+			.test_transaction_spending_coinbase_at_height(2, CORPUS_INPUT_VALUES.to_vec())
+			.unwrap();
+		ret.add_block(vec![funding_tx]);
 
 		ret
 	}
@@ -160,7 +167,15 @@ impl PoolFuzzer {
 		&self,
 		output_values: Vec<u64>,
 	) -> Option<Transaction> {
-		let header = self.chain.get_header_by_height(1).unwrap();
+		self.test_transaction_spending_coinbase_at_height(1, output_values)
+	}
+
+	fn test_transaction_spending_coinbase_at_height(
+		&self,
+		height: u64,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
+		let header = self.chain.get_header_by_height(height).unwrap();
 
 		let mut output_sum = 0u64;
 		for &s in output_values.iter() {
