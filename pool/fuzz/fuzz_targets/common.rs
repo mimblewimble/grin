@@ -156,7 +156,10 @@ impl PoolFuzzer {
 	}
 
 	// Same as from pool/tests/common.rs, with interface change
-	pub fn test_transaction_spending_coinbase(&self, output_values: Vec<u64>) -> Transaction {
+	pub fn test_transaction_spending_coinbase(
+		&self,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
 		let header = self.chain.get_header_by_height(1).unwrap();
 
 		let mut output_sum = 0u64;
@@ -166,7 +169,7 @@ impl PoolFuzzer {
 
 		let coinbase_reward: u64 = 60_000_000_000;
 
-		let fees = coinbase_reward.overflowing_sub(output_sum).0;
+		let fee = coinbase_reward.checked_sub(output_sum)?.try_into().ok()?;
 
 		let mut tx_elements = Vec::new();
 
@@ -182,19 +185,21 @@ impl PoolFuzzer {
 		}
 
 		build::transaction(
-			KernelFeatures::Plain {
-				fee: fees.try_into().unwrap(),
-			},
+			KernelFeatures::Plain { fee },
 			&tx_elements,
 			&self.keychain,
 			&ProofBuilder::new(&self.keychain),
 		)
-		.unwrap()
+		.ok()
 	}
 
 	// Same as from pool/tests/common.rs,
 	//   with changes for summing inputs and outputs
-	pub fn test_transaction(&self, input_values: Vec<u64>, output_values: Vec<u64>) -> Transaction {
+	pub fn test_transaction(
+		&self,
+		input_values: Vec<u64>,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
 		let mut input_sum = 0u64;
 		for &s in input_values.iter() {
 			input_sum = input_sum.overflowing_add(s).0;
@@ -205,15 +210,13 @@ impl PoolFuzzer {
 			output_sum = output_sum.overflowing_add(s).0;
 		}
 
-		let fees = input_sum.overflowing_sub(output_sum).0;
+		let fee = input_sum.checked_sub(output_sum)?.try_into().ok()?;
 
-		self.test_transaction_with_kernel_features(
+		Some(self.test_transaction_with_kernel_features(
 			input_values,
 			output_values,
-			KernelFeatures::Plain {
-				fee: fees.try_into().unwrap(),
-			},
-		)
+			KernelFeatures::Plain { fee },
+		))
 	}
 
 	pub fn test_transaction_with_kernel_features(

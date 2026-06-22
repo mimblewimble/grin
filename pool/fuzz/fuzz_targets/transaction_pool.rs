@@ -34,16 +34,20 @@ fn gen_tx_corpus() -> Result<(), Error> {
 	let mut txes: Vec<FuzzTx> = vec![];
 
 	// create valid txes of all supported types
-	txes.push(FuzzTx {
-		version: 1u32,
-		name: "coinbase".into(),
-		tx: fuzzer.test_transaction_spending_coinbase(outputs.clone()),
-	});
-	txes.push(FuzzTx {
-		version: 1u32,
-		name: "plain".into(),
-		tx: fuzzer.test_transaction(inputs.clone(), outputs.clone()),
-	});
+	if let Some(tx) = fuzzer.test_transaction_spending_coinbase(outputs.clone()) {
+		txes.push(FuzzTx {
+			version: 1u32,
+			name: "coinbase".into(),
+			tx,
+		});
+	}
+	if let Some(tx) = fuzzer.test_transaction(inputs.clone(), outputs.clone()) {
+		txes.push(FuzzTx {
+			version: 1u32,
+			name: "plain".into(),
+			tx,
+		});
+	}
 	txes.push(FuzzTx {
 		version: 2u32,
 		name: "height-locked".into(),
