@@ -1,0 +1,161 @@
+name: Telegram Events
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        required: true
+        type: string
+      status:
+        required: true
+        type: string
+      details:
+        required: false
+        type: string
+        default: ""
+      image:
+        required: false
+        type: string
+        default: ""
+      image_tag:
+        required: false
+        type: string
+        default: ""
+      artifact_url:
+        required: false
+        type: string
+        default: ""
+      commit_message:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+      TELEGRAM_MESSAGE_THREAD_ID:
+        required: false
+      GHCR_USERNAME:
+        required: false
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+    branches: [master, staging]
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  telegram-notify:
+    name: Telegram Notification
+    runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+      GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+    steps:
+      - name: Send Telegram message
+        if: ${{ env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != '' }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION_NAME: ${{ github.event.action }}
+          REPOSITORY: ${{ github.repository }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          NOTIFY_TITLE: ${{ inputs.title }}
+          NOTIFY_STATUS: ${{ inputs.status }}
+          NOTIFY_DETAILS: ${{ inputs.details }}
+          NOTIFY_IMAGE: ${{ inputs.image }}
+          NOTIFY_IMAGE_TAG: ${{ inputs.image_tag }}
+          NOTIFY_ARTIFACT_URL: ${{ inputs.artifact_url }}
+          NOTIFY_COMMIT_MESSAGE: ${{ inputs.commit_message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: |
+          telegram_api_url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+          echo "::add-mask::$telegram_api_url"
+
+          html_escape() {
+            printf "%s" "$1" | sed \
+              -e "s/&/\&amp;/g" \
+              -e "s/</\&lt;/g" \
+              -e "s/>/\&gt;/g"
+          }
+
+          if [ -n "$NOTIFY_TITLE" ]; then
+            commit_message=$(html_escape "$NOTIFY_COMMIT_MESSAGE")
+            text=$(printf "<b>%s</b>\n<b>Build %s</b>" "$NOTIFY_TITLE" "$NOTIFY_STATUS")
+
+            if [ -n "$NOTIFY_DETAILS" ]; then
+              text=$(printf "%s\n\n%s" "$text" "$NOTIFY_DETAILS")
+            fi
+
+            text=$(printf "%s\n\n<b>Actor:</b> %s\n<b>Repository:</b> %s\n<b>Branch:</b> %s" \
+              "$text" \
+              "${{ github.actor }}" \
+              "$REPOSITORY" \
+              "${{ github.ref_name }}")
+
+            if [ -n "$NOTIFY_IMAGE" ]; then
+              text=$(printf "%s\n<b>Image:</b> %s" "$text" "$NOTIFY_IMAGE")
+            elif [ -n "$NOTIFY_IMAGE_TAG" ]; then
+              image_owner="${GHCR_USERNAME:-${REPOSITORY%%/*}}"
+              image_name="${REPOSITORY#*/}"
+              text=$(printf "%s\n<b>Image:</b> ghcr.io/%s/%s:%s" "$text" "$image_owner" "$image_name" "$NOTIFY_IMAGE_TAG")
+            fi
+
+            text=$(printf "%s\n<b>Commit:</b> <a href=\"%s\">%s</a>" \
+              "$text" \
+              "$COMMIT_URL" \
+              "${GITHUB_SHA::7}")
+
+            if [ -n "$commit_message" ]; then
+              text=$(printf "%s\n%s" "$text" "$commit_message")
+            fi
+
+            if [ -n "$NOTIFY_ARTIFACT_URL" ]; then
+              text=$(printf "%s\n\n<a href=\"%s\">Download artifacts</a>" "$text" "$NOTIFY_ARTIFACT_URL")
+            else
+              text=$(printf "%s\n\n<a href=\"%s\">View workflow run</a>" "$text" "$RUN_URL")
+            fi
+          elif [ "$EVENT_NAME" = "pull_request_target" ]; then
+            title=$(html_escape "$PR_TITLE")
+            text=$(printf "<b>Grin pull request</b>\n<b>Status:</b> %s\n\n<b>Repository:</b> %s\n<b>PR:</b> <a href=\"%s\">#%s %s</a>" \
+              "$ACTION_NAME" \
+              "$REPOSITORY" \
+              "$PR_URL" \
+              "$PR_NUMBER" \
+              "$title")
+          else
+            title=$(html_escape "$ISSUE_TITLE")
+            text=$(printf "<b>Grin issue</b>\n<b>Status:</b> %s\n\n<b>Repository:</b> %s\n<b>Issue:</b> <a href=\"%s\">#%s %s</a>" \
+              "$ACTION_NAME" \
+              "$REPOSITORY" \
+              "$ISSUE_URL" \
+              "$ISSUE_NUMBER" \
+              "$title")
+          fi
+
+          payload=$(jq -n \
+            --arg chat_id "$TELEGRAM_CHAT_ID" \
+            --arg text "$text" \
+            '{chat_id: $chat_id, text: $text, parse_mode: "HTML", disable_web_page_preview: true}')
+
+          if [ -n "$TELEGRAM_MESSAGE_THREAD_ID" ]; then
+            payload=$(jq --argjson message_thread_id "$TELEGRAM_MESSAGE_THREAD_ID" \
+              '. + {message_thread_id: $message_thread_id}' <<< "$payload")
+          fi
+
+          curl -sSf \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$telegram_api_url" \
+            > /dev/null
