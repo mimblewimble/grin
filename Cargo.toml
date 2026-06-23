@@ -47,7 +47,7 @@ grin_store = { path = "./store", version = "5.5.1-alpha.0" }
 [dependencies.cursive]
 version = "0.21"
 default-features = false
-features = ["pancurses-backend"]
+features = ["crossterm-backend"]
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"]}
