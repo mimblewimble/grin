@@ -79,6 +79,10 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
         run: |
+          telegram_api_url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+          echo "::add-mask::$telegram_api_url"
+
           html_escape() {
             printf "%s" "$1" | sed \
               -e "s/&/\&amp;/g" \
@@ -153,5 +157,5 @@ jobs:
           curl -sSf \
             -H "Content-Type: application/json" \
             -d "$payload" \
-            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            "$telegram_api_url" \
             > /dev/null
