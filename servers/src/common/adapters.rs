@@ -99,6 +99,7 @@ impl PibdSegment {
 
 struct QueuedPibdSegment {
 	peer_info: PeerInfo,
+	archive_hash: Hash,
 	segment: PibdSegment,
 }
 
@@ -132,6 +133,16 @@ fn process_queued_pibd_segment(
 		.ok_or_else(|| chain::Error::Other("chain not available".to_owned()))?;
 	let archive_header = chain.txhashset_archive_header_header_only()?;
 	let segment_id = queued_segment.segment.segment_id();
+	if queued_segment.archive_hash != archive_header.hash() {
+		debug!(
+			"dropping stale PIBD segment {:?} from {} for archive header {} (current {})",
+			segment_id,
+			peer_addr,
+			queued_segment.archive_hash,
+			archive_header.hash(),
+		);
+		return Ok(());
+	}
 	let desegmenter = chain.desegmenter(&archive_header)?;
 	let mut desegmenter = desegmenter.write();
 	let res = if let Some(d) = desegmenter.as_mut() {
@@ -188,11 +199,9 @@ fn process_queued_pibd_segment(
 	} else {
 		Ok(())
 	};
-	if res.is_ok() {
-		sync_state.remove_pibd_segment(&segment_id);
-	} else {
+	if res.is_err() {
 		warn!(
-			"PIBD segment {:?} from peer {} failed validation and remains pending for retry",
+			"PIBD segment {:?} from peer {} failed validation",
 			segment_id, peer_addr
 		);
 		sync_state.reject_pibd_segment_from(&segment_id, peer_addr.0);
@@ -830,6 +839,9 @@ where
 			&segment_id,
 			peer_info.addr.0,
 			chain::pibd_params::REJECTED_SEGMENT_RETRY_SECS,
+		) || self.sync_state.rejected_pibd_peer(
+			peer_info.addr.0,
+			chain::pibd_params::REJECTED_SEGMENT_RETRY_SECS,
 		) {
 			debug!(
 				"ignoring rejected PIBD segment {:?} from {}",
@@ -837,34 +849,44 @@ where
 			);
 			return Ok(false);
 		}
-		if !self
+		let archive_hash = if let Some(hash) = self
 			.sync_state
-			.contains_pibd_segment_from(&segment_id, peer_info.addr.0)
+			.take_pibd_segment_from(&segment_id, peer_info.addr.0)
 		{
+			hash
+		} else {
 			debug!(
 				"ignoring unsolicited PIBD segment {:?} from {}",
 				segment_id, peer_info.addr
 			);
 			return Ok(true);
-		}
+		};
 		let queued = QueuedPibdSegment {
 			peer_info: peer_info.clone(),
+			archive_hash,
 			segment,
 		};
 		match self.pibd_segment_tx.try_send(queued) {
 			Ok(()) => Ok(true),
-			Err(mpsc::TrySendError::Full(_)) => {
+			Err(mpsc::TrySendError::Full(queued)) => {
 				warn!(
 					"PIBD receive queue full, dropping segment {:?} from {}",
 					segment_id, peer_info.addr
 				);
-				self.sync_state
-					.remove_pibd_segment_from(&segment_id, peer_info.addr.0);
+				self.sync_state.add_pibd_segment(
+					&segment_id,
+					queued.peer_info.addr.0,
+					queued.archive_hash,
+				);
 				Ok(true)
 			}
-			Err(mpsc::TrySendError::Disconnected(_)) => Err(chain::Error::Other(
-				"PIBD receive queue disconnected".to_owned(),
-			)),
+			Err(mpsc::TrySendError::Disconnected(_)) => {
+				error!("PIBD receive queue disconnected");
+				self.sync_state.set_sync_error(chain::Error::SyncError(
+					"PIBD receive queue disconnected".to_owned(),
+				));
+				Ok(true)
+			}
 		}
 	}
 

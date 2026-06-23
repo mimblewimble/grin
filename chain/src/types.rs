@@ -158,15 +158,22 @@ pub struct PIBDSegmentContainer {
 	pub request_time: DateTime<Utc>,
 	/// Peer that most recently received this request
 	pub last_peer: Option<SocketAddr>,
+	/// Archive header for this request
+	pub archive_hash: Hash,
 }
 
 impl PIBDSegmentContainer {
 	/// Return container with timestamp
-	pub fn new(identifier: SegmentTypeIdentifier, peer_addr: Option<SocketAddr>) -> Self {
+	pub fn new(
+		identifier: SegmentTypeIdentifier,
+		peer_addr: Option<SocketAddr>,
+		archive_hash: Hash,
+	) -> Self {
 		Self {
 			identifier,
 			request_time: Utc::now(),
 			last_peer: peer_addr,
+			archive_hash,
 		}
 	}
 }
@@ -182,7 +189,20 @@ pub struct RejectedPIBDSegment {
 	pub reject_time: DateTime<Utc>,
 }
 
+/// Recent PIBD rejections for a peer.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RejectedPIBDPeer {
+	/// Peer address
+	pub peer_addr: SocketAddr,
+	/// Last rejection time
+	pub reject_time: DateTime<Utc>,
+	/// Recent rejection count
+	pub reject_count: u32,
+}
+
 const MAX_REJECTED_PIBD_SEGMENTS: usize = 1024;
+const MAX_REJECTED_PIBD_PEERS: usize = 1024;
+const REJECTED_PIBD_PEER_THRESHOLD: u32 = 3;
 
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
@@ -196,6 +216,7 @@ pub struct SyncState {
 	/// and the sync loop)
 	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
 	rejected_pibd_segments: RwLock<Vec<RejectedPIBDSegment>>,
+	rejected_pibd_peers: RwLock<Vec<RejectedPIBDPeer>>,
 }
 
 impl SyncState {
@@ -206,6 +227,7 @@ impl SyncState {
 			sync_error: RwLock::new(None),
 			requested_pibd_segments: RwLock::new(vec![]),
 			rejected_pibd_segments: RwLock::new(vec![]),
+			rejected_pibd_peers: RwLock::new(vec![]),
 		}
 	}
 
@@ -326,14 +348,24 @@ impl SyncState {
 	}
 
 	/// Update PIBD segment list
-	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+	pub fn add_pibd_segment(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+		archive_hash: Hash,
+	) {
 		debug!("sync_state: tracking PIBD request for {:?}", id);
 		let mut requested_segments = self.requested_pibd_segments.write();
 		if let Some(existing) = requested_segments.iter_mut().find(|i| &i.identifier == id) {
 			existing.request_time = Utc::now();
 			existing.last_peer = Some(peer_addr);
+			existing.archive_hash = archive_hash;
 		} else {
-			requested_segments.push(PIBDSegmentContainer::new(id.clone(), Some(peer_addr)));
+			requested_segments.push(PIBDSegmentContainer::new(
+				id.clone(),
+				Some(peer_addr),
+				archive_hash,
+			));
 		}
 	}
 
@@ -347,14 +379,25 @@ impl SyncState {
 
 	/// Remove segment from list only if it is still pending for the given peer.
 	pub fn remove_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+		let _ = self.take_pibd_segment_from(id, peer_addr);
+	}
+
+	/// Take a pending request for the given peer.
+	pub fn take_pibd_segment_from(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<Hash> {
 		trace!(
-			"sync_state: removing PIBD request tracking for {:?} from {}",
+			"sync_state: taking PIBD request tracking for {:?} from {}",
 			id,
 			peer_addr
 		);
-		self.requested_pibd_segments
-			.write()
-			.retain(|i| &i.identifier != id || i.last_peer != Some(peer_addr));
+		let mut requested_segments = self.requested_pibd_segments.write();
+		let pos = requested_segments
+			.iter()
+			.position(|i| &i.identifier == id && i.last_peer == Some(peer_addr))?;
+		Some(requested_segments.remove(pos).archive_hash)
 	}
 
 	/// Remove segments with request timestamps less than cutoff time
@@ -384,18 +427,6 @@ impl SyncState {
 			.any(|i| &i.identifier == id)
 	}
 
-	/// Check whether segment is in request list for the given peer.
-	pub fn contains_pibd_segment_from(
-		&self,
-		id: &SegmentTypeIdentifier,
-		peer_addr: SocketAddr,
-	) -> bool {
-		self.requested_pibd_segments
-			.read()
-			.iter()
-			.any(|i| &i.identifier == id && i.last_peer == Some(peer_addr))
-	}
-
 	/// Mark a requested PIBD segment as rejected for this peer.
 	pub fn reject_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
 		self.remove_pibd_segment_from(id, peer_addr);
@@ -409,6 +440,22 @@ impl SyncState {
 		if rejected.len() > MAX_REJECTED_PIBD_SEGMENTS {
 			rejected.remove(0);
 		}
+		drop(rejected);
+
+		let mut rejected_peers = self.rejected_pibd_peers.write();
+		if let Some(existing) = rejected_peers.iter_mut().find(|i| i.peer_addr == peer_addr) {
+			existing.reject_time = Utc::now();
+			existing.reject_count = existing.reject_count.saturating_add(1);
+		} else {
+			rejected_peers.push(RejectedPIBDPeer {
+				peer_addr,
+				reject_time: Utc::now(),
+				reject_count: 1,
+			});
+		}
+		if rejected_peers.len() > MAX_REJECTED_PIBD_PEERS {
+			rejected_peers.remove(0);
+		}
 	}
 
 	/// Check whether this peer recently provided invalid data for this PIBD segment.
@@ -419,11 +466,31 @@ impl SyncState {
 		reject_seconds: i64,
 	) -> bool {
 		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
-		let mut rejected = self.rejected_pibd_segments.write();
-		rejected.retain(|i| i.reject_time > cutoff_time);
+		let rejected = self.rejected_pibd_segments.read();
 		rejected
 			.iter()
-			.any(|i| &i.identifier == id && i.peer_addr == peer_addr)
+			.any(|i| &i.identifier == id && i.peer_addr == peer_addr && i.reject_time > cutoff_time)
+	}
+
+	/// Check whether this peer has too many recent PIBD rejections.
+	pub fn rejected_pibd_peer(&self, peer_addr: SocketAddr, reject_seconds: i64) -> bool {
+		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
+		self.rejected_pibd_peers.read().iter().any(|i| {
+			i.peer_addr == peer_addr
+				&& i.reject_time > cutoff_time
+				&& i.reject_count >= REJECTED_PIBD_PEER_THRESHOLD
+		})
+	}
+
+	/// Prune expired PIBD rejection entries.
+	pub fn prune_rejected_pibd_segments(&self, reject_seconds: i64) {
+		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
+		self.rejected_pibd_segments
+			.write()
+			.retain(|i| i.reject_time > cutoff_time);
+		self.rejected_pibd_peers
+			.write()
+			.retain(|i| i.reject_time > cutoff_time);
 	}
 
 	/// Number of currently pending PIBD segment requests
@@ -795,5 +862,55 @@ mod tests {
 			sync_state.rejected_pibd_segments.read().len(),
 			MAX_REJECTED_PIBD_SEGMENTS
 		);
+	}
+
+	#[test]
+	fn take_pibd_segment_from_peer() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+
+		assert_eq!(
+			sync_state.take_pibd_segment_from(&id, peer_addr),
+			Some(archive_hash)
+		);
+		assert!(!sync_state.contains_pibd_segment(&id));
+		assert_eq!(sync_state.take_pibd_segment_from(&id, peer_addr), None);
+	}
+
+	#[test]
+	fn rejected_pibd_peer_threshold() {
+		let sync_state = SyncState::new();
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		for idx in 0..(REJECTED_PIBD_PEER_THRESHOLD - 1) {
+			let id = SegmentTypeIdentifier::new(
+				SegmentType::Kernel,
+				SegmentIdentifier {
+					height: 9,
+					idx: idx as u64,
+				},
+			);
+			sync_state.reject_pibd_segment_from(&id, peer_addr);
+		}
+
+		assert!(!sync_state.rejected_pibd_peer(peer_addr, 600));
+
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier {
+				height: 9,
+				idx: REJECTED_PIBD_PEER_THRESHOLD as u64,
+			},
+		);
+		sync_state.reject_pibd_segment_from(&id, peer_addr);
+
+		assert!(sync_state.rejected_pibd_peer(peer_addr, 600));
 	}
 }

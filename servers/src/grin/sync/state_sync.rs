@@ -270,6 +270,8 @@ impl StateSync {
 		let stale_segments = self
 			.sync_state
 			.remove_stale_pibd_requests(pibd_params::SEGMENT_REQUEST_TIMEOUT_SECS);
+		self.sync_state
+			.prune_rejected_pibd_segments(pibd_params::REJECTED_SEGMENT_RETRY_SECS);
 		if !stale_segments.is_empty() {
 			let stale_peers: HashSet<_> = stale_segments
 				.iter()
@@ -277,6 +279,13 @@ impl StateSync {
 				.collect();
 			for peer_addr in stale_peers {
 				// TODO: Consider retry-only exclusion first, and block after repeated PIBD timeouts.
+				if self.peers.is_blocked(peer_addr) {
+					debug!(
+						"state_sync: peer {} already blocked after PIBD timeout",
+						peer_addr
+					);
+					continue;
+				}
 				let _ = self.peers.block_peer(peer_addr, "PIBD segment timeout");
 				let is_outbound = self.peers.iter().outbound().by_addr(peer_addr).is_some();
 				if is_outbound {
@@ -421,7 +430,7 @@ impl StateSync {
 		let sync_state = self.sync_state.clone();
 		for (seg_id, excluded_peer) in request_candidates.iter() {
 			if sent_requests >= request_budget {
-				continue;
+				break;
 			}
 			if self.sync_state.contains_pibd_segment(seg_id) {
 				trace!("Request list contains, continuing: {:?}", seg_id);
@@ -485,35 +494,32 @@ impl StateSync {
 
 			// Choose a random "most work" peer, excluding peer from stale/retry segment
 			// and preferring outbound if at all possible.
+			let peer_usable = |p: &Arc<Peer>| {
+				!peers.is_blocked(p.info.addr)
+					&& !sync_state
+						.rejected_pibd_peer(p.info.addr.0, pibd_params::REJECTED_SEGMENT_RETRY_SECS)
+					&& !sync_state.rejected_pibd_segment_from(
+						seg_id,
+						p.info.addr.0,
+						pibd_params::REJECTED_SEGMENT_RETRY_SECS,
+					)
+			};
 			let peer = available_pibd_peers()
 				.outbound()
-				.with_filter(|p| {
-					!peers.is_blocked(p.info.addr)
-						&& !sync_state.rejected_pibd_segment_from(
-							seg_id,
-							p.info.addr.0,
-							pibd_params::REJECTED_SEGMENT_RETRY_SECS,
-						)
-				})
+				.with_filter(peer_usable)
 				.exclude(*excluded_peer)
 				.choose_random()
 				.or_else(|| {
 					available_pibd_peers()
 						.inbound()
-						.with_filter(|p| {
-							!peers.is_blocked(p.info.addr)
-								&& !sync_state.rejected_pibd_segment_from(
-									seg_id,
-									p.info.addr.0,
-									pibd_params::REJECTED_SEGMENT_RETRY_SECS,
-								)
-						})
+						.with_filter(peer_usable)
 						.exclude(*excluded_peer)
 						.choose_random()
 				});
 			if let Some(p) = peer {
 				// add to list of segments that are being tracked
-				self.sync_state.add_pibd_segment(seg_id, p.info.addr.0);
+				self.sync_state
+					.add_pibd_segment(seg_id, p.info.addr.0, archive_header.hash());
 				let res = match seg_id.segment_type {
 					SegmentType::Bitmap => p.send_bitmap_segment_request(
 						archive_header.hash(),
