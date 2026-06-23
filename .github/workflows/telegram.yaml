@@ -39,7 +39,7 @@ on:
       GHCR_USERNAME:
         required: false
   pull_request_target:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, closed]
     branches: [master, staging]
   issues:
     types: [opened, reopened]
@@ -66,6 +66,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
@@ -128,8 +129,12 @@ jobs:
             fi
           elif [ "$EVENT_NAME" = "pull_request_target" ]; then
             title=$(html_escape "$PR_TITLE")
+            pr_status="$ACTION_NAME"
+            if [ "$ACTION_NAME" = "closed" ] && [ "$PR_MERGED" = "true" ]; then
+              pr_status="merged"
+            fi
             text=$(printf "<b>Grin pull request</b>\n<b>Status:</b> %s\n\n<b>Repository:</b> %s\n<b>PR:</b> <a href=\"%s\">#%s %s</a>" \
-              "$ACTION_NAME" \
+              "$pr_status" \
               "$REPOSITORY" \
               "$PR_URL" \
               "$PR_NUMBER" \
@@ -154,8 +159,16 @@ jobs:
               '. + {message_thread_id: $message_thread_id}' <<< "$payload")
           fi
 
-          curl -sSf \
+          response_file=$(mktemp)
+          http_code=$(curl -sS \
+            -o "$response_file" \
+            -w "%{http_code}" \
             -H "Content-Type: application/json" \
             -d "$payload" \
-            "$telegram_api_url" \
-            > /dev/null
+            "$telegram_api_url")
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            description=$(jq -r '.description // "unknown error"' "$response_file")
+            echo "Telegram notification failed with HTTP $http_code: $description"
+            exit 1
+          fi
