@@ -23,3 +23,6 @@ name = "transaction_pool"
 path = "fuzz_targets/transaction_pool.rs"
 test = false
 doc = false
+
+[package.metadata]
+cargo-fuzz = true

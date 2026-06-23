@@ -280,6 +280,102 @@ pub struct BitmapSegment {
 	proof: SegmentProof,
 }
 
+impl BitmapSegment {
+	// Matches the upper end of the currently served PIBD bitmap segment range.
+	const MAX_SEGMENT_HEIGHT: u8 = 13;
+
+	fn max_chunks(identifier: &SegmentIdentifier) -> Result<usize, ser::Error> {
+		if identifier.height > Self::MAX_SEGMENT_HEIGHT {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		1usize
+			.checked_shl(identifier.height as u32)
+			.ok_or(ser::Error::TooLargeReadErr)
+	}
+
+	fn leaf_offset(identifier: &SegmentIdentifier) -> Result<u64, ser::Error> {
+		let segment_capacity = 1u64
+			.checked_shl(identifier.height as u32)
+			.ok_or(ser::Error::TooLargeReadErr)?;
+		segment_capacity
+			.checked_mul(identifier.idx)
+			.ok_or(ser::Error::TooLargeReadErr)
+	}
+
+	fn n_chunks(blocks: &[BitmapBlock]) -> Result<usize, ser::Error> {
+		let (last, full_blocks) = blocks.split_last().ok_or(ser::Error::CorruptedData)?;
+		for block in full_blocks {
+			if block.try_n_chunks()? != BitmapBlock::NCHUNKS {
+				return Err(ser::Error::CorruptedData);
+			}
+		}
+		let last_chunks = last.try_n_chunks()?;
+		if last_chunks == 0 {
+			return Err(ser::Error::CorruptedData);
+		}
+		full_blocks
+			.len()
+			.checked_mul(BitmapBlock::NCHUNKS)
+			.and_then(|n| n.checked_add(last_chunks))
+			.ok_or(ser::Error::TooLargeReadErr)
+	}
+
+	fn validate_blocks(
+		identifier: &SegmentIdentifier,
+		blocks: &[BitmapBlock],
+	) -> Result<usize, ser::Error> {
+		let offset = Self::leaf_offset(identifier)?;
+		let n_chunks = Self::n_chunks(blocks)?;
+		if n_chunks > Self::max_chunks(identifier)? {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		offset
+			.checked_add((n_chunks - 1) as u64)
+			.ok_or(ser::Error::TooLargeReadErr)?;
+		Ok(n_chunks)
+	}
+
+	/// Convert this bitmap segment into a PMMR segment, validating its encoded shape.
+	pub fn into_segment(self) -> Result<Segment<BitmapChunk>, ser::Error> {
+		let BitmapSegment {
+			identifier,
+			blocks,
+			proof,
+		} = self;
+
+		let n_chunks = Self::validate_blocks(&identifier, &blocks)?;
+		let mut leaf_pos = Vec::with_capacity(n_chunks);
+		let mut chunks = Vec::with_capacity(n_chunks);
+		let offset = Self::leaf_offset(&identifier)?;
+		for i in 0..(n_chunks as u64) {
+			let insertion_idx = offset.checked_add(i).ok_or(ser::Error::TooLargeReadErr)?;
+			leaf_pos.push(pmmr::insertion_to_pmmr_index(insertion_idx));
+			chunks.push(BitmapChunk::new());
+		}
+
+		for (block_idx, block) in blocks.into_iter().enumerate() {
+			block.try_n_chunks()?;
+			let offset = block_idx * BitmapBlock::NCHUNKS;
+			for (i, _) in block.inner.iter().enumerate().filter(|&(_, v)| v) {
+				chunks
+					.get_mut(offset + i / BitmapChunk::LEN_BITS)
+					.ok_or(ser::Error::CorruptedData)?
+					.0
+					.set(i % BitmapChunk::LEN_BITS, true);
+			}
+		}
+
+		Ok(Segment::from_parts(
+			identifier,
+			Vec::new(),
+			Vec::new(),
+			leaf_pos,
+			chunks,
+			proof,
+		))
+	}
+}
+
 impl Writeable for BitmapSegment {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		Writeable::write(&self.identifier, writer)?;
@@ -297,10 +393,20 @@ impl Readable for BitmapSegment {
 		let identifier: SegmentIdentifier = Readable::read(reader)?;
 
 		let n_blocks = reader.read_u16()? as usize;
+		if n_blocks == 0 {
+			return Err(ser::Error::CorruptedData);
+		}
+		let max_blocks = (BitmapSegment::max_chunks(&identifier)? + BitmapBlock::NCHUNKS - 1)
+			/ BitmapBlock::NCHUNKS;
+		if n_blocks > max_blocks {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		BitmapSegment::leaf_offset(&identifier)?;
 		let mut blocks = Vec::<BitmapBlock>::with_capacity(n_blocks);
 		for _ in 0..n_blocks {
 			blocks.push(Readable::read(reader)?);
 		}
+		BitmapSegment::validate_blocks(&identifier, &blocks)?;
 		let proof = Readable::read(reader)?;
 
 		Ok(Self {
@@ -348,36 +454,7 @@ impl From<Segment<BitmapChunk>> for BitmapSegment {
 // TODO: this can be sped up with some `unsafe` code
 impl From<BitmapSegment> for Segment<BitmapChunk> {
 	fn from(segment: BitmapSegment) -> Self {
-		let BitmapSegment {
-			identifier,
-			blocks,
-			proof,
-		} = segment;
-
-		// Count the number of chunks taking into account that the final block might be smaller
-		let n_chunks = (blocks.len() - 1) * BitmapBlock::NCHUNKS
-			+ blocks.last().map(|b| b.n_chunks()).unwrap_or(0);
-		let mut leaf_pos = Vec::with_capacity(n_chunks);
-		let mut chunks = Vec::with_capacity(n_chunks);
-		let offset = (1 << identifier.height) * identifier.idx;
-		for i in 0..(n_chunks as u64) {
-			leaf_pos.push(pmmr::insertion_to_pmmr_index(offset + i));
-			chunks.push(BitmapChunk::new());
-		}
-
-		for (block_idx, block) in blocks.into_iter().enumerate() {
-			assert!(block.inner.len() <= BitmapBlock::NBITS as usize);
-			let offset = block_idx * BitmapBlock::NCHUNKS;
-			for (i, _) in block.inner.iter().enumerate().filter(|&(_, v)| v) {
-				chunks
-					.get_mut(offset + i / BitmapChunk::LEN_BITS)
-					.unwrap()
-					.0
-					.set(i % BitmapChunk::LEN_BITS, true);
-			}
-		}
-
-		Segment::from_parts(identifier, Vec::new(), Vec::new(), leaf_pos, chunks, proof)
+		segment.into_segment().expect("valid bitmap segment")
 	}
 }
 
@@ -401,12 +478,16 @@ impl BitmapBlock {
 		}
 	}
 
-	fn n_chunks(&self) -> usize {
+	fn try_n_chunks(&self) -> Result<usize, ser::Error> {
 		let length = self.inner.len();
-		assert_eq!(length % BitmapChunk::LEN_BITS, 0);
+		if length % BitmapChunk::LEN_BITS != 0 {
+			return Err(ser::Error::CorruptedData);
+		}
 		let n_chunks = length / BitmapChunk::LEN_BITS;
-		assert!(n_chunks <= BitmapBlock::NCHUNKS);
-		n_chunks
+		if n_chunks > BitmapBlock::NCHUNKS {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		Ok(n_chunks)
 	}
 }
 
@@ -470,7 +551,11 @@ impl Readable for BitmapBlock {
 				let mut inner = BitVec::from_elem(n_bits, false);
 				let n = reader.read_u16()?;
 				for _ in 0..n {
-					inner.set(reader.read_u16()? as usize, true);
+					let pos = reader.read_u16()? as usize;
+					if pos >= n_bits {
+						return Err(ser::Error::CorruptedData);
+					}
+					inner.set(pos, true);
 				}
 				inner
 			}
@@ -479,7 +564,11 @@ impl Readable for BitmapBlock {
 				let mut inner = BitVec::from_elem(n_bits, true);
 				let n = reader.read_u16()?;
 				for _ in 0..n {
-					inner.set(reader.read_u16()? as usize, false);
+					let pos = reader.read_u16()? as usize;
+					if pos >= n_bits {
+						return Err(ser::Error::CorruptedData);
+					}
+					inner.set(pos, false);
 				}
 				inner
 			}
@@ -598,5 +687,19 @@ mod tests {
 		let entries =
 			thread_rng().gen_range(BitmapChunk::LEN_BITS, BitmapBlock::NBITS as usize / 16);
 		test_roundtrip(entries, true, 2, 4 + 2 * entries, 61);
+	}
+
+	#[test]
+	fn block_ser_rejects_bad_indices() {
+		for mode in [1, 2] {
+			let mut cursor = Cursor::new(vec![1, mode, 0, 1, 4, 0]);
+			let mut reader = BinReader::new(
+				&mut cursor,
+				ProtocolVersion(1),
+				DeserializationMode::default(),
+			);
+			let res: Result<BitmapBlock, _> = Readable::read(&mut reader);
+			assert!(matches!(res, Err(ser::Error::CorruptedData)));
+		}
 	}
 }

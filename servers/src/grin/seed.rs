@@ -35,18 +35,24 @@ use crate::util::StopState;
 
 /// DNS Seeds with contacts associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
-	"mainnet-seed.grinnode.live", // info@grinnode.live
-	"grincoin.org",               // xmpp:aglkm@conversations.im
-	"main.gri.mw",                // admin@gri.mw
-	"mainnet.grinffindor.org",    // support@grinffindor.org
-	"main-seed.grin.money",       // support@grinily.com
+	"mainnet-seed.grinnode.live",       // info@grinnode.live
+	"grincoin.org",                     // xmpp:aglkm@conversations.im
+	"main.gri.mw",                      // admin@gri.mw
+	"mainnet.grinffindor.org",          // support@grinffindor.org
+	"main-seed.grin.money",             // support@grinily.com
+	"mainnet.grin-coffee.com",          // grin-coffee@proton.me
+	"main.seed.grin.raubritter.org",    // er@raubritter.org
+	"mainnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 /// DNS Seeds with contacts associated - Testnet
 pub const TESTNET_DNS_SEEDS: &[&str] = &[
-	"testnet.grincoin.org",    // xmpp:aglkm@conversations.im
-	"test.gri.mw",             // admin@gri.mw
-	"testnet.grinffindor.org", // support@grinffindor.org
-	"test-seed.grin.money",    // support@grinily.com
+	"testnet.grincoin.org",             // xmpp:aglkm@conversations.im
+	"test.gri.mw",                      // admin@gri.mw
+	"testnet.grinffindor.org",          // support@grinffindor.org
+	"test-seed.grin.money",             // support@grinily.com
+	"testnet.grin-coffee.com",          // grin-coffee@proton.me
+	"test.seed.grin.raubritter.org",    // er@raubritter.org
+	"testnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 
 pub fn connect_and_monitor(
@@ -192,7 +198,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		return;
 	}
 
-	if !peers.enough_outbound_peers() {
+	let enough_outbound = peers.enough_outbound_peers();
+	if !enough_outbound {
 		// loop over connected peers that can provide peer lists
 		// ask them for their list of peers
 		let mut connected_peers: Vec<PeerAddr> = vec![];
@@ -237,7 +244,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		.iter()
 		.filter(|p| {
 			peers.get_connected_peer(p.addr).is_none()
-				&& Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+				&& (!enough_outbound
+					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
@@ -266,7 +274,9 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// check min 32 (max 128, if there are no healthy and unknown) random defunct peers no more often than 1 hour per peer.
 	for dp in defuncts
 		.iter()
-		.filter(|p| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
+		.filter(|p| {
+			!enough_outbound || Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
 		new_peers.push(&dp.addr);
