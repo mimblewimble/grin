@@ -21,7 +21,8 @@ use grin_core::{genesis, global};
 use grin_p2p as p2p;
 use grin_servers::{resolve_dns_to_addrs, MAINNET_DNS_SEEDS, TESTNET_DNS_SEEDS};
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
+use std::net::TcpStream;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use thiserror::Error;
@@ -88,29 +89,45 @@ pub struct SeedCheckConnectAttempt {
 	pub handshake_success: bool,
 	pub user_agent: Option<String>,
 	pub capabilities: Option<String>,
+	pub error: Option<String>,
 }
 
-pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
+pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult> {
 	let mut result = vec![];
 	let (default_seeds, port) = match is_testnet {
 		true => (TESTNET_DNS_SEEDS, "13414"),
 		false => (MAINNET_DNS_SEEDS, "3414"),
+	};
+	let seeds = match seed {
+		Some(seed) => vec![seed],
+		None => default_seeds.to_vec(),
 	};
 
 	if is_testnet {
 		global::set_local_chain_type(global::ChainTypes::Testnet);
 	}
 
+	eprintln!(
+		"Running seedcheck for {} on port {}",
+		if is_testnet { "testnet" } else { "mainnet" },
+		port
+	);
+
 	let config = p2p::types::P2PConfig::default();
 	let adapter = Arc::new(p2p::DummyAdapter {});
+	let tmp_root = ".__grintmp__";
+	let mut data_root = PathBuf::from(tmp_root);
+	data_root.push(format!("seedcheck-{}", std::process::id()));
+	let peer_store_root = data_root.join("peer_store_root");
 	let peers = Arc::new(p2p::Peers::new(
-		p2p::store::PeerStore::new(".__grintmp__/peer_store_root").unwrap(),
+		p2p::store::PeerStore::new(&peer_store_root.to_string_lossy()).unwrap(),
 		adapter,
 		config.clone(),
 	));
 
-	for s in default_seeds.iter() {
+	for s in seeds.iter() {
 		info!("Checking seed health for {}", s);
+		eprintln!("Checking seed {}", s);
 		let mut seed_result = SeedCheckResult::default();
 		seed_result.url = s.to_string();
 		let resolved_dns_entries = resolve_dns_to_addrs(&vec![format!("{}:{}", s, port)]);
@@ -124,10 +141,14 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 		for r in resolved_dns_entries.iter().rev() {
 			let res = check_seed_health(*r, is_testnet, &peers);
 			if let Ok(p) = res {
+				let user_agent = p.info.user_agent.clone();
+				let capabilities = format!("{:?}", p.info.capabilities);
 				info!(
 					"SUCCESS - Performed Handshake with seed for {} at {}. {} - {:?}",
-					s, r, p.info.user_agent, p.info.capabilities
+					s, r, user_agent, p.info.capabilities
 				);
+				p.stop();
+				p.wait();
 				//info!("{:?}", p);
 				seed_result.success = true;
 				seed_result
@@ -135,10 +156,11 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 					.push(SeedCheckConnectAttempt {
 						ip_addr: r.to_string(),
 						handshake_success: true,
-						user_agent: Some(p.info.user_agent),
-						capabilities: Some(format!("{:?}", p.info.capabilities)),
+						user_agent: Some(user_agent),
+						capabilities: Some(capabilities),
+						error: None,
 					});
-			} else {
+			} else if let Err(e) = res {
 				seed_result
 					.unsuccessful_attempts
 					.push(SeedCheckConnectAttempt {
@@ -146,6 +168,7 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 						handshake_success: false,
 						user_agent: None,
 						capabilities: None,
+						error: Some(e.to_string()),
 					});
 			}
 		}
@@ -160,8 +183,18 @@ pub fn check_seeds(is_testnet: bool) -> Vec<SeedCheckResult> {
 		result.push(seed_result);
 	}
 
-	// Clean up temporary files
-	fs::remove_dir_all(".__grintmp__").expect("Unable to delete temporary files");
+	drop(peers);
+
+	// Clean up temporary files for this process, then remove the common root
+	// only if no other seedcheck process is using it.
+	if let Err(e) = fs::remove_dir_all(&data_root) {
+		debug!("Unable to delete temporary seedcheck files: {:?}", e);
+		eprintln!(
+			"WARN cleanup: unable to delete temporary seedcheck files: {:?}",
+			e
+		);
+	}
+	let _ = fs::remove_dir(tmp_root);
 
 	result
 }
@@ -182,14 +215,14 @@ fn check_seed_health(
 
 	match TcpStream::connect_timeout(&addr.0, Duration::from_secs(5)) {
 		Ok(stream) => {
-			let addr = SocketAddr::new(config.host, config.port);
+			let self_addr = p2p::PeerAddr::from_ip(config.host);
 			let total_diff = Difficulty::from_num(1);
 
 			let peer = p2p::Peer::connect(
 				stream,
 				capabilities,
 				total_diff,
-				p2p::PeerAddr(addr),
+				self_addr,
 				&handshake,
 				peers.clone(),
 			)?;

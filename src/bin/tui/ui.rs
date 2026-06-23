@@ -72,7 +72,7 @@ impl UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
 
 		let mut grin_ui = UI {
-			cursive: cursive::default().into_runner(),
+			cursive: cursive::crossterm().into_runner(),
 			ui_tx,
 			ui_rx,
 			controller_tx,
@@ -269,8 +269,8 @@ impl Controller {
 				return match message {
 					ControllerMessage::Shutdown => {
 						warn!("Shutdown in progress, please wait");
-						self.ui.stop();
 						self.stop_server();
+						self.ui.stop();
 						exit_code
 					}
 				};
