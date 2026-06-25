@@ -460,14 +460,16 @@ impl StateSync {
 				})
 			};
 
+			let peer_usable = |p: &Arc<Peer>| {
+				!peers.is_blocked(p.info.addr)
+					&& !sync_state.rejected_pibd_segment_from_peer(seg_id, p.info.addr.0)
+			};
+
 			// If there are no suitable PIBD-Enabled peers, AND there hasn't been one for a minute,
 			// abort PIBD and fall back to txhashset download
 			// Waiting a minute helps ensures that the cancellation isn't simply due to a single non-PIBD enabled
 			// peer having the max difficulty
-			if available_pibd_peers()
-				.with_filter(|p| !peers.is_blocked(p.info.addr))
-				.count() == 0
-			{
+			if available_pibd_peers().with_filter(peer_usable).count() == 0 {
 				if let None = self.earliest_zero_pibd_peer_time {
 					self.set_earliest_zero_pibd_peer_time(Some(Utc::now()));
 				}
@@ -494,10 +496,6 @@ impl StateSync {
 
 			// Choose a random "most work" peer, excluding peer from stale/retry segment
 			// and preferring outbound if at all possible.
-			let peer_usable = |p: &Arc<Peer>| {
-				!peers.is_blocked(p.info.addr)
-					&& !sync_state.rejected_pibd_segment_from_peer(seg_id, p.info.addr.0)
-			};
 			let peer = available_pibd_peers()
 				.outbound()
 				.with_filter(peer_usable)

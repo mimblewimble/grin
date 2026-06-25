@@ -509,7 +509,14 @@ impl SyncState {
 
 	/// Remove segment from list only if it is still pending for the given peer.
 	pub fn remove_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
-		let _ = self.take_pibd_segment_from(id, peer_addr);
+		trace!(
+			"sync_state: removing PIBD request tracking for {:?} from {}",
+			id,
+			peer_addr,
+		);
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| &i.identifier != id || i.last_peer != Some(peer_addr));
 	}
 
 	/// Remove segment from list only if it is still pending for the given peer and archive.
@@ -528,24 +535,6 @@ impl SyncState {
 		self.requested_pibd_segments.write().retain(|i| {
 			&i.identifier != id || i.last_peer != Some(peer_addr) || i.archive_hash != archive_hash
 		});
-	}
-
-	/// Take a pending request for the given peer.
-	pub fn take_pibd_segment_from(
-		&self,
-		id: &SegmentTypeIdentifier,
-		peer_addr: SocketAddr,
-	) -> Option<Hash> {
-		trace!(
-			"sync_state: taking PIBD request tracking for {:?} from {}",
-			id,
-			peer_addr
-		);
-		let mut requested_segments = self.requested_pibd_segments.write();
-		let pos = requested_segments
-			.iter()
-			.position(|i| &i.identifier == id && i.last_peer == Some(peer_addr))?;
-		Some(requested_segments.remove(pos).archive_hash)
 	}
 
 	/// Return the archive hash for a pending request from the given peer.
@@ -1025,7 +1014,7 @@ mod tests {
 	}
 
 	#[test]
-	fn take_pibd_segment_from_peer() {
+	fn remove_pibd_segment_from_peer() {
 		let sync_state = SyncState::new();
 		let id = SegmentTypeIdentifier::new(
 			SegmentType::Kernel,
@@ -1036,12 +1025,11 @@ mod tests {
 
 		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
 
-		assert_eq!(
-			sync_state.take_pibd_segment_from(&id, peer_addr),
-			Some(archive_hash)
-		);
+		sync_state.remove_pibd_segment_from(&id, peer_addr);
 		assert!(!sync_state.contains_pibd_segment(&id));
-		assert_eq!(sync_state.take_pibd_segment_from(&id, peer_addr), None);
+
+		sync_state.remove_pibd_segment_from(&id, peer_addr);
+		assert!(!sync_state.contains_pibd_segment(&id));
 	}
 
 	#[test]
