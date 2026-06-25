@@ -499,7 +499,7 @@ impl Peers {
 		blocked.insert(peer_addr, (expiry, times));
 
 		warn!(
-			"state_sync: block peer {} ({}) for {} times: {}",
+			"state_sync: block peer {} ({}) for {} seconds, {} time",
 			peer_addr, reason, duration, times
 		);
 		Ok(())

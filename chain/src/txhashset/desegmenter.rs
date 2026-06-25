@@ -1109,9 +1109,10 @@ impl Desegmenter {
 			let theoretical_pmmr_size =
 				SegmentIdentifier::pmmr_size(cur_segment_count, self.default_kernel_segment_height);
 			if local_kernel_mmr_size < theoretical_pmmr_size {
-				debug!(
+				trace!(
 					"theoretical_pmmr_size {} is bigger than the current mmr size {}",
-					theoretical_pmmr_size, local_kernel_mmr_size
+					theoretical_pmmr_size,
+					local_kernel_mmr_size
 				);
 				cur_segment_count -= 1;
 			}
