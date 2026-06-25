@@ -406,19 +406,21 @@ impl SyncState {
 		queued_segment: QueuedPIBDSegment,
 	) -> Result<(), Error> {
 		let peer_addr = queued_segment.peer_addr;
+		let archive_hash = queued_segment.archive_hash;
 		let chain = chain
 			.upgrade()
 			.ok_or_else(|| Error::Other("chain not available".to_owned()))?;
 		let archive_header = chain.txhashset_archive_header_header_only()?;
 		let segment_id = queued_segment.segment.segment_id();
-		if queued_segment.archive_hash != archive_header.hash() {
+		if archive_hash != archive_header.hash() {
 			debug!(
 				"dropping stale PIBD segment {:?} from {} for archive header {} (current {})",
 				segment_id,
 				peer_addr,
-				queued_segment.archive_hash,
+				archive_hash,
 				archive_header.hash(),
 			);
+			self.remove_pibd_segment_for_archive(&segment_id, peer_addr, archive_hash);
 			return Ok(());
 		}
 		let desegmenter = chain.desegmenter(&archive_header)?;
@@ -469,6 +471,8 @@ impl SyncState {
 				segment_id, peer_addr
 			);
 			self.reject_pibd_segment_from(&segment_id, peer_addr);
+		} else {
+			self.remove_pibd_segment_for_archive(&segment_id, peer_addr, archive_hash);
 		}
 		res
 	}
@@ -508,6 +512,24 @@ impl SyncState {
 		let _ = self.take_pibd_segment_from(id, peer_addr);
 	}
 
+	/// Remove segment from list only if it is still pending for the given peer and archive.
+	pub fn remove_pibd_segment_for_archive(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+		archive_hash: Hash,
+	) {
+		trace!(
+			"sync_state: removing PIBD request tracking for {:?} from {} and archive {}",
+			id,
+			peer_addr,
+			archive_hash
+		);
+		self.requested_pibd_segments.write().retain(|i| {
+			&i.identifier != id || i.last_peer != Some(peer_addr) || i.archive_hash != archive_hash
+		});
+	}
+
 	/// Take a pending request for the given peer.
 	pub fn take_pibd_segment_from(
 		&self,
@@ -524,6 +546,19 @@ impl SyncState {
 			.iter()
 			.position(|i| &i.identifier == id && i.last_peer == Some(peer_addr))?;
 		Some(requested_segments.remove(pos).archive_hash)
+	}
+
+	/// Return the archive hash for a pending request from the given peer.
+	pub fn get_pibd_segment_archive_hash(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<Hash> {
+		self.requested_pibd_segments
+			.read()
+			.iter()
+			.find(|i| &i.identifier == id && i.last_peer == Some(peer_addr))
+			.map(|i| i.archive_hash)
 	}
 
 	/// Remove segments with request timestamps less than cutoff time
@@ -1007,6 +1042,46 @@ mod tests {
 		);
 		assert!(!sync_state.contains_pibd_segment(&id));
 		assert_eq!(sync_state.take_pibd_segment_from(&id, peer_addr), None);
+	}
+
+	#[test]
+	fn get_pibd_segment_archive_hash() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+
+		assert_eq!(
+			sync_state.get_pibd_segment_archive_hash(&id, peer_addr),
+			Some(archive_hash)
+		);
+		assert!(sync_state.contains_pibd_segment(&id));
+	}
+
+	#[test]
+	fn remove_pibd_segment_for_archive() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+		let other_archive_hash = Hash::from_vec(&[2; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+		sync_state.remove_pibd_segment_for_archive(&id, peer_addr, other_archive_hash);
+
+		assert!(sync_state.contains_pibd_segment(&id));
+
+		sync_state.remove_pibd_segment_for_archive(&id, peer_addr, archive_hash);
+
+		assert!(!sync_state.contains_pibd_segment(&id));
 	}
 
 	#[test]

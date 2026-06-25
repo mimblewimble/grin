@@ -17,6 +17,7 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Weak};
 use std::thread;
@@ -652,11 +653,25 @@ where
 					match msg {
 						NetAdapterWorkerMessage::PIBDSegment(s) => {
 							let segment_id = s.segment.segment_id();
-							if let Err(e) = sync_state.process_queued_pibd_segment(&chain, s) {
-								error!(
-									"PIBD segment processing failed for {:?}: {}",
-									segment_id, e
-								);
+							let peer_addr = s.peer_addr;
+							let res = catch_unwind(AssertUnwindSafe(|| {
+								sync_state.process_queued_pibd_segment(&chain, s)
+							}));
+							match res {
+								Ok(Ok(())) => {}
+								Ok(Err(e)) => {
+									error!(
+										"PIBD segment processing failed for {:?}: {}",
+										segment_id, e
+									);
+								}
+								Err(_) => {
+									error!(
+										"PIBD segment processing panicked for {:?} from {}",
+										segment_id, peer_addr
+									);
+									sync_state.reject_pibd_segment_from(&segment_id, peer_addr);
+								}
 							}
 						}
 					}
@@ -703,7 +718,7 @@ where
 		}
 		let archive_hash = if let Some(hash) = self
 			.sync_state
-			.take_pibd_segment_from(&segment_id, peer_info.addr.0)
+			.get_pibd_segment_archive_hash(&segment_id, peer_info.addr.0)
 		{
 			hash
 		} else {
@@ -714,29 +729,34 @@ where
 			return Ok(true);
 		};
 		let queued = QueuedPIBDSegment {
-			peer_addr: peer_info.clone().addr.0,
+			peer_addr: peer_info.addr.0,
 			archive_hash,
 			segment,
 		};
 		match self
 			.tx
-			.try_send(NetAdapterWorkerMessage::PIBDSegment(queued.clone()))
+			.try_send(NetAdapterWorkerMessage::PIBDSegment(queued))
 		{
 			Ok(()) => Ok(true),
-			Err(mpsc::TrySendError::Full(_)) => {
+			Err(mpsc::TrySendError::Full(NetAdapterWorkerMessage::PIBDSegment(queued))) => {
 				warn!(
 					"PIBD receive queue full, dropping segment {:?} from {}",
 					segment_id, peer_info.addr
 				);
-				self.sync_state.add_pibd_segment(
+				self.sync_state.remove_pibd_segment_for_archive(
 					&segment_id,
 					queued.peer_addr,
 					queued.archive_hash,
 				);
 				Ok(true)
 			}
-			Err(mpsc::TrySendError::Disconnected(_)) => {
+			Err(mpsc::TrySendError::Disconnected(NetAdapterWorkerMessage::PIBDSegment(queued))) => {
 				error!("PIBD receive queue disconnected");
+				self.sync_state.remove_pibd_segment_for_archive(
+					&segment_id,
+					queued.peer_addr,
+					queued.archive_hash,
+				);
 				self.sync_state.set_sync_error(chain::Error::SyncError(
 					"PIBD receive queue disconnected".to_owned(),
 				));
