@@ -835,14 +835,10 @@ where
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		let segment_id = segment.segment_id();
-		if self.sync_state.rejected_pibd_segment_from(
-			&segment_id,
-			peer_info.addr.0,
-			chain::pibd_params::REJECTED_SEGMENT_RETRY_SECS,
-		) || self.sync_state.rejected_pibd_peer(
-			peer_info.addr.0,
-			chain::pibd_params::REJECTED_SEGMENT_RETRY_SECS,
-		) {
+		if self
+			.sync_state
+			.rejected_pibd_segment_from_peer(&segment_id, peer_info.addr.0)
+		{
 			debug!(
 				"ignoring rejected PIBD segment {:?} from {}",
 				segment_id, peer_info.addr

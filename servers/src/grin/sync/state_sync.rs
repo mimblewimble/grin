@@ -496,13 +496,7 @@ impl StateSync {
 			// and preferring outbound if at all possible.
 			let peer_usable = |p: &Arc<Peer>| {
 				!peers.is_blocked(p.info.addr)
-					&& !sync_state
-						.rejected_pibd_peer(p.info.addr.0, pibd_params::REJECTED_SEGMENT_RETRY_SECS)
-					&& !sync_state.rejected_pibd_segment_from(
-						seg_id,
-						p.info.addr.0,
-						pibd_params::REJECTED_SEGMENT_RETRY_SECS,
-					)
+					&& !sync_state.rejected_pibd_segment_from_peer(seg_id, p.info.addr.0)
 			};
 			let peer = available_pibd_peers()
 				.outbound()
