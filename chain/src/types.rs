@@ -584,23 +584,22 @@ impl SyncState {
 		}
 	}
 
-	/// Check whether this peer recently provided invalid data for this PIBD segment.
-	pub fn rejected_pibd_segment_from(
+	/// Check whether this peer recently provided invalid PIBD data.
+	pub fn rejected_pibd_segment_from_peer(
 		&self,
 		id: &SegmentTypeIdentifier,
 		peer_addr: SocketAddr,
-		reject_seconds: i64,
 	) -> bool {
-		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
+		let cutoff_time =
+			Utc::now() - Duration::seconds(crate::pibd_params::REJECTED_SEGMENT_RETRY_SECS);
 		let rejected = self.rejected_pibd_segments.read();
-		rejected
+		if rejected
 			.iter()
 			.any(|i| &i.identifier == id && i.peer_addr == peer_addr && i.reject_time > cutoff_time)
-	}
+		{
+			return true;
+		}
 
-	/// Check whether this peer has too many recent PIBD rejections.
-	pub fn rejected_pibd_peer(&self, peer_addr: SocketAddr, reject_seconds: i64) -> bool {
-		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
 		self.rejected_pibd_peers.read().iter().any(|i| {
 			i.peer_addr == peer_addr
 				&& i.reject_time > cutoff_time
@@ -1026,7 +1025,20 @@ mod tests {
 			sync_state.reject_pibd_segment_from(&id, peer_addr);
 		}
 
-		assert!(!sync_state.rejected_pibd_peer(peer_addr, 600));
+		let rejected_id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 0 },
+		);
+		assert!(sync_state.rejected_pibd_segment_from_peer(&rejected_id, peer_addr));
+
+		let other_id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier {
+				height: 9,
+				idx: (REJECTED_PIBD_PEER_THRESHOLD + 1) as u64,
+			},
+		);
+		assert!(!sync_state.rejected_pibd_segment_from_peer(&other_id, peer_addr));
 
 		let id = SegmentTypeIdentifier::new(
 			SegmentType::Kernel,
@@ -1037,6 +1049,6 @@ mod tests {
 		);
 		sync_state.reject_pibd_segment_from(&id, peer_addr);
 
-		assert!(sync_state.rejected_pibd_peer(peer_addr, 600));
+		assert!(sync_state.rejected_pibd_segment_from_peer(&other_id, peer_addr));
 	}
 }
