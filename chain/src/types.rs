@@ -16,13 +16,17 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use grin_core::core::{OutputIdentifier, Segment, SegmentType, TxKernel};
+use grin_util::secp::pedersen::RangeProof;
 use std::net::SocketAddr;
+use std::sync::Weak;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::Error;
+use crate::txhashset::BitmapChunk;
 use crate::util::{RwLock, RwLockWriteGuard};
 
 bitflags! {
@@ -147,6 +151,54 @@ impl Default for TxHashsetDownloadStats {
 			total_size: 0,
 		}
 	}
+}
+
+/// PIBD segment type to process.
+#[derive(Clone)]
+pub enum PIBDSegment {
+	/// Bitmap (block hash, output root, segment).
+	Bitmap(Hash, Hash, Segment<BitmapChunk>),
+	/// Output (block hash, bitmap root, segment).
+	Output(Hash, Hash, Segment<OutputIdentifier>),
+	/// RangeProof (block hash, segment).
+	RangeProof(Hash, Segment<RangeProof>),
+	/// Kernel (block hash, segment).
+	Kernel(Hash, Segment<TxKernel>),
+}
+
+impl PIBDSegment {
+	/// Get PIBD segment identifier.
+	pub fn segment_id(&self) -> SegmentTypeIdentifier {
+		match self {
+			PIBDSegment::Bitmap(_, _, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Bitmap,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::Output(_, _, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Output,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::RangeProof(_, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::RangeProof,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::Kernel(_, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Kernel,
+				identifier: segment.identifier().clone(),
+			},
+		}
+	}
+}
+
+/// Received PIBD segment to process from the peer.
+#[derive(Clone)]
+pub struct QueuedPIBDSegment {
+	/// Peer from where segment was received.
+	pub peer_addr: SocketAddr,
+	/// Archive hash.
+	pub archive_hash: Hash,
+	/// Segment.
+	pub segment: PIBDSegment,
 }
 
 /// Container for entry in requested PIBD segments
@@ -345,6 +397,80 @@ impl SyncState {
 				};
 			}
 		}
+	}
+
+	/// Process PIBD segment.
+	pub fn process_queued_pibd_segment(
+		&self,
+		chain: &Weak<crate::Chain>,
+		queued_segment: QueuedPIBDSegment,
+	) -> Result<(), Error> {
+		let peer_addr = queued_segment.peer_addr;
+		let chain = chain
+			.upgrade()
+			.ok_or_else(|| Error::Other("chain not available".to_owned()))?;
+		let archive_header = chain.txhashset_archive_header_header_only()?;
+		let segment_id = queued_segment.segment.segment_id();
+		if queued_segment.archive_hash != archive_header.hash() {
+			debug!(
+				"dropping stale PIBD segment {:?} from {} for archive header {} (current {})",
+				segment_id,
+				peer_addr,
+				queued_segment.archive_hash,
+				archive_header.hash(),
+			);
+			return Ok(());
+		}
+		let desegmenter = chain.desegmenter(&archive_header)?;
+		let mut desegmenter = desegmenter.write();
+		let res = if let Some(d) = desegmenter.as_mut() {
+			match queued_segment.segment {
+				PIBDSegment::Bitmap(block_hash, output_root, segment) => {
+					debug!(
+						"Received bitmap segment {} for block_hash: {}, output_root: {}",
+						segment.identifier().idx,
+						block_hash,
+						output_root
+					);
+					d.add_bitmap_segment(segment, output_root)
+				}
+				PIBDSegment::Output(block_hash, bitmap_root, segment) => {
+					debug!(
+						"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+						segment.identifier().idx,
+						block_hash,
+						bitmap_root,
+					);
+					d.add_output_segment(segment)
+				}
+				PIBDSegment::RangeProof(block_hash, segment) => {
+					debug!(
+						"Received proof segment {} for block_hash: {}",
+						segment.identifier().idx,
+						block_hash,
+					);
+					d.add_rangeproof_segment(segment)
+				}
+				PIBDSegment::Kernel(block_hash, segment) => {
+					debug!(
+						"Received kernel segment {} for block_hash: {}",
+						segment.identifier().idx,
+						block_hash,
+					);
+					d.add_kernel_segment(segment)
+				}
+			}
+		} else {
+			Ok(())
+		};
+		if res.is_err() {
+			warn!(
+				"PIBD segment {:?} from peer {} failed validation",
+				segment_id, peer_addr
+			);
+			self.reject_pibd_segment_from(&segment_id, peer_addr);
+		}
+		res
 	}
 
 	/// Update PIBD segment list

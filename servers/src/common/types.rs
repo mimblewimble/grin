@@ -17,6 +17,7 @@ use std::convert::From;
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
+use grin_chain::types::QueuedPIBDSegment;
 use rand::prelude::*;
 
 use crate::chain;
@@ -420,4 +421,10 @@ pub enum ServerInitStatus {
 	FinishedLoading(Server),
 	/// Error on initialization.
 	ErrorLoading(Error),
+}
+
+/// Network adapter worker message.
+pub enum NetAdapterWorkerMessage {
+	/// Received PIBD segment.
+	PIBDSegment(QueuedPIBDSegment),
 }
