@@ -737,7 +737,14 @@ where
 			.tx
 			.try_send(NetAdapterWorkerMessage::PIBDSegment(queued))
 		{
-			Ok(()) => Ok(true),
+			Ok(()) => {
+				self.sync_state.remove_pibd_segment_for_archive(
+					&segment_id,
+					peer_info.addr.0,
+					archive_hash,
+				);
+				Ok(true)
+			}
 			Err(mpsc::TrySendError::Full(NetAdapterWorkerMessage::PIBDSegment(queued))) => {
 				warn!(
 					"PIBD receive queue full, dropping segment {:?} from {}",
