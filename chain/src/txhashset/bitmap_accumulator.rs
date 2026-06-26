@@ -187,7 +187,7 @@ impl BitmapAccumulator {
 	}
 
 	/// Readonly access to our internal data.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, BitmapChunk, VecBackend<BitmapChunk>> {
 		ReadonlyPMMR::at(&self.backend, self.backend.size())
 	}
 
@@ -239,7 +239,7 @@ impl BitmapChunk {
 			.iter()
 			.enumerate()
 			.filter(|(_, val)| *val)
-			.map(move |(idx, _)| (idx as u32 + idx_offset as u32))
+			.map(move |(idx, _)| idx as u32 + idx_offset as u32)
 	}
 }
 

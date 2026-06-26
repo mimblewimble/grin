@@ -214,10 +214,10 @@ impl DesegmenterRequestor {
 					}
 				}
 				SegmentType::Output => {
-					let (seg, bitmap_root) =
+					let (seg, _bitmap_root) =
 						self.responder.get_output_segment(seg_id.identifier.clone());
 					if let Some(d) = desegmenter.write().as_mut() {
-						d.add_output_segment(seg, Some(bitmap_root)).unwrap();
+						d.add_output_segment(seg).unwrap();
 					}
 				}
 				SegmentType::RangeProof => {

@@ -459,7 +459,7 @@ impl Peers {
 				peer.stop();
 				Ok(())
 			}
-			None => Err(Error::PeerNotFound),
+			None => Ok(()),
 		}
 	}
 
@@ -471,41 +471,39 @@ impl Peers {
 				Some((expiry, _)) => expiry > &Utc::now(),
 			},
 			None => {
-				error!("is_blocked: failed to get peers lock");
+				error!("is_blocked: failed to get blocked lock");
 				false
 			}
 		}
 	}
 
-	/// Temporary block a peer without banning it.
+	/// Temporarily block a peer without banning it.
 	pub fn block_peer(&self, peer_addr: PeerAddr, reason: &str) -> Result<(), Error> {
 		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 			error!("block_peer: failed to get blocked lock");
 			Error::PeerException
 		})?;
 
-		let times = {
-			match blocked.get(&peer_addr) {
-				Some((_, times)) => times + 1,
-				None => 1,
-			}
+		let times = match blocked.get(&peer_addr) {
+			Some((_, times)) => times + 1,
+			None => 1,
 		};
 		let duration = match times {
-			1 => 60,  // 1m
-			2 => 180, // 3m
-			_ => 600, // 10m
+			1 => 60,
+			2 => 180,
+			_ => 600,
 		};
 		let expiry = Utc::now() + Duration::seconds(duration);
 		blocked.insert(peer_addr, (expiry, times));
 
 		warn!(
-			"state_sync: block peer {} ({}) for {} times: {}",
+			"p2p: block peer {} ({}) for {} seconds after {} timeout(s)",
 			peer_addr, reason, duration, times
 		);
 		Ok(())
 	}
 
-	/// Unblock all blocked peers.
+	/// Clear all temporarily blocked peers.
 	pub fn unblock_peers(&self) -> Result<(), Error> {
 		let mut blocked = self.blocked.try_write_for(LOCK_TIMEOUT).ok_or_else(|| {
 			error!("unblock_peers: failed to get blocked lock");
@@ -517,8 +515,15 @@ impl Peers {
 
 	/// We have enough outbound connected peers
 	pub fn enough_outbound_peers(&self) -> bool {
-		self.iter().outbound().connected().count()
-			>= self.config.peer_min_preferred_outbound_count() as usize
+		let required_outbound = self
+			.config
+			.peers_allow
+			.as_ref()
+			.filter(|peers| !peers.peers.is_empty())
+			.map(|peers| peers.peers.len())
+			.unwrap_or_else(|| self.config.peer_min_preferred_outbound_count() as usize)
+			.min(self.config.peer_max_outbound_count() as usize);
+		self.iter().outbound().connected().count() >= required_outbound
 	}
 
 	/// Removes those peers that seem to have expired
@@ -747,9 +752,18 @@ impl ChainAdapter for Peers {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter
-			.receive_bitmap_segment(block_hash, output_root, segment)
+		if !self
+			.adapter
+			.receive_bitmap_segment(block_hash, output_root, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected bitmap PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_output_segment(
@@ -757,25 +771,54 @@ impl ChainAdapter for Peers {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter
-			.receive_output_segment(block_hash, bitmap_root, segment)
+		if !self
+			.adapter
+			.receive_output_segment(block_hash, bitmap_root, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected output PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_rangeproof_segment(block_hash, segment)
+		if !self
+			.adapter
+			.receive_rangeproof_segment(block_hash, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected rangeproof PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_kernel_segment(block_hash, segment)
+		if !self
+			.adapter
+			.receive_kernel_segment(block_hash, segment, peer_info)?
+		{
+			self.block_peer(peer_info.addr, "unexpected kernel PIBD segment")
+				.map_err(|e| chain::Error::Other(format!("block peer error: {:?}", e)))?;
+			Ok(false)
+		} else {
+			Ok(true)
+		}
 	}
 }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{iter, marker, ops::Range, u64};
+use std::{iter, marker, ops::Range};
 
 use croaring::Bitmap;
 

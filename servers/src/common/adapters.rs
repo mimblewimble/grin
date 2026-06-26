@@ -17,8 +17,9 @@
 
 use crate::util::RwLock;
 use std::fs::File;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 use std::time::Instant;
 
@@ -27,12 +28,14 @@ use crate::chain::{
 	self, BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, TxHashsetDownloadStats,
 };
 use crate::common::hooks::{ChainEvents, NetEvents};
-use crate::common::types::{ChainValidationMode, DandelionEpoch, ServerConfig};
+use crate::common::types::{
+	ChainValidationMode, DandelionEpoch, NetAdapterWorkerMessage, ServerConfig,
+};
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::transaction::Transaction;
 use crate::core::core::{
 	BlockHeader, BlockSums, CompactBlock, Inputs, OutputIdentifier, Segment, SegmentIdentifier,
-	SegmentType, SegmentTypeIdentifier, TxKernel,
+	TxKernel,
 };
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
@@ -44,6 +47,7 @@ use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
+use grin_chain::types::{PIBDSegment, QueuedPIBDSegment};
 use rand::prelude::*;
 use std::ops::Range;
 
@@ -51,6 +55,7 @@ const KERNEL_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
+const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -66,6 +71,7 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
 impl<B, P> p2p::ChainAdapter for NetToChainAdapter<B, P>
@@ -79,28 +85,6 @@ where
 
 	fn total_height(&self) -> Result<u64, chain::Error> {
 		Ok(self.chain().head()?.height)
-	}
-
-	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
-		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
-	}
-
-	fn tx_kernel_received(
-		&self,
-		kernel_hash: Hash,
-		peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error> {
-		// nothing much we can do with a new transaction while syncing
-		if self.sync_state.is_syncing() {
-			return Ok(true);
-		}
-
-		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
-
-		if tx.is_none() {
-			self.request_transaction(kernel_hash, peer_info);
-		}
-		Ok(true)
 	}
 
 	fn transaction_received(
@@ -131,6 +115,28 @@ where
 				Ok(false)
 			}
 		}
+	}
+
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
+	}
+
+	fn tx_kernel_received(
+		&self,
+		kernel_hash: Hash,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return Ok(true);
+		}
+
+		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
+
+		if tx.is_none() {
+			self.request_transaction(kernel_hash, peer_info);
+		}
+		Ok(true)
 	}
 
 	fn block_received(
@@ -566,34 +572,12 @@ where
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received bitmap segment {} for block_hash: {}, output_root: {}",
-			segment.identifier().idx,
-			block_hash,
-			output_root
-		);
-		// TODO: Entire process needs to be restarted if the horizon block
-		// has changed (perhaps not here, NB this has to go somewhere)
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_bitmap_segment(segment, output_root);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming bitmap segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Bitmap,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(
+			PIBDSegment::Bitmap(block_hash, output_root, segment),
+			peer_info,
+		)
 	}
 
 	fn receive_output_segment(
@@ -601,94 +585,30 @@ where
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
-			segment.identifier().idx,
-			block_hash,
-			bitmap_root,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_output_segment(segment, Some(bitmap_root));
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming output segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Output,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(
+			PIBDSegment::Output(block_hash, bitmap_root, segment),
+			peer_info,
+		)
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received proof segment {} for block_hash: {}",
-			segment.identifier().idx,
-			block_hash,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_rangeproof_segment(segment);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::RangeProof,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(PIBDSegment::RangeProof(block_hash, segment), peer_info)
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		debug!(
-			"Received kernel segment {} for block_hash: {}",
-			segment.identifier().idx,
-			block_hash,
-		);
-		let archive_header = self.chain().txhashset_archive_header_header_only()?;
-		let identifier = segment.identifier().clone();
-		let mut retval = Ok(true);
-		if let Some(d) = self.chain().desegmenter(&archive_header)?.write().as_mut() {
-			let res = d.add_kernel_segment(segment);
-			if let Err(e) = res {
-				error!(
-					"Validation of incoming rangeproof segment failed: {:?}, reason: {}",
-					identifier, e
-				);
-				retval = Err(e);
-			}
-		}
-		// Remove segment from outgoing list
-		self.sync_state.remove_pibd_segment(&SegmentTypeIdentifier {
-			segment_type: SegmentType::Kernel,
-			identifier,
-		});
-		retval
+		self.queue_pibd_segment(PIBDSegment::Kernel(block_hash, segment), peer_info)
 	}
 }
 
@@ -705,14 +625,60 @@ where
 		config: ServerConfig,
 		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	) -> Self {
-		NetToChainAdapter {
+		let (tx, rx) = mpsc::sync_channel(WORKER_CHANNEL_BUFFER_SIZE);
+		let adapter = NetToChainAdapter {
 			sync_state,
 			chain: Arc::downgrade(&chain),
 			tx_pool,
 			peers: OneTime::new(),
 			config,
 			hooks,
-		}
+			tx,
+		};
+		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
+		adapter
+	}
+
+	/// Handle network adapter messages at separate thread.
+	fn spawn_net_adapter_worker(
+		&self,
+		chain: Weak<chain::Chain>,
+		rx: mpsc::Receiver<NetAdapterWorkerMessage>,
+	) {
+		let sync_state = self.sync_state.clone();
+		thread::Builder::new()
+			.name("pibd_receive".to_string())
+			.spawn(move || {
+				while let Ok(msg) = rx.recv() {
+					match msg {
+						NetAdapterWorkerMessage::PIBDSegment(s) => {
+							let segment_id = s.segment.segment_id();
+							let peer_addr = s.peer_addr;
+							let res = catch_unwind(AssertUnwindSafe(|| {
+								sync_state.process_queued_pibd_segment(&chain, s)
+							}));
+							match res {
+								Ok(Ok(())) => {}
+								Ok(Err(e)) => {
+									error!(
+										"PIBD segment processing failed for {:?}: {}",
+										segment_id, e
+									);
+								}
+								Err(_) => {
+									error!(
+										"PIBD segment processing panicked for {:?} from {}",
+										segment_id, peer_addr
+									);
+									sync_state.reject_pibd_segment_from(&segment_id, peer_addr);
+								}
+							}
+						}
+					}
+				}
+				debug!("Net adapter worker shutting down");
+			})
+			.expect("failed to spawn Network adapter worker");
 	}
 
 	/// Initialize a NetToChainAdaptor with reference to a Peers object.
@@ -732,6 +698,78 @@ where
 		self.chain
 			.upgrade()
 			.expect("Failed to upgrade weak ref to our chain.")
+	}
+
+	fn queue_pibd_segment(
+		&self,
+		segment: PIBDSegment,
+		peer_info: &PeerInfo,
+	) -> Result<bool, chain::Error> {
+		let segment_id = segment.segment_id();
+		if self
+			.sync_state
+			.rejected_pibd_segment_from_peer(&segment_id, peer_info.addr.0)
+		{
+			debug!(
+				"ignoring rejected PIBD segment {:?} from {}",
+				segment_id, peer_info.addr
+			);
+			return Ok(false);
+		}
+		let archive_hash = if let Some(hash) = self
+			.sync_state
+			.get_pibd_segment_archive_hash(&segment_id, peer_info.addr.0)
+		{
+			hash
+		} else {
+			debug!(
+				"ignoring unsolicited PIBD segment {:?} from {}",
+				segment_id, peer_info.addr
+			);
+			return Ok(true);
+		};
+		let queued = QueuedPIBDSegment {
+			peer_addr: peer_info.addr.0,
+			archive_hash,
+			segment,
+		};
+		match self
+			.tx
+			.try_send(NetAdapterWorkerMessage::PIBDSegment(queued))
+		{
+			Ok(()) => {
+				self.sync_state.remove_pibd_segment_for_archive(
+					&segment_id,
+					peer_info.addr.0,
+					archive_hash,
+				);
+				Ok(true)
+			}
+			Err(mpsc::TrySendError::Full(NetAdapterWorkerMessage::PIBDSegment(queued))) => {
+				warn!(
+					"PIBD receive queue full, dropping segment {:?} from {}",
+					segment_id, peer_info.addr
+				);
+				self.sync_state.remove_pibd_segment_for_archive(
+					&segment_id,
+					queued.peer_addr,
+					queued.archive_hash,
+				);
+				Ok(true)
+			}
+			Err(mpsc::TrySendError::Disconnected(NetAdapterWorkerMessage::PIBDSegment(queued))) => {
+				error!("PIBD receive queue disconnected");
+				self.sync_state.remove_pibd_segment_for_archive(
+					&segment_id,
+					queued.peer_addr,
+					queued.archive_hash,
+				);
+				self.sync_state.set_sync_error(chain::Error::SyncError(
+					"PIBD receive queue disconnected".to_owned(),
+				));
+				Ok(true)
+			}
+		}
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.

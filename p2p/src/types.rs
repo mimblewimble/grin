@@ -679,6 +679,7 @@ pub trait ChainAdapter: Sync + Send {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_output_segment(
@@ -686,18 +687,21 @@ pub trait ChainAdapter: Sync + Send {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error>;
 }
 
