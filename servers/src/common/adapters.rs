@@ -58,17 +58,8 @@ const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
-const MAX_CACHED_HEADER_BATCHES: usize = 16;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
-const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 1000;
-const HEADER_BATCH_CACHE_LOOKAHEAD: u64 =
-	MAX_CACHED_HEADER_BATCHES as u64 * p2p::MAX_BLOCK_HEADERS as u64;
-
-#[derive(Clone)]
-struct HeaderBatch {
-	headers: Vec<BlockHeader>,
-	peer_info: PeerInfo,
-}
+const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -84,7 +75,6 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
-	header_batch_cache: RwLock<Vec<HeaderBatch>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
@@ -350,7 +340,27 @@ where
 			}
 		};
 
-		self.cache_and_process_header_batch(bhs, peer_info, sync_head)
+		match self
+			.chain()
+			.sync_block_headers(bhs, sync_head, chain::Options::SYNC)
+		{
+			Ok(sync_head) => {
+				// If we have an updated sync_head after processing this batch of headers
+				// then update our sync_state so we can request relevant headers in the next batch.
+				if let Some(sync_head) = sync_head {
+					self.sync_state.update_header_sync(sync_head);
+				}
+				Ok(true)
+			}
+			Err(e) => {
+				debug!("Block headers refused by chain: {:?}", e);
+				if e.is_bad_data() {
+					Ok(false)
+				} else {
+					Err(e)
+				}
+			}
+		}
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -697,7 +707,6 @@ where
 			peers: OneTime::new(),
 			config,
 			hooks,
-			header_batch_cache: RwLock::new(vec![]),
 			header_segment_requests: RwLock::new(HashMap::new()),
 			tx,
 		};
@@ -852,105 +861,6 @@ where
 		}
 		entry.1 += 1;
 		true
-	}
-
-	fn cache_and_process_header_batch(
-		&self,
-		headers: &[BlockHeader],
-		peer_info: &PeerInfo,
-		sync_head: chain::Tip,
-	) -> Result<bool, chain::Error> {
-		let headers = headers
-			.iter()
-			.skip_while(|h| h.height <= sync_head.height)
-			.cloned()
-			.collect::<Vec<_>>();
-		if headers.is_empty() {
-			return Ok(true);
-		}
-		if headers
-			.first()
-			.map(|h| {
-				h.height
-					> sync_head
-						.height
-						.saturating_add(HEADER_BATCH_CACHE_LOOKAHEAD)
-			})
-			.unwrap_or(false)
-		{
-			debug!(
-				"ignoring far-future header batch starting at height {} while sync head is {}",
-				headers[0].height, sync_head.height
-			);
-			return Ok(true);
-		}
-
-		{
-			let mut cache = self.header_batch_cache.write();
-			let first = headers.first().map(|h| h.hash());
-			let last = headers.last().map(|h| h.hash());
-			if !cache.iter().any(|b| {
-				b.headers.first().map(|h| h.hash()) == first
-					|| b.headers.last().map(|h| h.hash()) == last
-			}) {
-				if cache.len() >= MAX_CACHED_HEADER_BATCHES {
-					cache.remove(0);
-				}
-				cache.push(HeaderBatch {
-					headers,
-					peer_info: peer_info.clone(),
-				});
-			}
-		}
-
-		self.process_ready_header_batches(peer_info)
-	}
-
-	fn process_ready_header_batches(&self, current_peer: &PeerInfo) -> Result<bool, chain::Error> {
-		loop {
-			let sync_head = match self.sync_state.status() {
-				SyncStatus::HeaderSync { sync_head, .. } => sync_head,
-				_ => return Ok(true),
-			};
-			let batch = {
-				let mut cache = self.header_batch_cache.write();
-				cache.sort_by_key(|b| b.headers.first().map(|h| h.height).unwrap_or(u64::MAX));
-				let pos = cache.iter().position(|b| {
-					b.headers.first().map(|h| h.height) == Some(sync_head.height + 1)
-				});
-				match pos {
-					Some(pos) => cache.remove(pos),
-					None => return Ok(true),
-				}
-			};
-
-			match self
-				.chain()
-				.sync_block_headers(&batch.headers, sync_head, chain::Options::SYNC)
-			{
-				Ok(sync_head) => {
-					if let Some(sync_head) = sync_head {
-						self.sync_state.update_header_sync(sync_head);
-					}
-				}
-				Err(e) => {
-					debug!("Block headers refused by chain: {:?}", e);
-					if e.is_bad_data() {
-						if batch.peer_info.addr == current_peer.addr {
-							return Ok(false);
-						}
-						if let Err(e) = self.peers().ban_peer(
-							batch.peer_info.addr,
-							p2p::types::ReasonForBan::BadBlockHeader,
-						) {
-							error!("failed to ban peer {}: {:?}", batch.peer_info.addr, e);
-						}
-					} else {
-						return Err(e);
-					}
-				}
-			}
-		}
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
