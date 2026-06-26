@@ -521,7 +521,8 @@ impl Peers {
 			.as_ref()
 			.filter(|peers| !peers.peers.is_empty())
 			.map(|peers| peers.peers.len())
-			.unwrap_or_else(|| self.config.peer_min_preferred_outbound_count() as usize);
+			.unwrap_or_else(|| self.config.peer_min_preferred_outbound_count() as usize)
+			.min(self.config.peer_max_outbound_count() as usize);
 		self.iter().outbound().connected().count() >= required_outbound
 	}
 

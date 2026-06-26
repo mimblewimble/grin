@@ -70,7 +70,8 @@ pub fn connect_and_monitor(
 			let (tx, rx) = mpsc::channel();
 
 			// check seeds first
-			connect_to_seeds_and_peers(peers.clone(), tx.clone(), config);
+			let seed_addrs = seed_list(&config);
+			connect_to_seeds_and_peers(peers.clone(), tx.clone(), config, &seed_addrs);
 
 			let mut prev = DateTime::<Utc>::MIN_UTC;
 			let mut prev_expire_check = DateTime::<Utc>::MIN_UTC;
@@ -109,7 +110,12 @@ pub fn connect_and_monitor(
 					);
 
 					// monitor additional peers if we need to add more
-					monitor_peers(peers.clone(), p2p_server.config.clone(), tx.clone());
+					monitor_peers(
+						peers.clone(),
+						p2p_server.config.clone(),
+						tx.clone(),
+						&seed_addrs,
+					);
 
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
@@ -132,7 +138,12 @@ pub fn connect_and_monitor(
 		})
 }
 
-fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sender<PeerAddr>) {
+fn monitor_peers(
+	peers: Arc<p2p::Peers>,
+	config: p2p::P2PConfig,
+	tx: mpsc::Sender<PeerAddr>,
+	seed_addrs: &[PeerAddr],
+) {
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(
 		config.peer_max_inbound_count() as usize,
@@ -199,7 +210,7 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// Connect to seeds again if there is no peers at database,
 	// helps to avoid stuck when 1st request to seed list was failed.
 	if total_count == 0 {
-		connect_to_seeds_and_peers(peers.clone(), tx.clone(), config);
+		connect_to_seeds_and_peers(peers.clone(), tx.clone(), config, seed_addrs);
 		return;
 	}
 
@@ -296,9 +307,9 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !enough_outbound {
-		for addr in seed_list(&config) {
+		for addr in seed_addrs {
 			if !peers_deny.contains(&addr) && !new_peers.contains(&addr) {
-				new_peers.push(addr);
+				new_peers.push(*addr);
 			}
 		}
 	}
@@ -320,6 +331,7 @@ fn connect_to_seeds_and_peers(
 	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<PeerAddr>,
 	config: P2PConfig,
+	seed_addrs: &[PeerAddr],
 ) {
 	// If "peers_allow" is explicitly configured then just use this list.
 	if connect_to_allow_list(&config, &peers, &tx) {
@@ -344,7 +356,7 @@ fn connect_to_seeds_and_peers(
 	let mut peer_addrs = if peers.len() > 3 {
 		peers.iter().map(|p| p.addr).collect::<Vec<_>>()
 	} else {
-		seed_list(&config)
+		seed_addrs.to_vec()
 	};
 
 	// If the peer db has too few healthy peer-list providers, fill from seeds.
@@ -355,9 +367,9 @@ fn connect_to_seeds_and_peers(
 		.count();
 	if allowed_peer_count < min_outbound {
 		let mut allowed_peer_count = allowed_peer_count;
-		for addr in seed_list(&config) {
-			if !peers_deny.as_slice().contains(&addr) && !peer_addrs.contains(&addr) {
-				peer_addrs.push(addr);
+		for addr in seed_addrs {
+			if !peers_deny.as_slice().contains(addr) && !peer_addrs.contains(addr) {
+				peer_addrs.push(*addr);
 				allowed_peer_count += 1;
 			}
 			if allowed_peer_count >= min_outbound {
