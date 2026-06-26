@@ -157,8 +157,21 @@ impl Peers {
 
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: PeerAddr, ban_reason: ReasonForBan) -> Result<(), Error> {
-		// Update the peer in peers db
-		self.update_state(peer_addr, State::Banned)?;
+		// Update the peer in peers db or save new if not found.
+		if self.exists_peer(peer_addr)? {
+			self.update_state(peer_addr, State::Banned)?;
+		} else {
+			self.save_peer(&PeerData {
+				addr: peer_addr,
+				capabilities: Capabilities::UNKNOWN,
+				user_agent: "".to_string(),
+				flags: State::Banned,
+				last_banned: Utc::now().timestamp(),
+				ban_reason,
+				last_connected: Utc::now().timestamp(),
+				last_attempt: Utc::now().timestamp(),
+			})?;
+		}
 
 		// Update the peer in the peers Vec
 		match self.get_connected_peer(peer_addr) {
