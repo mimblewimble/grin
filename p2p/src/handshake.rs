@@ -215,7 +215,7 @@ impl Handshake {
 		// so check if we are configured to explicitly allow or deny it.
 		// If denied then we want to close the connection
 		// (without providing our peer with any details why).
-		if Peer::is_denied(&self.config, peer_info.addr) {
+		if Peer::is_denied(&self.config, hand.sender_addr) {
 			return Err(Error::ConnectionClose);
 		}
 
