@@ -14,6 +14,8 @@
 
 use grin_p2p as p2p;
 
+use grin_core::core::SegmentIdentifier;
+use grin_core::ser::{self, ProtocolVersion};
 use num::FromPrimitive;
 
 // Test that Healthy == 0.
@@ -64,4 +66,32 @@ fn test_capabilities() {
 		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
 			.contains(p2p::types::Capabilities::TX_KERNEL_HASH)
 	);
+}
+
+#[test]
+fn test_header_segment_limit() {
+	let mut bytes = vec![];
+	ser::serialize(
+		&mut bytes,
+		ProtocolVersion::local(),
+		&SegmentIdentifier {
+			height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
+			idx: 0,
+		},
+	)
+	.unwrap();
+	ser::serialize(
+		&mut bytes,
+		ProtocolVersion::local(),
+		&((p2p::MAX_BLOCK_HEADERS + 1) as u16),
+	)
+	.unwrap();
+
+	let res: Result<p2p::msg::HeaderSegment, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion::local(),
+		ser::DeserializationMode::default(),
+	);
+
+	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
 }
