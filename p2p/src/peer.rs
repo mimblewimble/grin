@@ -328,6 +328,11 @@ impl Peer {
 		self.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
+	/// Sends a request for a deterministic header segment.
+	pub fn send_header_segment_request(&self, identifier: SegmentIdentifier) -> Result<(), Error> {
+		self.send(&identifier, msg::Type::GetHeaderSegment)
+	}
+
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(
 			"Requesting tx (kernel hash) {} from peer {}.",

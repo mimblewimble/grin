@@ -58,8 +58,34 @@ const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
+const MAX_CACHED_PIHD_HEADER_SEGMENTS: usize = 16;
+const PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS: u64 = 16;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
+
+fn pihd_header_segment_capacity() -> u64 {
+	let id = SegmentIdentifier {
+		height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
+		idx: 0,
+	};
+	let capacity = id.segment_capacity();
+	debug_assert_eq!(capacity, p2p::MAX_BLOCK_HEADERS as u64);
+	capacity
+}
+
+#[derive(Clone)]
+struct PihdHeaderSegmentCacheEntry {
+	id: SegmentIdentifier,
+	headers: Vec<BlockHeader>,
+	peer_info: PeerInfo,
+	target_height: u64,
+}
+
+#[derive(Clone)]
+struct PihdHeaderCacheAnchor {
+	height: u64,
+	hash: Hash,
+}
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -75,6 +101,8 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+	pihd_header_cache: RwLock<Vec<PihdHeaderSegmentCacheEntry>>,
+	pihd_header_cache_anchor: RwLock<Option<PihdHeaderCacheAnchor>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
@@ -340,27 +368,7 @@ where
 			}
 		};
 
-		match self
-			.chain()
-			.sync_block_headers(bhs, sync_head, chain::Options::SYNC)
-		{
-			Ok(sync_head) => {
-				// If we have an updated sync_head after processing this batch of headers
-				// then update our sync_state so we can request relevant headers in the next batch.
-				if let Some(sync_head) = sync_head {
-					self.sync_state.update_header_sync(sync_head);
-				}
-				Ok(true)
-			}
-			Err(e) => {
-				debug!("Block headers refused by chain: {:?}", e);
-				if e.is_bad_data() {
-					Ok(false)
-				} else {
-					Err(e)
-				}
-			}
-		}
+		self.process_header_batch(bhs, sync_head)
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
@@ -676,13 +684,76 @@ where
 		headers: &[core::BlockHeader],
 		peer_info: &PeerInfo,
 	) -> Result<HeaderSegmentAcceptance, chain::Error> {
-		debug!(
-			"ignoring PIHD header segment {:?} with {} headers from {}",
-			id,
-			headers.len(),
-			peer_info.addr
-		);
-		Ok(HeaderSegmentAcceptance::Accepted)
+		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
+			return Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment height"));
+		}
+		if !self
+			.sync_state
+			.contains_pihd_header_segment_from(id, peer_info.addr.0)
+		{
+			debug!(
+				"ignoring unsolicited PIHD header segment {:?} from {}",
+				id, peer_info.addr
+			);
+			return Ok(HeaderSegmentAcceptance::Accepted);
+		}
+		let expected_first_height = match id
+			.idx
+			.checked_mul(id.segment_capacity())
+			.and_then(|height| height.checked_add(1))
+		{
+			Some(height) => height,
+			None => {
+				return Ok(
+					self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment index")
+				);
+			}
+		};
+		let target_height = self
+			.sync_state
+			.pihd_header_segment_target_height(id, peer_info.addr.0)
+			.unwrap_or(0);
+		if headers.is_empty() {
+			debug!(
+				"ignoring empty PIHD header segment {:?} from {} (expected first height {}, target height {})",
+				id, peer_info.addr, expected_first_height, target_height
+			);
+			self.sync_state
+				.remove_pihd_header_segment(id, peer_info.addr.0);
+			return Ok(HeaderSegmentAcceptance::Accepted);
+		}
+		if headers[0].height != expected_first_height {
+			return Ok(
+				self.block_bad_header_segment_peer(peer_info, "unexpected PIHD segment start")
+			);
+		}
+		if !headers.windows(2).all(|w| w[1].height == w[0].height + 1) {
+			return Ok(self.block_bad_header_segment_peer(peer_info, "non-contiguous PIHD segment"));
+		}
+		let sync_head = match self.sync_state.status() {
+			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+			_ => return Ok(HeaderSegmentAcceptance::Accepted),
+		};
+
+		if !self.cache_pihd_header_segment(id, headers, peer_info, target_height, sync_head)? {
+			return Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment order"));
+		}
+
+		match self.process_ready_pihd_header_segments(peer_info)? {
+			Some(bad_peer) if bad_peer.addr == peer_info.addr => {
+				Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD headers"))
+			}
+			Some(bad_peer) => {
+				if let Err(e) = self
+					.peers()
+					.ban_peer(bad_peer.addr, p2p::types::ReasonForBan::BadBlockHeader)
+				{
+					error!("failed to ban peer {}: {:?}", bad_peer.addr, e);
+				}
+				Ok(HeaderSegmentAcceptance::Accepted)
+			}
+			None => Ok(HeaderSegmentAcceptance::Accepted),
+		}
 	}
 }
 
@@ -707,6 +778,8 @@ where
 			peers: OneTime::new(),
 			config,
 			hooks,
+			pihd_header_cache: RwLock::new(vec![]),
+			pihd_header_cache_anchor: RwLock::new(None),
 			header_segment_requests: RwLock::new(HashMap::new()),
 			tx,
 		};
@@ -767,6 +840,18 @@ where
 			.borrow()
 			.upgrade()
 			.expect("Failed to upgrade weak ref to our peers.")
+	}
+
+	fn block_bad_header_segment_peer(
+		&self,
+		peer_info: &PeerInfo,
+		reason: &str,
+	) -> HeaderSegmentAcceptance {
+		warn!(
+			"bad PIHD header segment from {} ({}), banning peer",
+			peer_info.addr, reason
+		);
+		HeaderSegmentAcceptance::Ban
 	}
 
 	fn chain(&self) -> Arc<chain::Chain> {
@@ -861,6 +946,168 @@ where
 		}
 		entry.1 += 1;
 		true
+	}
+
+	fn process_header_batch(
+		&self,
+		headers: &[BlockHeader],
+		sync_head: chain::Tip,
+	) -> Result<bool, chain::Error> {
+		match self
+			.chain()
+			.sync_block_headers(headers, sync_head, chain::Options::SYNC)
+		{
+			Ok(sync_head) => {
+				if let Some(sync_head) = sync_head {
+					self.sync_state.update_header_sync(sync_head);
+				}
+				Ok(true)
+			}
+			Err(e) => {
+				debug!("Block headers refused by chain: {:?}", e);
+				if e.is_bad_data() {
+					Ok(false)
+				} else {
+					Err(e)
+				}
+			}
+		}
+	}
+
+	fn cache_pihd_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[BlockHeader],
+		peer_info: &PeerInfo,
+		target_height: u64,
+		sync_head: chain::Tip,
+	) -> Result<bool, chain::Error> {
+		self.prune_pihd_header_cache(sync_head.clone());
+
+		let next_idx = sync_head.height / pihd_header_segment_capacity();
+		if id.idx < next_idx {
+			self.sync_state
+				.remove_pihd_header_segment(id, peer_info.addr.0);
+			return Ok(true);
+		}
+		if id.idx > next_idx.saturating_add(PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS) {
+			return Ok(false);
+		}
+
+		let mut cache = self.pihd_header_cache.write();
+		if cache.iter().any(|entry| entry.id == id) {
+			self.sync_state
+				.remove_pihd_header_segment(id, peer_info.addr.0);
+			return Ok(true);
+		}
+		if cache.len() >= MAX_CACHED_PIHD_HEADER_SEGMENTS {
+			cache.sort_by_key(|entry| entry.id.idx);
+			if let Some(pos) = cache.iter().rposition(|entry| entry.id.idx != next_idx) {
+				cache.remove(pos);
+			} else {
+				return Ok(false);
+			}
+		}
+		cache.push(PihdHeaderSegmentCacheEntry {
+			id,
+			headers: headers.to_vec(),
+			peer_info: peer_info.clone(),
+			target_height,
+		});
+		self.sync_state
+			.remove_pihd_header_segment(id, peer_info.addr.0);
+		Ok(true)
+	}
+
+	fn process_ready_pihd_header_segments(
+		&self,
+		_current_peer: &PeerInfo,
+	) -> Result<Option<PeerInfo>, chain::Error> {
+		loop {
+			let sync_head = match self.sync_state.status() {
+				SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+				_ => {
+					self.clear_pihd_header_cache();
+					return Ok(None);
+				}
+			};
+			self.prune_pihd_header_cache(sync_head.clone());
+
+			let next_id = SegmentIdentifier {
+				height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
+				idx: sync_head.height / pihd_header_segment_capacity(),
+			};
+			let entry = {
+				let mut cache = self.pihd_header_cache.write();
+				cache.sort_by_key(|entry| entry.id.idx);
+				match cache.iter().position(|entry| entry.id == next_id) {
+					Some(pos) => cache.remove(pos),
+					None => return Ok(None),
+				}
+			};
+
+			let accepted = match self.process_header_batch(&entry.headers, sync_head) {
+				Ok(accepted) => accepted,
+				Err(e) => {
+					debug!(
+						"PIHD header segment {:?} from {} did not connect cleanly: {:?}",
+						entry.id, entry.peer_info.addr, e
+					);
+					self.clear_pihd_header_cache();
+					self.sync_state.retain_pihd_header_segments(|_| false);
+					return Ok(None);
+				}
+			};
+			if !accepted {
+				self.clear_pihd_header_cache();
+				return Ok(Some(entry.peer_info));
+			}
+
+			if entry
+				.headers
+				.last()
+				.map(|header| header.height >= entry.target_height)
+				.unwrap_or(false)
+			{
+				self.clear_pihd_header_cache();
+				return Ok(None);
+			}
+		}
+	}
+
+	fn prune_pihd_header_cache(&self, sync_head: chain::Tip) {
+		let next_idx = sync_head.height / pihd_header_segment_capacity();
+		let max_idx = next_idx.saturating_add(PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS);
+		let clear_cache = {
+			let mut anchor = self.pihd_header_cache_anchor.write();
+			let clear_cache = if let Some(prev) = anchor.as_ref() {
+				if sync_head.height < prev.height
+					|| (sync_head.height == prev.height && sync_head.last_block_h != prev.hash)
+				{
+					true
+				} else {
+					false
+				}
+			} else {
+				false
+			};
+			*anchor = Some(PihdHeaderCacheAnchor {
+				height: sync_head.height,
+				hash: sync_head.last_block_h,
+			});
+			clear_cache
+		};
+		let mut cache = self.pihd_header_cache.write();
+		if clear_cache {
+			cache.clear();
+		} else {
+			cache.retain(|entry| entry.id.idx >= next_idx && entry.id.idx <= max_idx);
+		}
+	}
+
+	fn clear_pihd_header_cache(&self) {
+		self.pihd_header_cache.write().clear();
+		*self.pihd_header_cache_anchor.write() = None;
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
