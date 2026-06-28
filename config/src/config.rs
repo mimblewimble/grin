@@ -94,28 +94,39 @@ pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	Ok(())
 }
 
-/// Check that the api secret files exist and are valid
-fn check_api_secret_files(
-	chain_type: &global::ChainTypes,
-	secret_file_name: &str,
-) -> Result<(), ConfigError> {
-	let grin_path = get_grin_path(chain_type)?;
-	let mut api_secret_path = grin_path;
-	api_secret_path.push(secret_file_name);
+/// Check that the api secret file exists and is valid
+fn check_api_secret_file(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	if !api_secret_path.exists() {
-		init_api_secret(&api_secret_path)
+		init_api_secret(api_secret_path)
 	} else {
-		check_api_secret(&api_secret_path)
+		check_api_secret(api_secret_path)
 	}
+}
+
+/// Check that the configured api secret files exist and are valid
+fn check_api_secret_files(config: &GlobalConfig) -> Result<(), ConfigError> {
+	let server_config = &config.members.as_ref().unwrap().server;
+	if let Some(ref api_secret_path) = server_config.api_secret_path {
+		check_api_secret_file(&PathBuf::from(api_secret_path))?;
+	}
+	if let Some(ref foreign_api_secret_path) = server_config.foreign_api_secret_path {
+		check_api_secret_file(&PathBuf::from(foreign_api_secret_path))?;
+	}
+	Ok(())
+}
+
+/// Load server config and ensure the configured api secret files exist
+pub fn load_server_config(file_path: &str) -> Result<GlobalConfig, ConfigError> {
+	let config = GlobalConfig::new(file_path)?;
+	check_api_secret_files(&config)?;
+	Ok(config)
 }
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
-	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
-		GlobalConfig::new(p.to_str().unwrap())
+		load_server_config(p.to_str().unwrap())
 	} else {
 		// Check if grin dir exists
 		let grin_path = get_grin_path(chain_type)?;
@@ -132,7 +143,7 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 			default_config.write_to_file(config_path.to_str().unwrap())?;
 		}
 
-		GlobalConfig::new(config_path.to_str().unwrap())
+		load_server_config(config_path.to_str().unwrap())
 	}
 }
 
@@ -400,4 +411,103 @@ fn test_bad_config() {
 		}
 		_ => panic!("expected config parse error, got {:?}", res),
 	}
+}
+
+#[cfg(test)]
+fn temp_config_dir(name: &str) -> PathBuf {
+	let mut test_dir = env::temp_dir();
+	test_dir.push(format!(
+		"{}_{}_{}",
+		name,
+		std::process::id(),
+		std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.unwrap()
+			.as_nanos()
+	));
+	fs::create_dir_all(&test_dir).unwrap();
+	test_dir
+}
+
+#[cfg(test)]
+fn write_test_config(test_dir: &PathBuf) -> (PathBuf, PathBuf, PathBuf) {
+	let mut config = GlobalConfig::for_chain(&global::ChainTypes::Mainnet);
+	config.update_paths(test_dir);
+
+	let mut config_path = test_dir.clone();
+	config_path.push(SERVER_CONFIG_FILE_NAME);
+	config.write_to_file(config_path.to_str().unwrap()).unwrap();
+
+	let mut api_secret_path = test_dir.clone();
+	api_secret_path.push(API_SECRET_FILE_NAME);
+	let mut foreign_api_secret_path = test_dir.clone();
+	foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
+
+	(config_path, api_secret_path, foreign_api_secret_path)
+}
+
+#[cfg(test)]
+fn check_test_secrets(
+	server_config: ServerConfig,
+	api_secret_path: &PathBuf,
+	foreign_api_secret_path: &PathBuf,
+	api_secret_exists: bool,
+	foreign_api_secret_exists: bool,
+) {
+	assert_eq!(
+		server_config.api_secret_path,
+		Some(api_secret_path.to_str().unwrap().to_owned())
+	);
+	assert_eq!(
+		server_config.foreign_api_secret_path,
+		Some(foreign_api_secret_path.to_str().unwrap().to_owned())
+	);
+	assert!(api_secret_exists);
+	assert!(foreign_api_secret_exists);
+}
+
+#[test]
+fn test_api_secret_paths() {
+	let current_dir = env::current_dir().unwrap();
+	let test_dir = temp_config_dir("grin_config");
+	let (_config_path, api_secret_path, foreign_api_secret_path) = write_test_config(&test_dir);
+
+	env::set_current_dir(&test_dir).unwrap();
+	let res = initial_setup_server(&global::ChainTypes::Mainnet);
+	env::set_current_dir(current_dir).unwrap();
+
+	let server_config = res.map(|config| config.members.unwrap().server);
+	let api_secret_exists = api_secret_path.exists();
+	let foreign_api_secret_exists = foreign_api_secret_path.exists();
+
+	fs::remove_dir_all(&test_dir).unwrap();
+
+	check_test_secrets(
+		server_config.unwrap(),
+		&api_secret_path,
+		&foreign_api_secret_path,
+		api_secret_exists,
+		foreign_api_secret_exists,
+	);
+}
+
+#[test]
+fn test_api_secret_paths_config_file() {
+	let test_dir = temp_config_dir("grin_config_file");
+	let (config_path, api_secret_path, foreign_api_secret_path) = write_test_config(&test_dir);
+
+	let res = load_server_config(config_path.to_str().unwrap());
+	let server_config = res.map(|config| config.members.unwrap().server);
+	let api_secret_exists = api_secret_path.exists();
+	let foreign_api_secret_exists = foreign_api_secret_path.exists();
+
+	fs::remove_dir_all(&test_dir).unwrap();
+
+	check_test_secrets(
+		server_config.unwrap(),
+		&api_secret_path,
+		&foreign_api_secret_path,
+		api_secret_exists,
+		foreign_api_secret_exists,
+	);
 }
