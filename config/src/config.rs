@@ -224,7 +224,10 @@ impl GlobalConfig {
 	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
 		let config_file_path = self.config_file_path.as_ref().unwrap();
 		let contents = fs::read_to_string(config_file_path)?;
-		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone());
+		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone())
+			.map_err(|e| {
+				ConfigError::ParseError(config_file_path.to_str().unwrap().to_string(), e)
+			})?;
 		if contents != migrated {
 			fs::write(config_file_path, &migrated)?;
 		}
@@ -313,13 +316,14 @@ impl GlobalConfig {
 	/// - Adds "config_file_version = 2"
 	/// - If server.pool_config.accept_fee_base is 1000000, change it to 500000
 	/// - Remove "#a setting to 1000000 will be overridden to 500000 to respect the fixfees RFC"
-	fn migrate_config_file_version_none_to_2(config_str: String) -> String {
+	fn migrate_config_file_version_none_to_2(config_str: String) -> Result<String, String> {
 		// Parse existing config and return unchanged if not eligible for migration
 
 		let mut config: ConfigMembers =
-			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap();
+			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()))
+				.map_err(|e| e.to_string())?;
 		if config.config_file_version != None {
-			return config_str;
+			return Ok(config_str);
 		}
 
 		// Apply changes both textually and structurally
@@ -342,12 +346,14 @@ impl GlobalConfig {
 
 		// Verify equivalence
 
-		assert_eq!(
-			config,
-			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap()
-		);
+		let migrated_config: ConfigMembers =
+			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()))
+				.map_err(|e| e.to_string())?;
+		if config != migrated_config {
+			return Err("config migration verification failed".to_string());
+		}
 
-		config_str
+		Ok(config_str)
 	}
 
 	// For forwards compatibility old config needs `Warning` log level changed to standard log::Level `WARN`
@@ -377,4 +383,21 @@ fn test_fix_warning_level() {
 	let config = "Warning".to_string();
 	let fixed_config = GlobalConfig::fix_warning_level(config);
 	assert_eq!(fixed_config, "WARN");
+}
+
+#[test]
+fn test_bad_config() {
+	let mut path = std::env::temp_dir();
+	path.push(format!("grin_bad_config_{}.toml", std::process::id()));
+
+	fs::write(&path, "invalid = [").unwrap();
+	let res = GlobalConfig::new(path.to_str().unwrap());
+	let _ = fs::remove_file(&path);
+
+	match res {
+		Err(ConfigError::ParseError(file_name, _)) => {
+			assert_eq!(file_name, path.to_str().unwrap());
+		}
+		_ => panic!("expected config parse error, got {:?}", res),
+	}
 }
