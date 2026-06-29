@@ -23,7 +23,7 @@ chrono = "0.4.11"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 async-stream = "0.3"
-rustls = "0.20"
+rustls = "0.23.41"
 walkdir = "2.3.1"
 
 grin_api = { path = "../api", version = "5.5.1-alpha.0" }

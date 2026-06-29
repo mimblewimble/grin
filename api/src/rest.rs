@@ -24,6 +24,8 @@ use futures::channel::oneshot;
 use hyper::server::accept;
 use hyper::service::make_service_fn;
 use hyper::{Body, Request, Server, StatusCode};
+use rustls::pki_types::pem::{PemObject, SectionKind};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile as pemfile;
 use std::convert::Infallible;
 use std::fs::File;
@@ -75,37 +77,38 @@ impl TLSConfig {
 		}
 	}
 
-	fn load_certs(&self) -> Result<Vec<rustls::Certificate>, Error> {
-		let certfile = File::open(&self.certificate).map_err(|e| {
-			Error::Internal(format!("failed to open file {} {}", self.certificate, e))
-		})?;
-		let mut reader = io::BufReader::new(certfile);
-
-		let certs = pemfile::certs(&mut reader)
-			.map_err(|_| Error::Internal("failed to load certificate".to_string()))?;
-
-		Ok(certs.into_iter().map(rustls::Certificate).collect())
-	}
-
-	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
-		let keyfile = File::open(&self.private_key)
-			.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
-		let mut reader = io::BufReader::new(keyfile);
-
-		let keys = pemfile::pkcs8_private_keys(&mut reader)
-			.map_err(|_| Error::Internal("failed to load private key".to_string()))?;
-		if keys.len() != 1 {
-			return Err(Error::Internal("expected a single private key".to_string()));
-		}
-		Ok(rustls::PrivateKey(keys[0].clone()))
-	}
-
 	pub fn build_server_config(&self) -> Result<Arc<rustls::ServerConfig>, Error> {
-		let certs = self.load_certs()?;
-		let key = self.load_private_key()?;
+		let certs: Vec<CertificateDer> = {
+			let certfile = File::open(&self.certificate).map_err(|e| {
+				Error::Internal(format!("failed to open file {} {}", self.certificate, e))
+			})?;
+			let mut reader = io::BufReader::new(certfile);
+
+			let certs = pemfile::certs(&mut reader)
+				.map_err(|_| Error::Internal("failed to load certificate".to_string()))?;
+			certs
+				.into_iter()
+				.map(CertificateDer::from)
+				.collect::<Vec<CertificateDer>>()
+		};
+		let key = {
+			let keyfile = File::open(&self.private_key)
+				.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
+			let mut reader = io::BufReader::new(keyfile);
+
+			let keys = pemfile::pkcs8_private_keys(&mut reader)
+				.map_err(|_| Error::Internal("failed to load private key".to_string()))?;
+			if keys.len() != 1 {
+				return Err(Error::Internal("expected a single private key".to_string()));
+			}
+			let key = PrivateKeyDer::from_pem(SectionKind::PrivateKey, keys[0].clone());
+			match key {
+				None => return Err(Error::Internal("wrong private key type".to_string())),
+				Some(k) => k,
+			}
+		};
 
 		let cfg = rustls::ServerConfig::builder()
-			.with_safe_defaults()
 			.with_no_client_auth()
 			.with_single_cert(certs, key)
 			.map_err(|e| Error::Internal(format!("set single certificate failed {}", e)))?;
