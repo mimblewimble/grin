@@ -273,6 +273,8 @@ fn decode_message(
 		Type::RangeProofSegment => Message::RangeProofSegment(msg.body()?),
 		Type::GetKernelSegment => Message::GetKernelSegment(msg.body()?),
 		Type::KernelSegment => Message::KernelSegment(msg.body()?),
+		Type::GetHeaderSegment => Message::GetHeaderSegment(msg.body()?),
+		Type::HeaderSegment => Message::HeaderSegment(msg.body()?),
 		Type::Error | Type::Hand | Type::Shake | Type::Headers => {
 			return Err(Error::UnexpectedMessage)
 		}
