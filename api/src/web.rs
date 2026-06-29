@@ -1,22 +1,42 @@
+// Copyright 2026 The Grin Developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::rest::*;
 use crate::router::ResponseFuture;
+use bytes::Bytes;
 use futures::future::ok;
-use hyper::body;
-use hyper::{Body, Request, Response, StatusCode};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
+use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::convert::Infallible;
 use std::io::Cursor;
 use url::form_urlencoded;
 
 /// Parse request body
-pub async fn parse_body<T>(req: Request<Body>) -> Result<T, Error>
+pub async fn parse_body<T>(req: Request<Incoming>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
-	let raw = body::to_bytes(req.into_body())
+	let body_req = req
+		.into_body()
+		.collect()
 		.await
 		.map_err(|e| Error::RequestError(format!("Failed to read request: {}", e)))?;
+	let raw = body_req.to_bytes();
 
 	let cursor = Cursor::new(raw);
 	serde_json::from_reader(cursor)
@@ -31,13 +51,12 @@ where
 	match res {
 		Ok(s) => json_response_pretty(&s),
 		Err(e) => match e {
-			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			Error::NotFound => response(StatusCode::NOT_FOUND, ""),
-			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-			// place holder
-			Error::Router { .. } => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg),
+			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg),
+			Error::NotFound => response(StatusCode::NOT_FOUND, "".into()),
+			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
+			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
+			Error::Router { .. } => response(StatusCode::INTERNAL_SERVER_ERROR, "".into()),
 		},
 	}
 }
@@ -50,7 +69,7 @@ where
 {
 	match serde_json::to_string(s) {
 		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, "".into()),
 	}
 }
 
@@ -69,15 +88,15 @@ where
 }
 
 /// Text response as HTTP response
-pub fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
-	let mut resp = Response::new(text.into());
+pub fn just_response(status: StatusCode, text: String) -> Response<BoxBody<Bytes, Infallible>> {
+	let mut resp = Response::new(Full::from(text).boxed());
 	*resp.status_mut() = status;
 	resp
 }
 
 /// Text response as future
-pub fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> ResponseFuture {
-	Box::pin(ok(just_response(status, text)))
+pub fn response(status: StatusCode, body: String) -> ResponseFuture {
+	Box::pin(ok(just_response(status, body)))
 }
 
 pub struct QueryParams {
@@ -126,8 +145,8 @@ impl From<Option<&str>> for QueryParams {
 	}
 }
 
-impl From<Request<Body>> for QueryParams {
-	fn from(req: Request<Body>) -> Self {
+impl From<Request<BoxBody<Bytes, Infallible>>> for QueryParams {
+	fn from(req: Request<BoxBody<Bytes, Infallible>>) -> Self {
 		Self::from(req.uri().query())
 	}
 }
@@ -136,7 +155,7 @@ impl From<Request<Body>> for QueryParams {
 macro_rules! right_path_element(
 	($req: expr) =>(
 		match $req.uri().path().trim_end_matches('/').rsplit('/').next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return response(StatusCode::BAD_REQUEST, "invalid url".into()),
 			Some(el) => el,
 		}
 	));
@@ -179,6 +198,6 @@ macro_rules! w_fut(
 	($p: expr) =>(
 		match w($p) {
 			Ok(p) => p,
-			Err(_) => return response(StatusCode::INTERNAL_SERVER_ERROR, "weak reference upgrade failed" ),
+			Err(_) => return response(StatusCode::INTERNAL_SERVER_ERROR, "weak reference upgrade failed".into()),
 		}
 	));

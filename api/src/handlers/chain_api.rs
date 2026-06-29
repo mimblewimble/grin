@@ -21,7 +21,8 @@ use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use std::sync::Weak;
 
 /// Chain handler. Get the head details.
@@ -40,7 +41,7 @@ impl ChainHandler {
 }
 
 impl Handler for ChainHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		result_to_response(self.get_tip())
 	}
 }
@@ -60,9 +61,9 @@ impl ChainValidationHandler {
 }
 
 impl Handler for ChainValidationHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		match w_fut!(&self.chain).validate(true) {
-			Ok(_) => response(StatusCode::OK, "{}"),
+			Ok(_) => response(StatusCode::OK, "{}".into()),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("validate failed: {}", e),
@@ -110,9 +111,9 @@ impl ChainCompactHandler {
 }
 
 impl Handler for ChainCompactHandler {
-	fn post(&self, _req: Request<Body>) -> ResponseFuture {
+	fn post(&self, _req: Request<Incoming>) -> ResponseFuture {
 		match w_fut!(&self.chain).compact() {
-			Ok(_) => response(StatusCode::OK, "{}"),
+			Ok(_) => response(StatusCode::OK, "{}".into()),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
 				format!("compact failed: {}", e),
@@ -121,10 +122,10 @@ impl Handler for ChainCompactHandler {
 	}
 }
 
-// Supports retrieval of multiple outputs in a single request -
-// GET /v1/chain/outputs/byids?id=xxx,yyy,zzz
-// GET /v1/chain/outputs/byids?id=xxx&id=yyy&id=zzz
-// GET /v1/chain/outputs/byheight?start_height=101&end_height=200
+/// Supports retrieval of multiple outputs in a single request -
+/// GET /v1/chain/outputs/byids?id=xxx,yyy,zzz
+/// GET /v1/chain/outputs/byids?id=xxx&id=yyy&id=zzz
+/// GET /v1/chain/outputs/byheight?start_height=101&end_height=200
 pub struct OutputHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -185,7 +186,7 @@ impl OutputHandler {
 		Ok(outputs)
 	}
 
-	// allows traversal of utxo set
+	/// Allows traversal of UTXO set.
 	pub fn get_unspent_outputs(
 		&self,
 		start_index: u64,
@@ -222,7 +223,7 @@ impl OutputHandler {
 		Ok(out)
 	}
 
-	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
+	fn outputs_by_ids(&self, req: &Request<Incoming>) -> Result<Vec<Output>, Error> {
 		let mut commitments: Vec<String> = vec![];
 
 		let query = must_get_query!(req);
@@ -276,7 +277,7 @@ impl OutputHandler {
 
 		Ok(BlockOutputs {
 			header: BlockHeaderDifficultyInfo::from_header(&header),
-			outputs: outputs,
+			outputs,
 		})
 	}
 
@@ -316,8 +317,8 @@ impl OutputHandler {
 		Ok(outputs)
 	}
 
-	// returns outputs for a specified range of blocks
-	fn outputs_block_batch(&self, req: &Request<Body>) -> Result<Vec<BlockOutputs>, Error> {
+	/// Returns outputs for a specified range of blocks.
+	fn outputs_block_batch(&self, req: &Request<Incoming>) -> Result<Vec<BlockOutputs>, Error> {
 		let mut commitments: Vec<Commitment> = vec![];
 
 		let query = must_get_query!(req);
@@ -348,7 +349,7 @@ impl OutputHandler {
 		Ok(return_vec)
 	}
 
-	// returns outputs for a specified range of blocks
+	/// Returns outputs for a specified range of blocks.
 	fn outputs_block_batch_v2(
 		&self,
 		start_height: u64,
@@ -382,11 +383,11 @@ impl OutputHandler {
 }
 
 impl Handler for OutputHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		match right_path_element!(req) {
 			"byids" => result_to_response(self.outputs_by_ids(&req)),
 			"byheight" => result_to_response(self.outputs_block_batch(&req)),
-			_ => response(StatusCode::BAD_REQUEST, ""),
+			_ => response(StatusCode::BAD_REQUEST, "".into()),
 		}
 	}
 }
@@ -399,7 +400,7 @@ pub struct KernelHandler {
 }
 
 impl KernelHandler {
-	fn get_kernel(&self, req: Request<Body>) -> Result<Option<LocatedTxKernel>, Error> {
+	fn get_kernel(&self, req: Request<Incoming>) -> Result<Option<LocatedTxKernel>, Error> {
 		let excess = req
 			.uri()
 			.path()
@@ -480,7 +481,7 @@ impl KernelHandler {
 }
 
 impl Handler for KernelHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		result_to_response(self.get_kernel(req))
 	}
 }

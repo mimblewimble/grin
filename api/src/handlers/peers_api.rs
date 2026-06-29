@@ -18,16 +18,18 @@ use crate::p2p::{self, PeerData};
 use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::web::*;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use std::net::SocketAddr;
 use std::sync::Weak;
 
+#[allow(dead_code)]
 pub struct PeersAllHandler {
 	pub peers: Weak<p2p::Peers>,
 }
 
 impl Handler for PeersAllHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		let peers = &w_fut!(&self.peers).all_peer_data();
 		json_response_pretty(&peers)
 	}
@@ -50,7 +52,7 @@ impl PeersConnectedHandler {
 }
 
 impl Handler for PeersConnectedHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		let peers: Vec<PeerInfoDisplay> = w_fut!(&self.peers)
 			.iter()
 			.connected()
@@ -99,7 +101,7 @@ impl PeerHandler {
 }
 
 impl Handler for PeerHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		let command = right_path_element!(req);
 
 		// We support both "ip" and "ip:port" here for peer_addr.
@@ -119,17 +121,17 @@ impl Handler for PeerHandler {
 
 		match w_fut!(&self.peers).get_peer(peer_addr) {
 			Ok(peer) => json_response(&peer),
-			Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
+			Err(_) => response(StatusCode::NOT_FOUND, "peer not found".into()),
 		}
 	}
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
+	fn post(&self, req: Request<Incoming>) -> ResponseFuture {
 		let mut path_elems = req.uri().path().trim_end_matches('/').rsplit('/');
 		let command = match path_elems.next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return response(StatusCode::BAD_REQUEST, "invalid url".into()),
 			Some(c) => c,
 		};
 		let addr = match path_elems.next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			None => return response(StatusCode::BAD_REQUEST, "invalid url".into()),
 			Some(a) => {
 				if let Ok(ip_addr) = a.parse() {
 					PeerAddr::from_ip(ip_addr)
@@ -146,20 +148,20 @@ impl Handler for PeerHandler {
 
 		match command {
 			"ban" => match w_fut!(&self.peers).ban_peer(addr, ReasonForBan::ManualBan) {
-				Ok(_) => response(StatusCode::OK, "{}"),
+				Ok(_) => response(StatusCode::OK, "{}".into()),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,
 					format!("ban failed: {:?}", e),
 				),
 			},
 			"unban" => match w_fut!(&self.peers).unban_peer(addr) {
-				Ok(_) => response(StatusCode::OK, "{}"),
+				Ok(_) => response(StatusCode::OK, "{}".into()),
 				Err(e) => response(
 					StatusCode::INTERNAL_SERVER_ERROR,
 					format!("unban failed: {:?}", e),
 				),
 			},
-			_ => response(StatusCode::BAD_REQUEST, "invalid command"),
+			_ => response(StatusCode::BAD_REQUEST, "invalid command".into()),
 		}
 	}
 }

@@ -14,9 +14,12 @@
 
 use crate::router::{Handler, HandlerObj, ResponseFuture};
 use crate::web::response;
+use bytes::Bytes;
 use futures::future::ok;
+use http_body_util::{BodyExt, Empty};
+use hyper::body::Incoming;
 use hyper::header::{HeaderValue, AUTHORIZATION, WWW_AUTHENTICATE};
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use ring::constant_time::verify_slices_are_equal;
 
 lazy_static! {
@@ -26,7 +29,7 @@ lazy_static! {
 		HeaderValue::from_str("Basic realm=GrinForeignAPI").unwrap();
 }
 
-// Basic Authentication Middleware
+/// Basic Authentication Middleware
 pub struct BasicAuthMiddleware {
 	api_basic_auth: String,
 	basic_realm: &'static HeaderValue,
@@ -50,12 +53,12 @@ impl BasicAuthMiddleware {
 impl Handler for BasicAuthMiddleware {
 	fn call(
 		&self,
-		req: Request<Body>,
+		req: Request<Incoming>,
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		let next_handler = match handlers.next() {
 			Some(h) => h,
-			None => return response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
+			None => return response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found".into()),
 		};
 		if req.method().as_str() == "OPTIONS" {
 			return next_handler.call(req, handlers);
@@ -104,12 +107,12 @@ impl BasicAuthURIMiddleware {
 impl Handler for BasicAuthURIMiddleware {
 	fn call(
 		&self,
-		req: Request<Body>,
+		req: Request<Incoming>,
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		let next_handler = match handlers.next() {
 			Some(h) => h,
-			None => return response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
+			None => return response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found".into()),
 		};
 		if req.method().as_str() == "OPTIONS" {
 			return next_handler.call(req, handlers);
@@ -137,7 +140,7 @@ fn unauthorized_response(basic_realm: &HeaderValue) -> ResponseFuture {
 	let response = Response::builder()
 		.status(StatusCode::UNAUTHORIZED)
 		.header(WWW_AUTHENTICATE, basic_realm)
-		.body(Body::empty())
+		.body(Empty::<Bytes>::new().boxed())
 		.unwrap();
 	Box::pin(ok(response))
 }

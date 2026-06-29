@@ -23,11 +23,13 @@ use crate::types::*;
 use crate::util;
 use crate::util::RwLock;
 use crate::web::*;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use std::sync::Weak;
 
 /// Get basic information about the transaction pool.
 /// GET /v1/pool
+#[allow(dead_code)]
 pub struct PoolInfoHandler<B, P>
 where
 	B: BlockChain,
@@ -41,7 +43,7 @@ where
 	B: BlockChain,
 	P: PoolAdapter,
 {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		let pool_arc = w_fut!(&self.tx_pool);
 		let pool = pool_arc.read();
 
@@ -104,6 +106,7 @@ where
 	}
 }
 /// Dummy wrapper for the hex-encoded serialized transaction.
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize)]
 struct TxWrapper {
 	tx_hex: String,
@@ -111,6 +114,7 @@ struct TxWrapper {
 
 /// Push new transaction to our local transaction pool.
 /// POST /v1/pool/push_tx
+#[allow(dead_code)]
 pub struct PoolPushHandler<B, P>
 where
 	B: BlockChain,
@@ -119,9 +123,10 @@ where
 	pub tx_pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
 }
 
+#[allow(dead_code)]
 async fn update_pool<B, P>(
 	pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
-	req: Request<Body>,
+	req: Request<Incoming>,
 ) -> Result<(), Error>
 where
 	B: BlockChain,
@@ -167,11 +172,11 @@ where
 	B: BlockChain + 'static,
 	P: PoolAdapter + 'static,
 {
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
+	fn post(&self, req: Request<Incoming>) -> ResponseFuture {
 		let pool = self.tx_pool.clone();
 		Box::pin(async move {
 			let res = match update_pool(pool, req).await {
-				Ok(_) => just_response(StatusCode::OK, ""),
+				Ok(_) => just_response(StatusCode::OK, "".into()),
 				Err(e) => {
 					just_response(StatusCode::INTERNAL_SERVER_ERROR, format!("failed: {}", e))
 				}

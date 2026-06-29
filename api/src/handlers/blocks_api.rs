@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 use super::utils::{get_output, get_output_v2, w};
 use crate::chain;
 use crate::core::core::hash::Hash;
@@ -20,7 +21,8 @@ use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
 use crate::util;
 use crate::web::*;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use regex::Regex;
 use std::sync::Weak;
 
@@ -42,10 +44,10 @@ impl HeaderHandler {
 			return Ok(h);
 		}
 		if let Ok(height) = input.parse() {
-			match w(&self.chain)?.get_header_by_height(height) {
-				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
-				Err(_) => return Err(Error::NotFound),
-			}
+			return match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => Ok(BlockHeaderPrintable::from_header(&header)),
+				Err(_) => Err(Error::NotFound),
+			};
 		}
 		check_block_param(&input)?;
 		let vec =
@@ -74,40 +76,18 @@ impl HeaderHandler {
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
 
-	// Try to get hash from height, hash or output commit
 	pub fn parse_inputs(
 		&self,
 		height: Option<u64>,
 		hash: Option<Hash>,
 		commit: Option<String>,
 	) -> Result<Hash, Error> {
-		if let Some(height) = height {
-			match w(&self.chain)?.get_header_by_height(height) {
-				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
-			}
-		}
-		if let Some(hash) = hash {
-			return Ok(hash);
-		}
-		if let Some(commit) = commit {
-			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
-				Some((_, o)) => o,
-				None => return Err(Error::NotFound),
-			};
-			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
-				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
-			}
-		}
-		Err(Error::Argument(
-			"not a valid hash, height or output commit".to_owned(),
-		))
+		parse_inputs(&self.chain, height, hash, commit)
 	}
 }
 
 impl Handler for HeaderHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		let el = right_path_element!(req);
 		result_to_response(self.get_header(el.to_string()))
 	}
@@ -220,10 +200,10 @@ impl BlockHandler {
 	// Try to decode the string as a height or a hash.
 	fn parse_input(&self, input: String) -> Result<Hash, Error> {
 		if let Ok(height) = input.parse() {
-			match w(&self.chain)?.get_header_by_height(height) {
-				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
-			}
+			return match w(&self.chain)?.get_header_by_height(height) {
+				Ok(header) => Ok(header.hash()),
+				Err(_) => Err(Error::NotFound),
+			};
 		}
 		check_block_param(&input)?;
 		let vec =
@@ -231,36 +211,45 @@ impl BlockHandler {
 		Ok(Hash::from_vec(&vec))
 	}
 
-	// Try to get hash from height, hash or output commit
 	pub fn parse_inputs(
 		&self,
 		height: Option<u64>,
 		hash: Option<Hash>,
 		commit: Option<String>,
 	) -> Result<Hash, Error> {
-		if let Some(height) = height {
-			match w(&self.chain)?.get_header_by_height(height) {
-				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
-			}
-		}
-		if let Some(hash) = hash {
-			return Ok(hash);
-		}
-		if let Some(commit) = commit {
-			let oid = match get_output_v2(&self.chain, &commit, false, false)? {
-				Some((_, o)) => o,
-				None => return Err(Error::NotFound),
-			};
-			match w(&self.chain)?.get_header_for_output(oid.commitment()) {
-				Ok(header) => return Ok(header.hash()),
-				Err(_) => return Err(Error::NotFound),
-			}
-		}
-		Err(Error::Argument(
-			"not a valid hash, height or output commit".to_owned(),
-		))
+		parse_inputs(&self.chain, height, hash, commit)
 	}
+}
+
+/// Try to get hash from height, hash or output commit.
+pub fn parse_inputs(
+	chain: &Weak<chain::Chain>,
+	height: Option<u64>,
+	hash: Option<Hash>,
+	commit: Option<String>,
+) -> Result<Hash, Error> {
+	if let Some(height) = height {
+		return match w(chain)?.get_header_by_height(height) {
+			Ok(header) => Ok(header.hash()),
+			Err(_) => Err(Error::NotFound),
+		};
+	}
+	if let Some(hash) = hash {
+		return Ok(hash);
+	}
+	if let Some(commit) = commit {
+		let oid = match get_output_v2(chain, &commit, false, false)? {
+			Some((_, o)) => o,
+			None => return Err(Error::NotFound),
+		};
+		return match w(chain)?.get_header_for_output(oid.commitment()) {
+			Ok(header) => Ok(header.hash()),
+			Err(_) => Err(Error::NotFound),
+		};
+	}
+	Err(Error::Argument(
+		"not a valid hash, height or output commit".to_owned(),
+	))
 }
 
 fn check_block_param(input: &str) -> Result<(), Error> {
@@ -274,7 +263,7 @@ fn check_block_param(input: &str) -> Result<(), Error> {
 }
 
 impl Handler for BlockHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		let el = right_path_element!(req);
 		let h = match self.parse_input(el.to_string()) {
 			Err(e) => {
