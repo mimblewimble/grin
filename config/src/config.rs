@@ -103,22 +103,53 @@ fn check_api_secret_file(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	}
 }
 
+fn resolve_api_secret_path(path: &str, grin_path: &PathBuf) -> PathBuf {
+	let path = PathBuf::from(path);
+	if path.is_absolute() {
+		path
+	} else {
+		let mut resolved = grin_path.clone();
+		resolved.push(path);
+		resolved
+	}
+}
+
+fn resolve_api_secret_path_for_chain(
+	path: &str,
+	chain_type: &global::ChainTypes,
+) -> Result<PathBuf, ConfigError> {
+	let path_buf = PathBuf::from(path);
+	if path_buf.is_absolute() {
+		Ok(path_buf)
+	} else {
+		Ok(resolve_api_secret_path(path, &get_grin_path(chain_type)?))
+	}
+}
+
 /// Check that the configured api secret files exist and are valid
-fn check_api_secret_files(config: &GlobalConfig) -> Result<(), ConfigError> {
-	let server_config = &config.members.as_ref().unwrap().server;
-	if let Some(ref api_secret_path) = server_config.api_secret_path {
-		check_api_secret_file(&PathBuf::from(api_secret_path))?;
+fn check_api_secret_files(config: &mut GlobalConfig) -> Result<(), ConfigError> {
+	let server_config = &mut config.members.as_mut().unwrap().server;
+
+	if let Some(api_secret_path) = server_config.api_secret_path.clone() {
+		let resolved =
+			resolve_api_secret_path_for_chain(&api_secret_path, &server_config.chain_type)?;
+		check_api_secret_file(&resolved)?;
+		server_config.api_secret_path = Some(resolved.to_str().unwrap().to_owned());
 	}
-	if let Some(ref foreign_api_secret_path) = server_config.foreign_api_secret_path {
-		check_api_secret_file(&PathBuf::from(foreign_api_secret_path))?;
+	if let Some(foreign_api_secret_path) = server_config.foreign_api_secret_path.clone() {
+		let resolved =
+			resolve_api_secret_path_for_chain(&foreign_api_secret_path, &server_config.chain_type)?;
+		check_api_secret_file(&resolved)?;
+		server_config.foreign_api_secret_path = Some(resolved.to_str().unwrap().to_owned());
 	}
+
 	Ok(())
 }
 
 /// Load server config and ensure the configured api secret files exist
 pub fn load_server_config(file_path: &str) -> Result<GlobalConfig, ConfigError> {
-	let config = GlobalConfig::new(file_path)?;
-	check_api_secret_files(&config)?;
+	let mut config = GlobalConfig::new(file_path)?;
+	check_api_secret_files(&mut config)?;
 	Ok(config)
 }
 
@@ -464,6 +495,25 @@ fn check_test_secrets(
 	);
 	assert!(api_secret_exists);
 	assert!(foreign_api_secret_exists);
+}
+
+#[test]
+fn test_relative_api_secret_paths() {
+	let grin_path = temp_config_dir("grin_config_relative_home");
+	let mut expected_api_secret_path = grin_path.clone();
+	expected_api_secret_path.push(API_SECRET_FILE_NAME);
+	let mut absolute_api_secret_path = temp_config_dir("grin_config_absolute");
+	absolute_api_secret_path.push(API_SECRET_FILE_NAME);
+
+	let resolved_api_secret_path = resolve_api_secret_path(API_SECRET_FILE_NAME, &grin_path);
+	let resolved_absolute_api_secret_path =
+		resolve_api_secret_path(absolute_api_secret_path.to_str().unwrap(), &grin_path);
+
+	assert_eq!(resolved_api_secret_path, expected_api_secret_path);
+	assert_eq!(resolved_absolute_api_secret_path, absolute_api_secret_path);
+
+	fs::remove_dir_all(&grin_path).unwrap();
+	fs::remove_dir_all(absolute_api_secret_path.parent().unwrap()).unwrap();
 }
 
 #[test]
