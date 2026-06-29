@@ -15,9 +15,8 @@
 //! Mining Stratum Server
 
 use futures::channel::mpsc;
-use futures::pin_mut;
-use futures::{SinkExt, StreamExt, TryStreamExt};
-use tokio::net::TcpListener;
+use futures::{SinkExt, StreamExt};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -599,72 +598,92 @@ impl Handler {
 
 // ----------------------------------------
 // Worker Factory Thread Function
+
+struct WorkerCleanup {
+	worker_id: usize,
+	workers: Arc<WorkersList>,
+}
+
+impl Drop for WorkerCleanup {
+	fn drop(&mut self) {
+		self.workers.remove_worker(self.worker_id);
+		info!("Worker {} disconnected", self.worker_id);
+	}
+}
+
+async fn handle_connection(socket: TcpStream, handler: Arc<Handler>) {
+	let (tx, mut rx) = mpsc::unbounded();
+	let worker_id = handler.workers.add_worker(tx);
+	let _cleanup = WorkerCleanup {
+		worker_id,
+		workers: handler.workers.clone(),
+	};
+
+	if let Ok(addr) = socket.peer_addr() {
+		info!("Worker {} connected from {}", worker_id, addr);
+	} else {
+		info!("Worker {} connected", worker_id);
+	}
+
+	let mut framed = Framed::new(socket, LinesCodec::new());
+
+	loop {
+		tokio::select! {
+			incoming = framed.next() => {
+				match incoming {
+					Some(Ok(line)) => {
+						let request: RpcRequest = match serde_json::from_str(&line) {
+							Ok(req) => req,
+							Err(e) => {
+								error!("error serializing line: {}", e);
+								break;
+							}
+						};
+						let resp = handler.handle_rpc_requests(request, worker_id);
+						handler.workers.send_to(worker_id, resp);
+					}
+					Some(Err(e)) => {
+						error!("error reading line: {}", e);
+						break;
+					}
+					None => break,
+				}
+			}
+			outgoing = rx.next() => {
+				match outgoing {
+					Some(line) => {
+						if let Err(e) = framed.send(line).await {
+							error!("error writing line: {}", e);
+							break;
+						}
+					}
+					None => break,
+				}
+			}
+		}
+	}
+}
+
 fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 	info!("Start tokio stratum server");
 	let task = async move {
 		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		let server = async_stream::stream! {
-			loop {
-				match listener.accept().await {
-					Ok((socket, _)) => yield socket,
-					Err(e) => {
-						error!("accept error = {:?}", e);
-						continue;
-					}
+		loop {
+			match listener.accept().await {
+				Ok((socket, _)) => {
+					let handler = handler.clone();
+					tokio::spawn(async move {
+						handle_connection(socket, handler).await;
+					});
+				}
+				Err(e) => {
+					error!("accept error = {:?}", e);
+					continue;
 				}
 			}
 		}
-		.for_each(move |socket| {
-			let handler = handler.clone();
-			async move {
-				// Spawn a task to process the connection
-				let (tx, mut rx) = mpsc::unbounded();
-
-				let worker_id = handler.workers.add_worker(tx);
-				info!("Worker {} connected", worker_id);
-
-				let framed = Framed::new(socket, LinesCodec::new());
-				let (mut writer, mut reader) = framed.split();
-
-				let h = handler.clone();
-				let read = async move {
-					while let Some(line) = reader
-						.try_next()
-						.await
-						.map_err(|e| error!("error reading line: {}", e))?
-					{
-						let request = serde_json::from_str(&line)
-							.map_err(|e| error!("error serializing line: {}", e))?;
-						let resp = h.handle_rpc_requests(request, worker_id);
-						h.workers.send_to(worker_id, resp);
-					}
-
-					Result::<_, ()>::Ok(())
-				};
-
-				let write = async move {
-					while let Some(line) = rx.next().await {
-						writer
-							.send(line)
-							.await
-							.map_err(|e| error!("error writing line: {}", e))?;
-					}
-
-					Result::<_, ()>::Ok(())
-				};
-
-				let task = async move {
-					pin_mut!(read, write);
-					futures::future::select(read, write).await;
-					handler.workers.remove_worker(worker_id);
-					info!("Worker {} disconnected", worker_id);
-				};
-				tokio::spawn(task);
-			}
-		});
-		server.await
 	};
 
 	let rt = Runtime::new().unwrap();
