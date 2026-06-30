@@ -29,7 +29,7 @@ use std::{cmp, str, thread, time};
 use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::p2p;
-use crate::p2p::types::PeerAddr;
+use crate::p2p::types::{PeerAddr, MAINNET_PEER_PORT, TESTNET_PEER_PORT};
 use crate::p2p::ChainAdapter;
 use crate::util::StopState;
 
@@ -513,11 +513,15 @@ fn default_dns_seeds() -> Vec<PeerAddr> {
 			.iter()
 			.map(|s| {
 				s.to_string()
-					+ if global::is_testnet() {
-						":13414"
-					} else {
-						":3414"
-					}
+					+ format!(
+						":{}",
+						if global::is_testnet() {
+							TESTNET_PEER_PORT
+						} else {
+							MAINNET_PEER_PORT
+						}
+					)
+					.as_str()
 			})
 			.collect(),
 	)

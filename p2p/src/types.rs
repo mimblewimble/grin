@@ -192,12 +192,33 @@ impl<'de> Visitor<'de> for PeerAddrs {
 				// Try to parse IP address first
 				Ok(ip) => peers.push(PeerAddr(ip)),
 				// If that fails it's probably a DNS record
-				Err(_) => {
-					let socket_addrs: Result<std::vec::IntoIter<SocketAddr>, M::Error> =
-						entry.to_socket_addrs().map_err(|_| {
-							serde::de::Error::custom(format!("Unable to resolve DNS: {}", entry))
-						});
+				Err(e) => {
+					eprintln!(
+						"Address {} parse error, trying to resolve DNS: {}",
+						entry, e
+					);
+					let socket_addrs: Result<std::vec::IntoIter<SocketAddr>, M::Error> = {
+						match entry.to_socket_addrs() {
+							Ok(r) => Ok(r),
+							Err(_) => (
+								entry,
+								if global::is_testnet() {
+									TESTNET_PEER_PORT
+								} else {
+									MAINNET_PEER_PORT
+								},
+							)
+								.to_socket_addrs()
+								.map_err(|e| {
+									let err_msg =
+										format!("Unable to resolve DNS for {}: {}", entry, e);
+									eprintln!("{}", err_msg);
+									serde::de::Error::custom(err_msg)
+								}),
+						}
+					};
 					if let Ok(socket_addrs) = socket_addrs {
+						println!("resolved DNS for {:?}", socket_addrs);
 						peers.append(&mut socket_addrs.map(PeerAddr).collect());
 					}
 				}
