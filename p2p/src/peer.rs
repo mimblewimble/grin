@@ -152,8 +152,12 @@ impl Peer {
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
+		// Check if IP and non-empty port of peers are equal.
+		let peer_filter = |p: &PeerAddr| {
+			p.0.ip() == peer_addr.0.ip() && (p.0.port() == peer_addr.0.port() || p.0.port() == 0)
+		};
 		if let Some(ref denied) = config.peers_deny {
-			if denied.peers.contains(&peer_addr) {
+			if denied.peers.iter().any(peer_filter) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -162,19 +166,19 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			if allowed.peers.contains(&peer_addr) {
+			return if allowed.peers.iter().any(peer_filter) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr
 				);
-				return false;
+				false
 			} else {
 				debug!(
 					"checking peer allowed/denied: {:?} not explicitly allowed, denying",
 					peer_addr
 				);
-				return true;
-			}
+				true
+			};
 		}
 
 		// default to allowing peer connection if we do not explicitly allow or deny
