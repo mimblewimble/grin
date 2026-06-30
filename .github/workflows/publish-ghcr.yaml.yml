@@ -125,3 +125,18 @@ jobs:
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.version }}
+
+  telegram-notify:
+    name: Telegram Notification
+    needs: [build, merge]
+    if: always()
+    uses: ./.github/workflows/telegram.yaml
+    secrets: inherit
+    with:
+      title: Grin Docker
+      status: ${{ contains(join(needs.*.result, ','), 'failure') && 'failed' || contains(join(needs.*.result, ','), 'cancelled') && 'cancelled' || 'success' }}
+      details: |
+        <b>Images:</b> ${{ needs.build.result }}
+        <b>Manifest:</b> ${{ needs.merge.result }}
+      image_tag: ${{ github.ref_name == 'master' && 'latest' || 'staging' }}
+      commit_message: ${{ github.event.head_commit.message }}

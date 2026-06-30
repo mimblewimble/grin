@@ -142,7 +142,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"run_tui".to_string(),
 		"
-#whether to run the ncurses TUI (Ncurses must be installed)
+#whether to run the terminal TUI
 "
 		.to_string(),
 	);
