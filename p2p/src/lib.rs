@@ -53,7 +53,7 @@ pub use crate::peers::Peers;
 pub use crate::serv::{DummyAdapter, Server};
 pub use crate::store::{PeerData, State};
 pub use crate::types::{
-	Capabilities, ChainAdapter, Direction, Error, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	Seeding, TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
-	PIHD_HEADER_SEGMENT_HEIGHT,
+	pihd_header_segment_capacity, Capabilities, ChainAdapter, Direction, Error, P2PConfig,
+	PeerAddr, PeerInfo, ReasonForBan, Seeding, TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS,
+	MAX_PEER_ADDRS, PIHD_HEADER_SEGMENT_HEIGHT,
 };

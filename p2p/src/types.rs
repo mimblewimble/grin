@@ -43,6 +43,17 @@ pub const MAX_BLOCK_HEADERS: u32 = 512;
 /// Header segment height used for PIHD header segment requests.
 pub const PIHD_HEADER_SEGMENT_HEIGHT: u8 = 9;
 
+/// Number of headers represented by one PIHD header segment.
+pub fn pihd_header_segment_capacity() -> u64 {
+	let id = SegmentIdentifier {
+		height: PIHD_HEADER_SEGMENT_HEIGHT,
+		idx: 0,
+	};
+	let capacity = id.segment_capacity();
+	debug_assert_eq!(capacity, MAX_BLOCK_HEADERS as u64);
+	capacity
+}
+
 /// Maximum number of block bodies a peer should ever ask for and send
 #[allow(dead_code)]
 pub const MAX_BLOCK_BODIES: u32 = 16;
