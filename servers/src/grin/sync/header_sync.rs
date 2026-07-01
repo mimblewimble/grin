@@ -177,6 +177,23 @@ impl HeaderSync {
 			self.pihd_stalling_ts = None;
 		}
 
+		// Returns conditions to retain pihd segments.
+		let retain_pihd_segment_conditions =
+			|req: &PIHDHeaderSegmentContainer| -> (bool, bool, bool) {
+				let completed_height = req
+					.identifier
+					.idx
+					.saturating_mul(req.identifier.segment_capacity())
+					.saturating_add(req.identifier.segment_capacity());
+				let completed_height = completed_height.min(req.target_height);
+				let connected = peers.get_connected_peer(PeerAddr(req.peer_addr)).is_some();
+				let complete = header_head.height >= completed_height;
+				let timeout = now
+					> req.request_time
+						+ Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
+				(complete, connected, timeout)
+			};
+
 		let mut newly_failed = 0;
 		let mut failed_peers = vec![];
 		self.pending_pihd.retain(|req| {
@@ -186,16 +203,7 @@ impl HeaderSync {
 			if !still_requested {
 				return false;
 			}
-			let completed_height = req
-				.identifier
-				.idx
-				.saturating_mul(req.identifier.segment_capacity())
-				.saturating_add(req.identifier.segment_capacity())
-				.min(req.target_height);
-			let connected = peers.get_connected_peer(PeerAddr(req.peer_addr)).is_some();
-			let complete = header_head.height >= completed_height;
-			let timeout = now
-				> req.request_time + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
+			let (complete, connected, timeout) = retain_pihd_segment_conditions(req);
 			if !complete && connected && timeout {
 				newly_failed += 1;
 				failed_peers.push(PeerAddr(req.peer_addr));
@@ -207,16 +215,7 @@ impl HeaderSync {
 			!complete && connected && !timeout
 		});
 		self.sync_state.retain_pihd_header_segments(|req| {
-			let completed_height = req
-				.identifier
-				.idx
-				.saturating_mul(req.identifier.segment_capacity())
-				.saturating_add(req.identifier.segment_capacity());
-			let completed_height = completed_height.min(req.target_height);
-			let connected = peers.get_connected_peer(PeerAddr(req.peer_addr)).is_some();
-			let complete = header_head.height >= completed_height;
-			let timeout = now
-				> req.request_time + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
+			let (complete, connected, timeout) = retain_pihd_segment_conditions(req);
 			!complete && connected && !timeout
 		});
 		if newly_failed > 0 {
