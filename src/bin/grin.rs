@@ -97,6 +97,9 @@ fn real_main() -> i32 {
 		global::ChainTypes::Mainnet
 	};
 
+	// Initialize our global chain_type.
+	global::init_global_chain_type(chain_type);
+
 	// Deal with configuration file creation
 	if let ("server", Some(server_args)) = args.subcommand() {
 		// If it's just a server config command, do it and exit
@@ -177,9 +180,8 @@ fn real_main() -> i32 {
 
 	log_build_info();
 
-	// Initialize our global chain_type, feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
+	// Initialize feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
 	// These are read via global and not read from config beyond this point.
-	global::init_global_chain_type(config.members.as_ref().unwrap().server.chain_type);
 	info!("Chain: {:?}", global::get_chain_type());
 	match global::get_chain_type() {
 		global::ChainTypes::Mainnet => {

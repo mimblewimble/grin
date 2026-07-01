@@ -37,6 +37,13 @@ use crate::msg::PeerAddrs;
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
 
+/// Default main network peer port.
+pub const MAINNET_PEER_PORT: u16 = 3414;
+/// Default test network peer port.
+pub const TESTNET_PEER_PORT: u16 = 13414;
+/// Default user network peer port.
+pub const USERNET_PEER_PORT: u16 = 23414;
+
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
 
@@ -185,12 +192,33 @@ impl<'de> Visitor<'de> for PeerAddrs {
 				// Try to parse IP address first
 				Ok(ip) => peers.push(PeerAddr(ip)),
 				// If that fails it's probably a DNS record
-				Err(_) => {
-					let socket_addrs: Result<std::vec::IntoIter<SocketAddr>, M::Error> =
-						entry.to_socket_addrs().map_err(|_| {
-							serde::de::Error::custom(format!("Unable to resolve DNS: {}", entry))
-						});
+				Err(e) => {
+					eprintln!(
+						"Address {} parse error, trying to resolve DNS: {}",
+						entry, e
+					);
+					let socket_addrs: Result<std::vec::IntoIter<SocketAddr>, M::Error> = {
+						match entry.to_socket_addrs() {
+							Ok(r) => Ok(r),
+							Err(_) => (
+								entry,
+								if global::is_testnet() {
+									TESTNET_PEER_PORT
+								} else {
+									MAINNET_PEER_PORT
+								},
+							)
+								.to_socket_addrs()
+								.map_err(|e| {
+									let err_msg =
+										format!("Unable to resolve DNS for {}: {}", entry, e);
+									eprintln!("{}", err_msg);
+									serde::de::Error::custom(err_msg)
+								}),
+						}
+					};
 					if let Ok(socket_addrs) = socket_addrs {
+						println!("resolved DNS for {:?}", socket_addrs);
 						peers.append(&mut socket_addrs.map(PeerAddr).collect());
 					}
 				}
@@ -210,10 +238,10 @@ impl<'de> Deserialize<'de> for PeerAddrs {
 }
 
 impl std::hash::Hash for PeerAddr {
-	/// If loopback address then we care about ip and port.
+	/// If private address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-		if self.0.ip().is_loopback() {
+		if is_private_ip(&self.0.ip()) {
 			self.0.hash(state);
 		} else {
 			self.0.ip().hash(state);
@@ -222,10 +250,10 @@ impl std::hash::Hash for PeerAddr {
 }
 
 impl PartialEq for PeerAddr {
-	/// If loopback address then we care about ip and port.
+	/// If private address then we care about ip and port.
 	/// If regular address then we only care about the ip and ignore the port.
 	fn eq(&self, other: &PeerAddr) -> bool {
-		if self.0.ip().is_loopback() {
+		if is_private_ip(&self.0.ip()) {
 			self.0 == other.0
 		} else {
 			self.0.ip() == other.0.ip()
@@ -233,26 +261,89 @@ impl PartialEq for PeerAddr {
 	}
 }
 
-impl Eq for PeerAddr {}
-
-impl std::fmt::Display for PeerAddr {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		write!(f, "{}", self.0)
+/// Check if IP address is private.
+/// Implementation taken from `core::net:ip_addr` while `is_global` is unstable.
+pub fn is_private_ip(ip: &IpAddr) -> bool {
+	// Check IPv4.
+	let check_ip_v4 = |ip: &Ipv4Addr| {
+		ip.is_private() || ip.is_loopback() || ip.is_link_local() || ip.is_documentation()
+			// addresses reserved for future protocols (`192.0.0.0/24`)
+			// .9 and .10 are documented as globally reachable so they're excluded
+			|| (
+			ip.octets()[0] == 192 && ip.octets()[1] == 0 && ip.octets()[2] == 0
+				&& ip.octets()[3] != 9 && ip.octets()[3] != 10
+				// this address is part of the Shared Address Space defined in
+				// [IETF RFC 6598] (`100.64.0.0/10`).
+				|| ip.octets()[0] == 100 && (ip.octets()[1] & 0b1100_0000 == 0b0100_0000)
+		)
+	};
+	// Check IPv6.
+	let check_ip_v6 = |ip: &Ipv6Addr| {
+		ip.is_loopback() || ip.is_unspecified()
+			// IPv4-mapped Address (`::ffff:0:0/96`)
+			|| matches!(ip.segments(), [0, 0, 0, 0, 0, 0xffff, _, _])
+			// IPv4-IPv6 Translat. (`64:ff9b:1::/48`)
+			|| matches!(ip.segments(), [0x64, 0xff9b, 1, _, _, _, _, _])
+			// Discard-Only Address Block (`100::/64`)
+			|| matches!(ip.segments(), [0x100, 0, 0, 0, _, _, _, _])
+			// IETF Protocol Assignments (`2001::/23`)
+			|| (matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b < 0x200)
+			&& !(
+			// Port Control Protocol Anycast (`2001:1::1`)
+			u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0001
+				// Traversal Using Relays around NAT Anycast (`2001:1::2`)
+				|| u128::from_be_bytes(ip.octets()) == 0x2001_0001_0000_0000_0000_0000_0000_0002
+				// AMT (`2001:3::/32`)
+				|| matches!(ip.segments(), [0x2001, 3, _, _, _, _, _, _])
+				// AS112-v6 (`2001:4:112::/48`)
+				|| matches!(ip.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
+				// ORCHIDv2 (`2001:20::/28`)
+				// Drone Remote ID Protocol Entity Tags (DETs) Prefix (`2001:30::/28`)`
+				|| matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x3F)
+		))
+			// 6to4 (`2002::/16`) – it's not explicitly documented as globally reachable,
+			// IANA says N/A.
+			|| matches!(ip.segments(), [0x2002, _, _, _, _, _, _, _])
+			// Segment Routing (SRv6) SIDs (`5f00::/16`)
+			|| matches!(ip.segments(), [0x5f00, ..])
+			|| ip.is_unique_local()
+			|| ip.is_unicast_link_local()
+	};
+	// Check if address is private.
+	match ip {
+		IpAddr::V4(ip) => check_ip_v4(ip),
+		IpAddr::V6(ip) => {
+			if let Some(ipv4) = ip.to_ipv4_mapped() {
+				check_ip_v4(&ipv4)
+			} else {
+				check_ip_v6(ip)
+			}
+		}
 	}
 }
 
+impl Eq for PeerAddr {}
+
+impl fmt::Display for PeerAddr {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.0)
+	}
+}
 impl PeerAddr {
-	/// Convenient way of constructing a new peer_addr from an ip_addr
-	/// defaults to port 3414 on mainnet and 13414 on testnet.
+	/// Convenient way of constructing a new peer address from an ip address.
 	pub fn from_ip(addr: IpAddr) -> PeerAddr {
-		let port = if global::is_testnet() { 13414 } else { 3414 };
+		let port = if global::is_testnet() {
+			TESTNET_PEER_PORT
+		} else {
+			MAINNET_PEER_PORT
+		};
 		PeerAddr(SocketAddr::new(addr, port))
 	}
 
-	/// If the ip is loopback then our key is "ip:port" (mainly for local usernet testing).
-	/// Otherwise we only care about the ip (we disallow multiple peers on the same ip address).
+	/// If the ip is private then our key is "ip:port".
+	/// Otherwise, we only care about the ip (we disallow multiple peers on the same ip address).
 	pub fn as_key(&self) -> String {
-		if self.0.ip().is_loopback() {
+		if is_private_ip(&self.0.ip()) {
 			format!("{}:{}", self.0.ip(), self.0.port())
 		} else {
 			format!("{}", self.0.ip())
@@ -299,7 +390,7 @@ impl Default for P2PConfig {
 		let ipaddr = "::".parse().unwrap();
 		P2PConfig {
 			host: ipaddr,
-			port: 3414,
+			port: MAINNET_PEER_PORT,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
@@ -320,42 +411,31 @@ impl Default for P2PConfig {
 impl P2PConfig {
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {
-		match self.ban_window {
-			Some(n) => n,
-			None => BAN_WINDOW,
-		}
+		self.ban_window.unwrap_or_else(|| BAN_WINDOW)
 	}
 
 	/// return maximum inbound peer connections count
 	pub fn peer_max_inbound_count(&self) -> u32 {
-		match self.peer_max_inbound_count {
-			Some(n) => n,
-			None => PEER_MAX_INBOUND_COUNT,
-		}
+		self.peer_max_inbound_count
+			.unwrap_or_else(|| PEER_MAX_INBOUND_COUNT)
 	}
 
 	/// return maximum outbound peer connections count
 	pub fn peer_max_outbound_count(&self) -> u32 {
-		match self.peer_max_outbound_count {
-			Some(n) => n,
-			None => PEER_MAX_OUTBOUND_COUNT,
-		}
+		self.peer_max_outbound_count
+			.unwrap_or_else(|| PEER_MAX_OUTBOUND_COUNT)
 	}
 
 	/// return minimum preferred outbound peer count
 	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
-		match self.peer_min_preferred_outbound_count {
-			Some(n) => n,
-			None => PEER_MIN_PREFERRED_OUTBOUND_COUNT,
-		}
+		self.peer_min_preferred_outbound_count
+			.unwrap_or_else(|| PEER_MIN_PREFERRED_OUTBOUND_COUNT)
 	}
 
 	/// return peer buffer count for listener
 	pub fn peer_listener_buffer_count(&self) -> u32 {
-		match self.peer_listener_buffer_count {
-			Some(n) => n,
-			None => PEER_LISTENER_BUFFER_COUNT,
-		}
+		self.peer_listener_buffer_count
+			.unwrap_or_else(|| PEER_LISTENER_BUFFER_COUNT)
 	}
 }
 

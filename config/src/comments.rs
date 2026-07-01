@@ -295,9 +295,9 @@ fn comments() -> HashMap<String, String> {
 #seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
 #hardcoded peer lists for allow/deny
-#will *only* connect to peers in allow list
+#will *only* connect to peers in allow list, ports will be ignored only for public IPs
 #peers_allow = [\"192.168.0.1:3414\", \"192.168.0.2:3414\"]
-#will *never* connect to peers in deny list
+#will *never* connect to peers in deny list, ports will be ignored only for public IPs
 #peers_deny = [\"192.168.0.3:3414\", \"192.168.0.4:3414\"]
 #a list of preferred peers to connect to
 #peers_preferred = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]

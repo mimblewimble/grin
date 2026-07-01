@@ -20,6 +20,7 @@ use grin_core::pow::Difficulty;
 use grin_core::{genesis, global};
 use grin_p2p as p2p;
 use grin_servers::{resolve_dns_to_addrs, MAINNET_DNS_SEEDS, TESTNET_DNS_SEEDS};
+use p2p::types::{MAINNET_PEER_PORT, TESTNET_PEER_PORT};
 use std::fs;
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -95,8 +96,8 @@ pub struct SeedCheckConnectAttempt {
 pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult> {
 	let mut result = vec![];
 	let (default_seeds, port) = match is_testnet {
-		true => (TESTNET_DNS_SEEDS, "13414"),
-		false => (MAINNET_DNS_SEEDS, "3414"),
+		true => (TESTNET_DNS_SEEDS, TESTNET_PEER_PORT),
+		false => (MAINNET_DNS_SEEDS, MAINNET_PEER_PORT),
 	};
 	let seeds = match seed {
 		Some(seed) => vec![seed],
