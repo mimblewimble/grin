@@ -685,7 +685,7 @@ where
 		peer_info: &PeerInfo,
 	) -> Result<HeaderSegmentAcceptance, chain::Error> {
 		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
-			return Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment height"));
+			return Ok(self.reject_bad_header_segment(peer_info, "invalid PIHD segment height"));
 		}
 		if !self
 			.sync_state
@@ -704,9 +704,7 @@ where
 		{
 			Some(height) => height,
 			None => {
-				return Ok(
-					self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment index")
-				);
+				return Ok(self.reject_bad_header_segment(peer_info, "invalid PIHD segment index"));
 			}
 		};
 		let target_height = self
@@ -723,12 +721,10 @@ where
 			return Ok(HeaderSegmentAcceptance::Accepted);
 		}
 		if headers[0].height != expected_first_height {
-			return Ok(
-				self.block_bad_header_segment_peer(peer_info, "unexpected PIHD segment start")
-			);
+			return Ok(self.reject_bad_header_segment(peer_info, "unexpected PIHD segment start"));
 		}
 		if !headers.windows(2).all(|w| w[1].height == w[0].height + 1) {
-			return Ok(self.block_bad_header_segment_peer(peer_info, "non-contiguous PIHD segment"));
+			return Ok(self.reject_bad_header_segment(peer_info, "non-contiguous PIHD segment"));
 		}
 		let sync_head = match self.sync_state.status() {
 			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
@@ -736,12 +732,12 @@ where
 		};
 
 		if !self.cache_pihd_header_segment(id, headers, peer_info, target_height, sync_head)? {
-			return Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD segment order"));
+			return Ok(self.reject_bad_header_segment(peer_info, "invalid PIHD segment order"));
 		}
 
 		match self.process_ready_pihd_header_segments(peer_info)? {
 			Some(bad_peer) if bad_peer.addr == peer_info.addr => {
-				Ok(self.block_bad_header_segment_peer(peer_info, "invalid PIHD headers"))
+				Ok(self.reject_bad_header_segment(peer_info, "invalid PIHD headers"))
 			}
 			Some(bad_peer) => {
 				if let Err(e) = self
@@ -842,7 +838,7 @@ where
 			.expect("Failed to upgrade weak ref to our peers.")
 	}
 
-	fn block_bad_header_segment_peer(
+	fn reject_bad_header_segment(
 		&self,
 		peer_info: &PeerInfo,
 		reason: &str,

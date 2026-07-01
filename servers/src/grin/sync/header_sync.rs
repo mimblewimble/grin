@@ -181,7 +181,7 @@ impl HeaderSync {
 			self.pihd_stalling_ts = None;
 		}
 
-		let mut failed = 0;
+		let mut newly_failed = 0;
 		let mut failed_peers = vec![];
 		self.pending_pihd.retain(|req| {
 			let still_requested = self
@@ -201,11 +201,11 @@ impl HeaderSync {
 			let timeout = now
 				> req.requested_at + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			if !complete && connected && timeout {
-				failed += 1;
+				newly_failed += 1;
 				failed_peers.push(req.peer_addr);
 			}
 			if !complete && !connected {
-				failed += 1;
+				newly_failed += 1;
 				failed_peers.push(req.peer_addr);
 			}
 			!complete && connected && !timeout
@@ -223,14 +223,16 @@ impl HeaderSync {
 				> req.request_time + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			!complete && connected && !timeout
 		});
-		if failed > 0 {
+		if newly_failed > 0 {
 			for peer_addr in failed_peers {
 				self.note_pihd_peer_failure(peer_addr, now);
 			}
-			self.pihd_failure_count += failed;
+			self.pihd_failure_count += newly_failed;
 			if self.pihd_stalling_ts.is_none() {
 				self.pihd_stalling_ts = Some(now);
 			}
+		}
+		if self.pihd_failure_count > 0 {
 			let pihd_stalled = self
 				.pihd_stalling_ts
 				.map(|stalling_ts| {
@@ -459,25 +461,21 @@ impl HeaderSync {
 				segment_idx += 1;
 				continue;
 			}
+			let can_request = |peer: &&Arc<Peer>, max_in_flight| {
+				peer.info.height() >= start_height
+					&& self
+						.pending_pihd
+						.iter()
+						.filter(|req| req.peer_addr == peer.info.addr)
+						.count() < max_in_flight
+			};
 			let peer = match peers
 				.iter()
-				.find(|peer| {
-					peer.info.height() >= start_height
-						&& self
-							.pending_pihd
-							.iter()
-							.filter(|req| req.peer_addr == peer.info.addr)
-							.count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER
-				})
+				.find(|peer| can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER))
 				.or_else(|| {
-					peers.iter().find(|peer| {
-						peer.info.height() >= start_height
-							&& self
-								.pending_pihd
-								.iter()
-								.filter(|req| req.peer_addr == peer.info.addr)
-								.count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
-					})
+					peers
+						.iter()
+						.find(|peer| can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS))
 				}) {
 				Some(peer) => peer.clone(),
 				None => return,
