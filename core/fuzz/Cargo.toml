@@ -41,3 +41,6 @@ path = "fuzz_targets/compact_block_read_v1.rs"
 [[bin]]
 name = "compact_block_read_v2"
 path = "fuzz_targets/compact_block_read_v2.rs"
+
+[package.metadata]
+cargo-fuzz = true
