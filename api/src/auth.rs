@@ -20,7 +20,6 @@ use http_body_util::{BodyExt, Empty};
 use hyper::body::Incoming;
 use hyper::header::{HeaderValue, AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::{Request, Response, StatusCode};
-use ring::constant_time::verify_slices_are_equal;
 
 lazy_static! {
 	pub static ref GRIN_BASIC_REALM: HeaderValue =
@@ -69,11 +68,7 @@ impl Handler for BasicAuthMiddleware {
 			}
 		}
 		if req.headers().contains_key(AUTHORIZATION)
-			&& verify_slices_are_equal(
-				req.headers()[AUTHORIZATION].as_bytes(),
-				&self.api_basic_auth.as_bytes(),
-			)
-			.is_ok()
+			&& req.headers()[AUTHORIZATION].as_bytes() == self.api_basic_auth.as_bytes()
 		{
 			next_handler.call(req, handlers)
 		} else {
@@ -119,11 +114,7 @@ impl Handler for BasicAuthURIMiddleware {
 		}
 		if req.uri().path() == self.target_uri {
 			if req.headers().contains_key(AUTHORIZATION)
-				&& verify_slices_are_equal(
-					req.headers()[AUTHORIZATION].as_bytes(),
-					&self.api_basic_auth.as_bytes(),
-				)
-				.is_ok()
+				&& req.headers()[AUTHORIZATION].as_bytes() == self.api_basic_auth.as_bytes()
 			{
 				next_handler.call(req, handlers)
 			} else {
