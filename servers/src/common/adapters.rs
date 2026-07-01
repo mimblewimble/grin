@@ -16,7 +16,9 @@
 //! events to consumers of those events.
 
 use crate::util::RwLock;
+use std::collections::HashMap;
 use std::fs::File;
+use std::net::SocketAddr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Weak};
@@ -41,7 +43,7 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::core::{core, global};
 use crate::p2p;
-use crate::p2p::types::PeerInfo;
+use crate::p2p::types::{HeaderSegmentAcceptance, PeerInfo};
 use crate::pool::{self, BlockChain, PoolAdapter};
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
@@ -56,6 +58,8 @@ const BITMAP_SEGMENT_HEIGHT_RANGE: Range<u8> = 9..14;
 const OUTPUT_SEGMENT_HEIGHT_RANGE: Range<u8> = 11..16;
 const RANGEPROOF_SEGMENT_HEIGHT_RANGE: Range<u8> = 7..12;
 const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
+const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
+const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -71,6 +75,7 @@ where
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -393,6 +398,60 @@ where
 		Ok(headers)
 	}
 
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		if !peer_info
+			.capabilities
+			.contains(p2p::Capabilities::PIHD_HIST)
+			|| id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT
+		{
+			return Ok(None);
+		}
+		if !self.header_segment_request_allowed(peer_info.addr.0) {
+			warn!(
+				"throttling PIHD header segment request {:?} from {}",
+				id, peer_info.addr
+			);
+			return Ok(None);
+		}
+
+		let segment_capacity = id.segment_capacity();
+		let start_height = match id
+			.idx
+			.checked_mul(segment_capacity)
+			.and_then(|height| height.checked_add(1))
+		{
+			Some(height) => height,
+			None => return Ok(None),
+		};
+		let max_height = self.chain().header_head()?.height;
+		let end_height = match start_height
+			.checked_add(segment_capacity)
+			.and_then(|height| height.checked_sub(1))
+		{
+			Some(height) => std::cmp::min(height, max_height),
+			None => max_height,
+		};
+		if start_height > end_height {
+			return Ok(Some(vec![]));
+		}
+
+		let header_pmmr = self.chain().header_pmmr();
+		let header_pmmr = header_pmmr.read();
+		let mut headers = vec![];
+		for h in start_height..=end_height {
+			if let Ok(hash) = header_pmmr.get_header_hash_by_height(h) {
+				headers.push(self.chain().get_block_header(&hash)?);
+			} else {
+				break;
+			}
+		}
+		Ok(Some(headers))
+	}
+
 	/// Gets a full block by its hash.
 	/// We only support v3 blocks since HF4.
 	/// If a peer is requesting a block and only appears to support v2
@@ -610,6 +669,21 @@ where
 	) -> Result<bool, chain::Error> {
 		self.queue_pibd_segment(PIBDSegment::Kernel(block_hash, segment), peer_info)
 	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		debug!(
+			"ignoring PIHD header segment {:?} with {} headers from {}",
+			id,
+			headers.len(),
+			peer_info.addr
+		);
+		Ok(HeaderSegmentAcceptance::Accepted)
+	}
 }
 
 impl<B, P> NetToChainAdapter<B, P>
@@ -633,6 +707,7 @@ where
 			peers: OneTime::new(),
 			config,
 			hooks,
+			header_segment_requests: RwLock::new(HashMap::new()),
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -770,6 +845,22 @@ where
 				Ok(true)
 			}
 		}
+	}
+
+	fn header_segment_request_allowed(&self, peer_addr: SocketAddr) -> bool {
+		let now = Utc::now();
+		let cutoff = now - Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS);
+		let mut requests = self.header_segment_requests.write();
+		requests.retain(|_, (window_start, _)| *window_start > cutoff);
+		let entry = requests.entry(peer_addr).or_insert((now, 0));
+		if now > entry.0 + Duration::seconds(HEADER_SEGMENT_REQUEST_WINDOW_SECS) {
+			*entry = (now, 0);
+		}
+		if entry.1 >= MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW {
+			return false;
+		}
+		entry.1 += 1;
+		true
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.

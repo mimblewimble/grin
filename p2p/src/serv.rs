@@ -32,8 +32,8 @@ use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead,
 };
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::StopState;
@@ -362,6 +362,13 @@ impl ChainAdapter for DummyAdapter {
 	fn locate_headers(&self, _: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
 		Ok(vec![])
 	}
+	fn locate_header_segment(
+		&self,
+		_: SegmentIdentifier,
+		_: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		Ok(Some(vec![]))
+	}
 	fn get_block(&self, _: Hash, _: &PeerInfo) -> Option<core::Block> {
 		None
 	}
@@ -471,6 +478,15 @@ impl ChainAdapter for DummyAdapter {
 		_peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		unimplemented!()
+	}
+
+	fn receive_header_segment(
+		&self,
+		_id: SegmentIdentifier,
+		_headers: &[core::BlockHeader],
+		_peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		Ok(HeaderSegmentAcceptance::Accepted)
 	}
 }
 

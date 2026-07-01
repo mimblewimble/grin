@@ -94,6 +94,8 @@ enum_from_primitive! {
 		RangeProofSegment = 26,
 		GetKernelSegment = 27,
 		KernelSegment = 28,
+		GetHeaderSegment = 29,
+		HeaderSegment = 30,
 	}
 }
 
@@ -107,6 +109,14 @@ fn default_max_msg_size() -> u64 {
 	max_block_size()
 }
 
+// Max serialized header size for the largest proof accepted by Proof::read().
+fn max_header_size() -> u64 {
+	let header_bytes = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
+	let pow_bytes = 8 + 4 + 8 + 1;
+	let proof_bytes = (63 * consensus::PROOFSIZE + 7) / 8;
+	(header_bytes + pow_bytes + proof_bytes) as u64
+}
+
 // Max msg size for each msg type.
 fn max_msg_size(msg_type: Type) -> u64 {
 	match msg_type {
@@ -118,8 +128,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::GetPeerAddrs => 4,
 		Type::PeerAddrs => 4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,
 		Type::GetHeaders => 1 + 32 * MAX_LOCATORS as u64,
-		Type::Header => 365,
-		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
+		Type::Header => max_header_size(),
+		Type::Headers => 2 + max_header_size() * MAX_BLOCK_HEADERS as u64,
 		Type::GetBlock => 32,
 		Type::Block => max_block_size(),
 		Type::GetCompactBlock => 32,
@@ -139,6 +149,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::RangeProofSegment => 2 * max_block_size(),
 		Type::GetKernelSegment => 41,
 		Type::KernelSegment => 2 * max_block_size(),
+		Type::GetHeaderSegment => 9,
+		Type::HeaderSegment => 11 + max_header_size() * MAX_BLOCK_HEADERS as u64,
 	}
 }
 
@@ -649,6 +661,45 @@ impl Writeable for Headers {
 	}
 }
 
+/// Serializable wrapper for a deterministic header segment.
+pub struct HeaderSegment {
+	pub identifier: SegmentIdentifier,
+	pub headers: Vec<BlockHeader>,
+}
+
+impl Readable for HeaderSegment {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderSegment, ser::Error> {
+		let identifier = SegmentIdentifier::read(reader)?;
+		let len = reader.read_u16()?;
+		if len > (MAX_BLOCK_HEADERS as u16) {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut headers = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			let header: UntrustedBlockHeader = Readable::read(reader)?;
+			headers.push(header.into());
+		}
+		Ok(HeaderSegment {
+			identifier,
+			headers,
+		})
+	}
+}
+
+impl Writeable for HeaderSegment {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if self.headers.len() > MAX_BLOCK_HEADERS as usize {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		self.identifier.write(writer)?;
+		writer.write_u16(self.headers.len() as u16)?;
+		for h in &self.headers {
+			h.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
 pub struct Ping {
 	/// total difficulty accumulated by the sender, used to check whether sync
 	/// may be needed
@@ -926,6 +977,8 @@ pub enum Message {
 	RangeProofSegment(SegmentResponse<RangeProof>),
 	GetKernelSegment(SegmentRequest),
 	KernelSegment(SegmentResponse<TxKernel>),
+	GetHeaderSegment(SegmentIdentifier),
+	HeaderSegment(HeaderSegment),
 }
 
 /// We receive 512 headers from a peer.
@@ -970,6 +1023,8 @@ impl fmt::Display for Message {
 			Message::RangeProofSegment(_) => write!(f, "range proof segment"),
 			Message::GetKernelSegment(_) => write!(f, "get kernel segment"),
 			Message::KernelSegment(_) => write!(f, "kernel segment"),
+			Message::GetHeaderSegment(_) => write!(f, "get header segment"),
+			Message::HeaderSegment(_) => write!(f, "header segment"),
 		}
 	}
 }
@@ -995,5 +1050,13 @@ impl fmt::Debug for Consumed {
 			Consumed::None => write!(f, "Consumed::None"),
 			Consumed::Disconnect => write!(f, "Consumed::Disconnect"),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn test_max_header_size_limit() {
+		assert_eq!(super::max_header_size(), 578);
 	}
 }
