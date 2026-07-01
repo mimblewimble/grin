@@ -16,7 +16,10 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use crate::chain::{self, pibd_params, pihd_params, HeaderSyncMode, SyncState, SyncStatus};
+use crate::chain::{
+	self, pibd_params, pihd_params, types::PIHDHeaderSegmentContainer, HeaderSyncMode, SyncState,
+	SyncStatus,
+};
 use crate::common::types::Error;
 use crate::core::core::hash::Hash;
 use crate::core::core::SegmentIdentifier;
@@ -24,13 +27,6 @@ use crate::core::pow::Difficulty;
 use crate::p2p::{
 	self, types::PeerAddr, types::ReasonForBan, Capabilities, Peer, PIHD_HEADER_SEGMENT_HEIGHT,
 };
-
-struct PihdHeaderRequest {
-	identifier: SegmentIdentifier,
-	peer_addr: PeerAddr,
-	requested_at: DateTime<Utc>,
-	target_height: u64,
-}
 
 struct LegacyHeaderRequest {
 	peer_addr: PeerAddr,
@@ -45,7 +41,7 @@ pub struct HeaderSync {
 	prev_header_sync: (DateTime<Utc>, u64, u64),
 	syncing_peer: Option<Arc<Peer>>,
 	stalling_ts: Option<DateTime<Utc>>,
-	pending_pihd: Vec<PihdHeaderRequest>,
+	pending_pihd: Vec<PIHDHeaderSegmentContainer>,
 	pending_legacy: Option<LegacyHeaderRequest>,
 	pihd_failure_count: usize,
 	pihd_peer_timeout_until: Vec<(PeerAddr, DateTime<Utc>)>,
@@ -186,7 +182,7 @@ impl HeaderSync {
 		self.pending_pihd.retain(|req| {
 			let still_requested = self
 				.sync_state
-				.contains_pihd_header_segment_from(req.identifier, req.peer_addr.0);
+				.contains_pihd_header_segment_from(req.identifier, req.peer_addr);
 			if !still_requested {
 				return false;
 			}
@@ -196,17 +192,17 @@ impl HeaderSync {
 				.saturating_mul(req.identifier.segment_capacity())
 				.saturating_add(req.identifier.segment_capacity())
 				.min(req.target_height);
-			let connected = peers.get_connected_peer(req.peer_addr).is_some();
+			let connected = peers.get_connected_peer(PeerAddr(req.peer_addr)).is_some();
 			let complete = header_head.height >= completed_height;
 			let timeout = now
-				> req.requested_at + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
+				> req.request_time + Duration::seconds(pihd_params::HEADER_REQUEST_TIMEOUT_SECS);
 			if !complete && connected && timeout {
 				newly_failed += 1;
-				failed_peers.push(req.peer_addr);
+				failed_peers.push(PeerAddr(req.peer_addr));
 			}
 			if !complete && !connected {
 				newly_failed += 1;
-				failed_peers.push(req.peer_addr);
+				failed_peers.push(PeerAddr(req.peer_addr));
 			}
 			!complete && connected && !timeout
 		});
@@ -441,7 +437,7 @@ impl HeaderSync {
 			return;
 		}
 		let mut sent = 0;
-		let mut segment_idx = sync_head.height / pihd_header_segment_capacity();
+		let mut segment_idx = sync_head.height / p2p::pihd_header_segment_capacity();
 		while self.pending_pihd.len() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
 			&& sent < pihd_params::MAX_REQUESTS_PER_TICK
 		{
@@ -466,7 +462,7 @@ impl HeaderSync {
 					&& self
 						.pending_pihd
 						.iter()
-						.filter(|req| req.peer_addr == peer.info.addr)
+						.filter(|req| req.peer_addr == peer.info.addr.0)
 						.count() < max_in_flight
 			};
 			let peer = match peers
@@ -487,12 +483,11 @@ impl HeaderSync {
 					peer.info.addr.0,
 					target_height,
 				);
-				self.pending_pihd.push(PihdHeaderRequest {
+				self.pending_pihd.push(PIHDHeaderSegmentContainer::new(
 					identifier,
-					peer_addr: peer.info.addr,
-					requested_at: Utc::now(),
+					peer.info.addr.0,
 					target_height,
-				});
+				));
 				sent += 1;
 			}
 			segment_idx += 1;
@@ -540,16 +535,6 @@ fn pihd_segment_start_height(id: SegmentIdentifier) -> Option<u64> {
 		.and_then(|height| height.checked_add(1))
 }
 
-fn pihd_header_segment_capacity() -> u64 {
-	let id = SegmentIdentifier {
-		height: PIHD_HEADER_SEGMENT_HEIGHT,
-		idx: 0,
-	};
-	let capacity = id.segment_capacity();
-	debug_assert_eq!(capacity, p2p::MAX_BLOCK_HEADERS as u64);
-	capacity
-}
-
 // current height back to 0 decreasing in powers of 2
 fn get_locator_heights(height: u64) -> Vec<u64> {
 	let mut current = height;
@@ -593,7 +578,7 @@ mod test {
 	#[test]
 	fn test_pihd_segment_start_height() {
 		assert_eq!(
-			pihd_header_segment_capacity(),
+			p2p::pihd_header_segment_capacity(),
 			p2p::MAX_BLOCK_HEADERS as u64
 		);
 		assert_eq!(
@@ -608,7 +593,7 @@ mod test {
 				height: PIHD_HEADER_SEGMENT_HEIGHT,
 				idx: 1
 			}),
-			Some(pihd_header_segment_capacity() + 1)
+			Some(p2p::pihd_header_segment_capacity() + 1)
 		);
 		assert_eq!(
 			pihd_segment_start_height(SegmentIdentifier {

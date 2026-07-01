@@ -63,16 +63,6 @@ const PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS: u64 = 16;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
-fn pihd_header_segment_capacity() -> u64 {
-	let id = SegmentIdentifier {
-		height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
-		idx: 0,
-	};
-	let capacity = id.segment_capacity();
-	debug_assert_eq!(capacity, p2p::MAX_BLOCK_HEADERS as u64);
-	capacity
-}
-
 #[derive(Clone)]
 struct PihdHeaderSegmentCacheEntry {
 	id: SegmentIdentifier,
@@ -980,7 +970,7 @@ where
 	) -> Result<bool, chain::Error> {
 		self.prune_pihd_header_cache(sync_head.clone());
 
-		let next_idx = sync_head.height / pihd_header_segment_capacity();
+		let next_idx = sync_head.height / p2p::pihd_header_segment_capacity();
 		if id.idx < next_idx {
 			self.sync_state
 				.remove_pihd_header_segment(id, peer_info.addr.0);
@@ -1031,7 +1021,7 @@ where
 
 			let next_id = SegmentIdentifier {
 				height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
-				idx: sync_head.height / pihd_header_segment_capacity(),
+				idx: sync_head.height / p2p::pihd_header_segment_capacity(),
 			};
 			let entry = {
 				let mut cache = self.pihd_header_cache.write();
@@ -1072,7 +1062,7 @@ where
 	}
 
 	fn prune_pihd_header_cache(&self, sync_head: chain::Tip) {
-		let next_idx = sync_head.height / pihd_header_segment_capacity();
+		let next_idx = sync_head.height / p2p::pihd_header_segment_capacity();
 		let max_idx = next_idx.saturating_add(PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS);
 		let clear_cache = {
 			let mut anchor = self.pihd_header_cache_anchor.write();
