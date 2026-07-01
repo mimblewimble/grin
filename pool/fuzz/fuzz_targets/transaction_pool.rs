@@ -15,7 +15,9 @@ use common::*;
 
 #[derive(Debug)]
 enum Error {
+	#[allow(dead_code)]
 	IoErr(std::io::Error),
+	#[allow(dead_code)]
 	SerErr(ser::Error),
 }
 
