@@ -32,5 +32,5 @@ mod comments;
 pub mod config;
 pub mod types;
 
-pub use crate::config::initial_setup_server;
+pub use crate::config::{initial_setup_server, load_server_config};
 pub use crate::types::{ConfigError, ConfigMembers, GlobalConfig};

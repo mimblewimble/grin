@@ -63,6 +63,7 @@ fn comments() -> HashMap<String, String> {
 		"api_secret_path".to_string(),
 		"
 #path of the secret token used by the Rest API and v2 Owner API to authenticate the calls
+#relative paths are resolved relative to the chain-specific grin home directory
 #comment the it to disable basic auth
 "
 		.to_string(),
@@ -72,6 +73,7 @@ fn comments() -> HashMap<String, String> {
 		"foreign_api_secret_path".to_string(),
 		"
 #path of the secret token used by the Foreign API to authenticate the calls
+#relative paths are resolved relative to the chain-specific grin home directory
 #comment the it to disable basic auth
 "
 		.to_string(),
