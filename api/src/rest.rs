@@ -178,7 +178,15 @@ impl ApiServer {
 					match TcpListener::bind(addr).await {
 						Ok(l) => loop {
 							tokio::select! {
-								Ok((s, _)) = l.accept() => {
+								Ok(s) = async {
+									match l.accept().await {
+										Ok((s, _)) => Ok(s),
+										Err(e) => {
+											error!("Failed to accept connection: {e:#}");
+											Err(e)
+										}
+									}
+								} => {
 									let io = TokioIo::new(s);
 									let router = router.clone();
 									let conn = http1::Builder::new().serve_connection(io, router);
@@ -245,14 +253,22 @@ impl ApiServer {
 					match TcpListener::bind(addr).await {
 						Ok(l) => loop {
 							tokio::select! {
-								Ok((s, _)) = l.accept() => {
+								Ok(s) = async {
+									match l.accept().await {
+										Ok((s, _)) => Ok(s),
+										Err(e) => {
+											error!("Failed to accept connection: {e:#}");
+											Err(e)
+										}
+									}
+								} => {
 									let router = router.clone();
 									let tls_acceptor = tls_acceptor.clone();
 									let tls_stream = match tls_acceptor.accept(s).await {
 										Ok(tls_stream) => tls_stream,
 										Err(err) => {
 											error!("failed to perform TLS handshake: {err:#}");
-											return;
+											continue;
 										}
 									};
 									let io = TokioIo::new(tls_stream);
