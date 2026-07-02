@@ -20,6 +20,7 @@ use http_body_util::{BodyExt, Empty};
 use hyper::body::Incoming;
 use hyper::header::{HeaderValue, AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::{Request, Response, StatusCode};
+use subtle::ConstantTimeEq;
 
 lazy_static! {
 	pub static ref GRIN_BASIC_REALM: HeaderValue =
@@ -67,9 +68,7 @@ impl Handler for BasicAuthMiddleware {
 				return next_handler.call(req, handlers);
 			}
 		}
-		if req.headers().contains_key(AUTHORIZATION)
-			&& req.headers()[AUTHORIZATION].as_bytes() == self.api_basic_auth.as_bytes()
-		{
+		if check_auth(&req, &self.api_basic_auth) {
 			next_handler.call(req, handlers)
 		} else {
 			// Unauthorized 401
@@ -113,9 +112,7 @@ impl Handler for BasicAuthURIMiddleware {
 			return next_handler.call(req, handlers);
 		}
 		if req.uri().path() == self.target_uri {
-			if req.headers().contains_key(AUTHORIZATION)
-				&& req.headers()[AUTHORIZATION].as_bytes() == self.api_basic_auth.as_bytes()
-			{
+			if check_auth(&req, &self.api_basic_auth) {
 				next_handler.call(req, handlers)
 			} else {
 				// Unauthorized 401
@@ -125,6 +122,15 @@ impl Handler for BasicAuthURIMiddleware {
 			next_handler.call(req, handlers)
 		}
 	}
+}
+
+fn check_auth(req: &Request<Incoming>, api_basic_auth: &String) -> bool {
+	if req.headers().contains_key(AUTHORIZATION) {
+		let req_auth = req.headers()[AUTHORIZATION].as_bytes();
+		let auth = api_basic_auth.as_bytes();
+		return req_auth.ct_eq(auth).unwrap_u8() == 1;
+	}
+	false
 }
 
 fn unauthorized_response(basic_realm: &HeaderValue) -> ResponseFuture {
