@@ -143,12 +143,6 @@ impl From<Option<&str>> for QueryParams {
 	}
 }
 
-impl From<Request<ApiBody>> for QueryParams {
-	fn from(req: Request<ApiBody>) -> Self {
-		Self::from(req.uri().query())
-	}
-}
-
 #[macro_export]
 macro_rules! right_path_element(
 	($req: expr) =>(
