@@ -25,12 +25,15 @@ use crate::core::core;
 use crate::core::core::hash::Hashed;
 use crate::p2p::types::PeerAddr;
 use futures::TryFutureExt;
+use grin_api::ApiBody;
 use grin_util::ToHex;
-use hyper::client::HttpConnector;
+use http_body_util::{BodyExt, Full};
 use hyper::header::HeaderValue;
-use hyper::Client;
-use hyper::{Body, Method, Request};
+use hyper::{Method, Request};
 use hyper_rustls::HttpsConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use serde::Serialize;
 use serde_json::{json, to_string};
 use std::time::Duration;
@@ -198,7 +201,7 @@ struct WebHook {
 	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
 	block_accepted_url: Option<hyper::Uri>,
 	/// The hyper client to be used for all requests
-	client: Client<HttpsConnector<HttpConnector>>,
+	client: Client<HttpsConnector<HttpConnector>, ApiBody>,
 	/// The tokio event loop
 	runtime: Runtime,
 }
@@ -222,13 +225,14 @@ impl WebHook {
 
 		let https = hyper_rustls::HttpsConnectorBuilder::new()
 			.with_native_roots()
+			.unwrap()
 			.https_only()
 			.enable_http1()
 			.build();
 
-		let client = Client::builder()
+		let client = Client::builder(TokioExecutor::new())
 			.pool_idle_timeout(keep_alive)
-			.build::<_, hyper::Body>(https);
+			.build::<_, ApiBody>(https);
 
 		WebHook {
 			tx_received_url,
@@ -257,7 +261,7 @@ impl WebHook {
 	}
 
 	fn post(&self, url: hyper::Uri, data: String) {
-		let mut req = Request::new(Body::from(data));
+		let mut req = Request::new(Full::from(data).boxed());
 		*req.method_mut() = Method::POST;
 		*req.uri_mut() = url.clone();
 		req.headers_mut().insert(

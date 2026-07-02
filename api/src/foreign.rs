@@ -36,8 +36,6 @@ use std::sync::Weak;
 /// called the ['Owner'](struct.Owner.html) and ['Foreign'](struct.Foreign.html) APIs
 ///
 /// Methods in this API are intended to be 'single use'.
-///
-
 pub struct Foreign<B, P>
 where
 	B: BlockChain,
@@ -63,8 +61,6 @@ where
 	///
 	/// # Returns
 	/// * An instance of the Node holding references to the current chain, transaction pool, peers and sync_state.
-	///
-
 	pub fn new(
 		chain: Weak<Chain>,
 		tx_pool: Weak<RwLock<pool::TransactionPool<B, P>>>,
@@ -89,8 +85,6 @@ where
 	/// * Result Containing:
 	/// * A [`BlockHeaderPrintable`](types/struct.BlockHeaderPrintable.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_header(
 		&self,
 		height: Option<u64>,
@@ -104,7 +98,7 @@ where
 		header_handler.get_header_v2(&hash)
 	}
 
-	/// Gets block details given either a height, a hash or an unspent output commitment. Only one parameters is needed.
+	/// Gets block details given either a height, a hash or an unspent output commitment. Only one parameter is needed.
 	/// If multiple parameters are provided only the first one in the list is used.
 	///
 	/// # Arguments
@@ -116,8 +110,6 @@ where
 	/// * Result Containing:
 	/// * A [`BlockPrintable`](types/struct.BlockPrintable.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_block(
 		&self,
 		height: Option<u64>,
@@ -146,16 +138,14 @@ where
 	///
 	/// # Arguments
 	/// * `start_height` - starting height to lookup.
-	/// * `end_height` - ending height to to lookup.
-	/// * 'max` - The max number of blocks to return.
+	/// * `end_height` - ending height to lookup.
+	/// * `max` - The max number of blocks to return.
 	///   Note this is overriden with BLOCK_TRANSFER_LIMIT if BLOCK_TRANSFER_LIMIT is exceeded
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * A [`BlockListing`](types/struct.BlockListing.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_blocks(
 		&self,
 		start_height: u64,
@@ -175,8 +165,6 @@ where
 	/// * Result Containing:
 	/// * A [`Version`](types/struct.Version.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_version(&self) -> Result<Version, Error> {
 		let version_handler = VersionHandler {
 			chain: self.chain.clone(),
@@ -190,8 +178,6 @@ where
 	/// * Result Containing:
 	/// * A [`Tip`](types/struct.Tip.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_tip(&self) -> Result<Tip, Error> {
 		let chain_handler = ChainHandler {
 			chain: self.chain.clone(),
@@ -214,8 +200,6 @@ where
 	/// * Result Containing:
 	/// * A [`LocatedTxKernel`](types/struct.LocatedTxKernel.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_kernel(
 		&self,
 		excess: String,
@@ -235,8 +219,8 @@ where
 	/// * `commits` - a vector of unspent output commitments.
 	/// * `start_height` - start height to start the lookup.
 	/// * `end_height` - end height to stop the lookup.
-	/// * `include_proof` - whether or not to include the range proof in the response.
-	/// * `include_merkle_proof` (currently ignored) - whether or not to include the merkle proof in the response.
+	/// * `include_proof` - whether to include the range proof in the response.
+	/// * `include_merkle_proof` (currently ignored) - whether to include the merkle proof in the response.
 	///    removed as it is not used and expensive to generate for historical blocks. See comments below to
 	///    re-enable this feature at compile-time.
 	///
@@ -244,8 +228,6 @@ where
 	/// * Result Containing:
 	/// * An [`OutputPrintable`](types/struct.OutputPrintable.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_outputs(
 		&self,
 		commits: Option<Vec<String>>,
@@ -272,14 +254,12 @@ where
 	/// * `start_index` - start index in the MMR.
 	/// * `end_index` - optional index so stop in the MMR.
 	/// * `max` - max index in the MMR.
-	/// * `include_proof` - whether or not to include the range proof in the response.
+	/// * `include_proof` - whether to include the range proof in the response.
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * An [`OutputListing`](types/struct.OutputListing.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_unspent_outputs(
 		&self,
 		start_index: u64,
@@ -303,8 +283,6 @@ where
 	/// * Result Containing:
 	/// * An [`OutputListing`](types/struct.OutputListing.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_pmmr_indices(
 		&self,
 		start_block_height: u64,
@@ -322,8 +300,6 @@ where
 	/// * Result Containing:
 	/// * `usize`
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_pool_size(&self) -> Result<usize, Error> {
 		let pool_handler = PoolHandler {
 			tx_pool: self.tx_pool.clone(),
@@ -337,8 +313,6 @@ where
 	/// * Result Containing:
 	/// * `usize`
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_stempool_size(&self) -> Result<usize, Error> {
 		let pool_handler = PoolHandler {
 			tx_pool: self.tx_pool.clone(),
@@ -353,8 +327,6 @@ where
 	/// * Result Containing:
 	/// * A vector of [`PoolEntry`](types/struct.PoolEntry.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
-
 	pub fn get_unconfirmed_transactions(&self) -> Result<Vec<PoolEntry>, Error> {
 		let pool_handler = PoolHandler {
 			tx_pool: self.tx_pool.clone(),
@@ -372,7 +344,6 @@ where
 	/// * Result Containing:
 	/// * `Ok(())` if the transaction was pushed successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
-	///
 	pub fn push_transaction(&self, tx: Transaction, fluff: Option<bool>) -> Result<(), Error> {
 		let pool_handler = PoolHandler {
 			tx_pool: self.tx_pool.clone(),

@@ -10,30 +10,29 @@ edition = "2021"
 
 [dependencies]
 easy-jsonrpc-mw = "0.5.4"
-hyper = { version = "0.14", features = ["full"] }
+hyper = { version = "1.10.1", features = ["full"] }
 lazy_static = "1"
 regex = "1"
-ring = "0.16"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
 thiserror = "1"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
-tokio-rustls = "0.23"
-http = "0.2"
-hyper-rustls = "0.23"
-hyper-timeout = "0.4"
+tokio-rustls = "0.26.4"
+hyper-rustls = "0.27.9"
+hyper-timeout = "0.5.2"
 futures = "0.3"
-rustls = "0.20"
+rustls = "0.23.41"
 rustls-pemfile = "1.0"
-async-stream = "0.3"
 url = "2.1"
 bytes = "1"
+hyper-util = { version = "0.1.20", features = ["client-legacy", "server-graceful", "tokio"] }
+http-body-util = "0.1.3"
+subtle = "2.6.1"
 
 grin_core = { path = "../core", version = "5.5.1-alpha.0" }
 grin_chain = { path = "../chain", version = "5.5.1-alpha.0" }
 grin_p2p = { path = "../p2p", version = "5.5.1-alpha.0" }
 grin_pool = { path = "../pool", version = "5.5.1-alpha.0" }
-grin_store = { path = "../store", version = "5.5.1-alpha.0" }
 grin_util = { path = "../util", version = "5.5.1-alpha.0" }

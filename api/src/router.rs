@@ -12,64 +12,70 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use bytes::Bytes;
 use futures::future::{self, Future};
+use http_body_util::combinators::BoxBody;
+use http_body_util::{BodyExt, Empty};
+use hyper::body::Incoming;
 use hyper::service::Service;
-use hyper::{Body, Method, Request, Response, StatusCode};
+use hyper::{Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
+use std::convert::Infallible;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 lazy_static! {
 	static ref WILDCARD_HASH: u64 = calculate_hash(&"*");
 	static ref WILDCARD_STOP_HASH: u64 = calculate_hash(&"**");
 }
 
+pub type ApiBody = BoxBody<Bytes, Infallible>;
+
 pub type ResponseFuture =
-	Pin<Box<dyn Future<Output = Result<Response<Body>, hyper::Error>> + Send>>;
+	Pin<Box<dyn Future<Output = Result<Response<ApiBody>, hyper::Error>> + Send>>;
 
 pub trait Handler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn post(&self, _req: Request<Body>) -> ResponseFuture {
+	fn post(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn put(&self, _req: Request<Body>) -> ResponseFuture {
+	fn put(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn patch(&self, _req: Request<Body>) -> ResponseFuture {
+	fn patch(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn delete(&self, _req: Request<Body>) -> ResponseFuture {
+	fn delete(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn head(&self, _req: Request<Body>) -> ResponseFuture {
+	fn head(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+	fn options(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn trace(&self, _req: Request<Body>) -> ResponseFuture {
+	fn trace(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn connect(&self, _req: Request<Body>) -> ResponseFuture {
+	fn connect(&self, _req: Request<Incoming>) -> ResponseFuture {
 		not_found()
 	}
 
 	fn call(
 		&self,
-		req: Request<Body>,
-		mut _handlers: Box<dyn Iterator<Item = HandlerObj>>,
+		req: Request<Incoming>,
+		_handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		match *req.method() {
 			Method::GET => self.get(req),
@@ -204,16 +210,12 @@ impl Router {
 	}
 }
 
-impl Service<Request<Body>> for Router {
-	type Response = Response<Body>;
+impl Service<Request<Incoming>> for Router {
+	type Response = Response<ApiBody>;
 	type Error = hyper::Error;
 	type Future = ResponseFuture;
 
-	fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-		Poll::Ready(Ok(()))
-	}
-
-	fn call(&mut self, req: Request<Body>) -> Self::Future {
+	fn call(&self, req: Request<Incoming>) -> Self::Future {
 		match self.get(req.uri().path()) {
 			Err(_) => not_found(),
 			Ok(mut handlers) => match handlers.next() {
@@ -266,7 +268,7 @@ impl Node {
 }
 
 pub fn not_found() -> ResponseFuture {
-	let mut response = Response::new(Body::empty());
+	let mut response = Response::new(Empty::<Bytes>::new().boxed());
 	*response.status_mut() = StatusCode::NOT_FOUND;
 	Box::pin(future::ok(response))
 }
@@ -295,19 +297,24 @@ fn collect_node_middleware(handlers: &mut Vec<HandlerObj>, node: &Node) {
 
 #[cfg(test)]
 mod tests {
+	use grin_util as util;
 
 	use super::*;
-	use futures::executor::block_on;
+	use crate::{client, ApiServer};
+	use futures::channel::oneshot;
+	use http_body_util::Full;
+	use std::net::SocketAddr;
+	use std::{thread, time};
 
 	struct HandlerImpl(u16);
 
 	impl Handler for HandlerImpl {
-		fn get(&self, _req: Request<Body>) -> ResponseFuture {
+		fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 			let code = self.0;
 			Box::pin(async move {
 				let res = Response::builder()
-					.status(code)
-					.body(Body::default())
+					.status(200)
+					.body(Full::from(format!("{}", code)).boxed())
 					.unwrap();
 				Ok(res)
 			})
@@ -333,45 +340,45 @@ mod tests {
 
 	#[test]
 	fn test_get() {
+		util::init_test_logger();
 		let mut routes = Router::new();
 		routes
 			.add_route("/v1/users", Arc::new(HandlerImpl(101)))
 			.unwrap();
 		routes
-			.add_route("/v1/users/xxx", Arc::new(HandlerImpl(103)))
+			.add_route("/v1/users/xxx", Arc::new(HandlerImpl(102)))
 			.unwrap();
 		routes
 			.add_route("/v1/users/xxx/yyy", Arc::new(HandlerImpl(103)))
 			.unwrap();
 		routes
-			.add_route("/v1/zzz/*", Arc::new(HandlerImpl(103)))
+			.add_route("/v1/zzz/*", Arc::new(HandlerImpl(104)))
 			.unwrap();
 		routes
-			.add_route("/v1/zzz/*/zzz", Arc::new(HandlerImpl(106)))
+			.add_route("/v1/zzz/*/zzz", Arc::new(HandlerImpl(105)))
 			.unwrap();
 
+		let mut server = ApiServer::new();
+		let server_addr = "127.0.0.1:14424";
+		let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
+		let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
+			Box::leak(Box::new(oneshot::channel::<()>()));
+		server.start(addr, routes.clone(), None, api_chan).unwrap();
+
 		let call_handler = |url| {
-			let task = async {
-				let resp = routes
-					.get(url)
-					.unwrap()
-					.next()
-					.unwrap()
-					.get(Request::new(Body::default()))
-					.await
-					.unwrap();
-				resp.status().as_u16()
-			};
-			block_on(task)
+			let res = client::get::<u16>(format!("http://{}{}", server_addr, url).as_str(), None);
+			thread::sleep(time::Duration::from_millis(500));
+			res.unwrap()
 		};
 
 		assert_eq!(call_handler("/v1/users"), 101);
-		assert_eq!(call_handler("/v1/users/xxx"), 103);
+
+		assert_eq!(call_handler("/v1/users/xxx"), 102);
 		assert!(routes.get("/v1/users/yyy").is_err());
 		assert_eq!(call_handler("/v1/users/xxx/yyy"), 103);
 		assert!(routes.get("/v1/zzz").is_err());
-		assert_eq!(call_handler("/v1/zzz/1"), 103);
-		assert_eq!(call_handler("/v1/zzz/2"), 103);
-		assert_eq!(call_handler("/v1/zzz/2/zzz"), 106);
+		assert_eq!(call_handler("/v1/zzz/1"), 104);
+		assert_eq!(call_handler("/v1/zzz/2"), 104);
+		assert_eq!(call_handler("/v1/zzz/2/zzz"), 105);
 	}
 }

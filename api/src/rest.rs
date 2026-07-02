@@ -21,11 +21,13 @@
 use crate::router::{Handler, HandlerObj, ResponseFuture, Router, RouterError};
 use crate::web::response;
 use futures::channel::oneshot;
-use hyper::server::accept;
-use hyper::service::make_service_fn;
-use hyper::{Body, Request, Server, StatusCode};
+use hyper::body::Incoming;
+use hyper::server::conn::http1;
+use hyper::{Request, StatusCode};
+use hyper_util::rt::TokioIo;
+use rustls::pki_types::pem::{PemObject, SectionKind};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use rustls_pemfile as pemfile;
-use std::convert::Infallible;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -75,37 +77,38 @@ impl TLSConfig {
 		}
 	}
 
-	fn load_certs(&self) -> Result<Vec<rustls::Certificate>, Error> {
-		let certfile = File::open(&self.certificate).map_err(|e| {
-			Error::Internal(format!("failed to open file {} {}", self.certificate, e))
-		})?;
-		let mut reader = io::BufReader::new(certfile);
-
-		let certs = pemfile::certs(&mut reader)
-			.map_err(|_| Error::Internal("failed to load certificate".to_string()))?;
-
-		Ok(certs.into_iter().map(rustls::Certificate).collect())
-	}
-
-	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
-		let keyfile = File::open(&self.private_key)
-			.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
-		let mut reader = io::BufReader::new(keyfile);
-
-		let keys = pemfile::pkcs8_private_keys(&mut reader)
-			.map_err(|_| Error::Internal("failed to load private key".to_string()))?;
-		if keys.len() != 1 {
-			return Err(Error::Internal("expected a single private key".to_string()));
-		}
-		Ok(rustls::PrivateKey(keys[0].clone()))
-	}
-
 	pub fn build_server_config(&self) -> Result<Arc<rustls::ServerConfig>, Error> {
-		let certs = self.load_certs()?;
-		let key = self.load_private_key()?;
+		let certs: Vec<CertificateDer> = {
+			let certfile = File::open(&self.certificate).map_err(|e| {
+				Error::Internal(format!("failed to open file {} {}", self.certificate, e))
+			})?;
+			let mut reader = io::BufReader::new(certfile);
+
+			let certs = pemfile::certs(&mut reader)
+				.map_err(|_| Error::Internal("failed to load certificate".to_string()))?;
+			certs
+				.into_iter()
+				.map(CertificateDer::from)
+				.collect::<Vec<CertificateDer>>()
+		};
+		let key = {
+			let keyfile = File::open(&self.private_key)
+				.map_err(|e| Error::Internal(format!("failed to open private key file {}", e)))?;
+			let mut reader = io::BufReader::new(keyfile);
+
+			let keys = pemfile::pkcs8_private_keys(&mut reader)
+				.map_err(|_| Error::Internal("failed to load private key".to_string()))?;
+			if keys.len() != 1 {
+				return Err(Error::Internal("expected a single private key".to_string()));
+			}
+			let key = PrivateKeyDer::from_pem(SectionKind::PrivateKey, keys[0].clone());
+			match key {
+				None => return Err(Error::Internal("wrong private key type".to_string())),
+				Some(k) => k,
+			}
+		};
 
 		let cfg = rustls::ServerConfig::builder()
-			.with_safe_defaults()
 			.with_no_client_auth()
 			.with_single_cert(certs, key)
 			.map_err(|e| Error::Internal(format!("set single certificate failed {}", e)))?;
@@ -167,30 +170,54 @@ impl ApiServer {
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = async move {
-					let server = Server::bind(&addr)
-						.serve(make_service_fn(move |_| {
-							let router = router.clone();
-							async move { Ok::<_, Infallible>(router) }
-						}))
-						.with_graceful_shutdown(async {
-							rx.await.ok();
-						});
+					let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+					// When this signal completes, start shutdown.
+					let mut signal = std::pin::pin!(shutdown_signal(rx));
 
-					server.await
+					// Start server loop.
+					match TcpListener::bind(addr).await {
+						Ok(l) => loop {
+							tokio::select! {
+								Ok(s) = async {
+									match l.accept().await {
+										Ok((s, _)) => Ok(s),
+										Err(e) => {
+											error!("Failed to accept connection: {e:#}");
+											Err(e)
+										}
+									}
+								} => {
+									let io = TokioIo::new(s);
+									let router = router.clone();
+									let conn = http1::Builder::new().serve_connection(io, router);
+									let fut = graceful.watch(conn);
+									tokio::spawn(async move {
+										if let Err(e) = fut.await {
+											error!("API server error: {:?}", e);
+										}
+									});
+								}
+								_ = &mut signal => {
+									drop(l);
+									break;
+								}
+							}
+						},
+						Err(e) => {
+							error!("API listener binding error: {}", e);
+						}
+					}
 				};
 
 				let rt = Runtime::new()
-					.map_err(|e| eprintln!("HTTP API server error: {}", e))
+					.map_err(|e| error!("HTTP API server error: {}", e))
 					.unwrap();
-				if let Err(e) = rt.block_on(server) {
-					eprintln!("HTTP API server error: {}", e)
-				}
+				rt.block_on(server);
 			})
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
 	/// Starts the TLS ApiServer at the provided address.
-	/// TODO support stop operation
 	fn start_tls(
 		&mut self,
 		addr: SocketAddr,
@@ -212,62 +239,84 @@ impl ApiServer {
 		let tx = std::mem::replace(tx, m.0);
 		self.shutdown_sender = Some(tx);
 
-		let acceptor = TlsAcceptor::from(conf.build_server_config()?);
+		let tls_acceptor = TlsAcceptor::from(conf.build_server_config()?);
 
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = async move {
-					let listener = TcpListener::bind(&addr).await.expect("failed to bind");
+					let graceful = hyper_util::server::graceful::GracefulShutdown::new();
+					// When this signal completes, start shutdown.
+					let mut signal = std::pin::pin!(shutdown_signal(rx));
 
-					let tls_stream = async_stream::stream! {
-						loop {
-							let (socket, _addr) = match listener.accept().await {
-								Ok(conn) => conn,
-								Err(e) => {
-									eprintln!("Error accepting connection: {}", e);
-									continue;
+					// Start server loop.
+					match TcpListener::bind(addr).await {
+						Ok(l) => loop {
+							tokio::select! {
+								Ok(s) = async {
+									match l.accept().await {
+										Ok((s, _)) => Ok(s),
+										Err(e) => {
+											error!("Failed to accept connection: {e:#}");
+											Err(e)
+										}
+									}
+								} => {
+									let router = router.clone();
+									let tls_acceptor = tls_acceptor.clone();
+									let tls_stream = match tls_acceptor.accept(s).await {
+										Ok(tls_stream) => tls_stream,
+										Err(err) => {
+											error!("failed to perform TLS handshake: {err:#}");
+											continue;
+										}
+									};
+									let io = TokioIo::new(tls_stream);
+									let router = router.clone();
+									let conn = http1::Builder::new().serve_connection(io, router);
+									let fut = graceful.watch(conn);
+									tokio::spawn(async move {
+										if let Err(e) = fut.await {
+											error!("API server error: {:?}", e);
+										}
+									});
 								}
-							};
-
-							match acceptor.accept(socket).await {
-								Ok(stream) => yield Ok::<_, std::io::Error>(stream),
-								Err(_) => continue,
+								_ = &mut signal => {
+									drop(l);
+									break;
+								}
 							}
+						},
+						Err(e) => {
+							error!("API listener binding error: {}", e);
 						}
-					};
-
-					let server = Server::builder(accept::from_stream(tls_stream))
-						.serve(make_service_fn(move |_| {
-							let router = router.clone();
-							async move { Ok::<_, Infallible>(router) }
-						}))
-						.with_graceful_shutdown(async {
-							rx.await.ok();
-						});
-
-					server.await
+					}
 				};
 
 				let rt = Runtime::new()
 					.map_err(|e| eprintln!("HTTP API server error: {}", e))
 					.unwrap();
-				if let Err(e) = rt.block_on(server) {
-					eprintln!("HTTP API server error: {}", e)
-				}
+				rt.block_on(server);
 			})
 			.map_err(|_| Error::Internal("failed to spawn API thread".to_string()))
 	}
 
-	/// Stops the API server, it panics in case of error
+	/// Stops the API server.
 	pub fn stop(&mut self) -> bool {
 		if self.shutdown_sender.is_some() {
 			let tx = self.shutdown_sender.as_mut().unwrap();
 			let m = oneshot::channel::<()>();
 			let tx = std::mem::replace(tx, m.0);
-			tx.send(()).expect("Failed to stop API server");
-			info!("API server has been stopped");
-			true
+			match tx.send(()) {
+				Ok(_) => {
+					info!("API server has been stopped");
+					true
+				}
+				Err(_) => {
+					error!("Failed to stop API server");
+					false
+				}
+			}
 		} else {
 			error!("Can't stop API server, it's not running or doesn't spport stop operation");
 			false
@@ -275,18 +324,23 @@ impl ApiServer {
 	}
 }
 
+/// Signal for graceful API server shutdown.
+async fn shutdown_signal(rx: &mut oneshot::Receiver<()>) {
+	rx.await.ok();
+}
+
 pub struct LoggingMiddleware {}
 
 impl Handler for LoggingMiddleware {
 	fn call(
 		&self,
-		req: Request<Body>,
+		req: Request<Incoming>,
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		debug!("REST call: {} {}", req.method(), req.uri().path());
 		match handlers.next() {
 			Some(handler) => handler.call(req, handlers),
-			None => response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
+			None => response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found".into()),
 		}
 	}
 }

@@ -24,13 +24,11 @@ pub mod version_api;
 use crate::auth::{
 	BasicAuthMiddleware, BasicAuthURIMiddleware, GRIN_BASIC_REALM, GRIN_FOREIGN_BASIC_REALM,
 };
-use crate::chain;
 use crate::chain::{Chain, SyncState};
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
 use crate::owner::Owner;
 use crate::owner_rpc::OwnerRpc;
-use crate::p2p;
 use crate::pool;
 use crate::pool::{BlockChain, PoolAdapter};
 use crate::rest::{ApiServer, Error, TLSConfig};
@@ -40,9 +38,12 @@ use crate::util::to_base64;
 use crate::util::RwLock;
 use crate::util::StopState;
 use crate::web::*;
+use crate::{p2p, ApiBody};
 use easy_jsonrpc_mw::{Handler, MaybeReply};
 use futures::channel::oneshot;
-use hyper::{Body, Request, Response, StatusCode};
+use http_body_util::{BodyExt, Full};
+use hyper::body::Incoming;
+use hyper::{Request, Response, StatusCode};
 use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
@@ -52,10 +53,10 @@ use std::thread;
 /// port and wrapping the calls
 pub fn node_apis<B, P>(
 	addr: &str,
-	chain: Arc<chain::Chain>,
+	chain: Arc<Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<B, P>>>,
 	peers: Arc<p2p::Peers>,
-	sync_state: Arc<chain::SyncState>,
+	sync_state: Arc<SyncState>,
 	api_secret: Option<String>,
 	foreign_api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
@@ -118,7 +119,7 @@ where
 		.spawn(move || {
 			// monitor for stop state is_stopped
 			loop {
-				std::thread::sleep(std::time::Duration::from_millis(100));
+				thread::sleep(std::time::Duration::from_millis(100));
 				if stop_state.is_stopped() {
 					apis.stop();
 					break;
@@ -155,7 +156,7 @@ impl OwnerAPIHandlerV2 {
 }
 
 impl crate::router::Handler for OwnerAPIHandlerV2 {
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
+	fn post(&self, req: Request<Incoming>) -> ResponseFuture {
 		let api = Owner::new(
 			self.chain.clone(),
 			self.peers.clone(),
@@ -184,7 +185,7 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 		})
 	}
 
-	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+	fn options(&self, _req: Request<Incoming>) -> ResponseFuture {
 		Box::pin(async { Ok(create_ok_response("{}")) })
 	}
 }
@@ -224,7 +225,7 @@ where
 	B: BlockChain + 'static,
 	P: PoolAdapter + 'static,
 {
-	fn post(&self, req: Request<Body>) -> ResponseFuture {
+	fn post(&self, req: Request<Incoming>) -> ResponseFuture {
 		let api = Foreign::new(
 			self.chain.clone(),
 			self.tx_pool.clone(),
@@ -253,23 +254,23 @@ where
 		})
 	}
 
-	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+	fn options(&self, _req: Request<Incoming>) -> ResponseFuture {
 		Box::pin(async { Ok(create_ok_response("{}")) })
 	}
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> Response<Body>
+fn json_response_pretty<T>(s: &T) -> Response<ApiBody>
 where
 	T: Serialize,
 {
 	match serde_json::to_string_pretty(s) {
-		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		Ok(json) => response(StatusCode::OK, Full::from(json).boxed()),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, Full::from("").boxed()),
 	}
 }
 
-fn create_error_response(e: Error) -> Response<Body> {
+fn create_error_response(e: Error) -> Response<ApiBody> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
@@ -277,11 +278,11 @@ fn create_error_response(e: Error) -> Response<Body> {
 			"access-control-allow-headers",
 			"Content-Type, Authorization",
 		)
-		.body(format!("{}", e).into())
+		.body(Full::from(format!("{}", e)).boxed())
 		.unwrap()
 }
 
-fn create_ok_response(json: &str) -> Response<Body> {
+fn create_ok_response(json: &str) -> Response<ApiBody> {
 	Response::builder()
 		.status(StatusCode::OK)
 		.header("access-control-allow-origin", "*")
@@ -290,7 +291,7 @@ fn create_ok_response(json: &str) -> Response<Body> {
 			"Content-Type, Authorization",
 		)
 		.header(hyper::header::CONTENT_TYPE, "application/json")
-		.body(json.to_string().into())
+		.body(Full::from(json.to_string()).boxed())
 		.unwrap()
 }
 
@@ -298,7 +299,7 @@ fn create_ok_response(json: &str) -> Response<Body> {
 ///
 /// Whenever the status code is `StatusCode::OK` the text parameter should be
 /// valid JSON as the content type header will be set to `application/json'
-fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
+fn response<T: Into<ApiBody>>(status: StatusCode, text: T) -> Response<ApiBody> {
 	let mut builder = Response::builder();
 
 	builder = builder

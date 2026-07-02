@@ -3,7 +3,8 @@ use grin_util as util;
 
 use crate::api::*;
 use futures::channel::oneshot;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -16,7 +17,7 @@ struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		json_response_pretty(&self.list)
 	}
 }
@@ -40,13 +41,13 @@ impl CounterMiddleware {
 impl Handler for CounterMiddleware {
 	fn call(
 		&self,
-		req: Request<Body>,
+		req: Request<Incoming>,
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		self.counter.fetch_add(1, Ordering::SeqCst);
 		match handlers.next() {
 			Some(h) => h.call(req, handlers),
-			None => return response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found"),
+			None => response(StatusCode::INTERNAL_SERVER_ERROR, "no handler found".into()),
 		}
 	}
 }
@@ -107,10 +108,10 @@ fn test_start_api_tls() {
 	assert!(!server.stop());
 }
 
-fn request_with_retry(url: &str) -> Result<Vec<String>, api::Error> {
+fn request_with_retry(url: &str) -> Result<Vec<String>, Error> {
 	let mut tries = 0;
 	loop {
-		let res = api::client::get::<Vec<String>>(url, None);
+		let res = client::get::<Vec<String>>(url, None);
 		if res.is_ok() {
 			return res;
 		}

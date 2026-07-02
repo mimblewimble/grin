@@ -19,13 +19,15 @@ use crate::rest::*;
 use crate::router::{Handler, ResponseFuture};
 use crate::types::*;
 use crate::web::*;
-use hyper::{Body, Request};
+use hyper::body::Incoming;
+use hyper::Request;
 use serde_json::json;
 use std::convert::TryInto;
 use std::sync::Weak;
 
-// RESTful index of available api endpoints
-// GET /v1/
+/// RESTful index of available api endpoints
+/// GET /v1/
+#[allow(dead_code)]
 pub struct IndexHandler {
 	pub list: Vec<String>,
 }
@@ -33,7 +35,7 @@ pub struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		json_response_pretty(&self.list)
 	}
 }
@@ -68,7 +70,7 @@ impl StatusHandler {
 }
 
 impl Handler for StatusHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
 		result_to_response(self.get_status())
 	}
 }
@@ -149,7 +151,5 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 			Some(json!({ "current_height": current_height, "highest_height": highest_height })),
 		),
 		SyncStatus::Shutdown => ("shutdown".to_string(), None),
-		// any other status is considered syncing (should be unreachable)
-		_ => ("syncing".to_string(), None),
 	}
 }
