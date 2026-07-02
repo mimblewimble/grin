@@ -29,7 +29,6 @@ use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
 use crate::owner::Owner;
 use crate::owner_rpc::OwnerRpc;
-use crate::p2p;
 use crate::pool;
 use crate::pool::{BlockChain, PoolAdapter};
 use crate::rest::{ApiServer, Error, TLSConfig};
@@ -39,15 +38,13 @@ use crate::util::to_base64;
 use crate::util::RwLock;
 use crate::util::StopState;
 use crate::web::*;
-use bytes::Bytes;
+use crate::{p2p, ApiBody};
 use easy_jsonrpc_mw::{Handler, MaybeReply};
 use futures::channel::oneshot;
-use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use serde::Serialize;
-use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
@@ -263,7 +260,7 @@ where
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> Response<BoxBody<Bytes, Infallible>>
+fn json_response_pretty<T>(s: &T) -> Response<ApiBody>
 where
 	T: Serialize,
 {
@@ -273,7 +270,7 @@ where
 	}
 }
 
-fn create_error_response(e: Error) -> Response<BoxBody<Bytes, Infallible>> {
+fn create_error_response(e: Error) -> Response<ApiBody> {
 	Response::builder()
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
@@ -285,7 +282,7 @@ fn create_error_response(e: Error) -> Response<BoxBody<Bytes, Infallible>> {
 		.unwrap()
 }
 
-fn create_ok_response(json: &str) -> Response<BoxBody<Bytes, Infallible>> {
+fn create_ok_response(json: &str) -> Response<ApiBody> {
 	Response::builder()
 		.status(StatusCode::OK)
 		.header("access-control-allow-origin", "*")
@@ -302,10 +299,7 @@ fn create_ok_response(json: &str) -> Response<BoxBody<Bytes, Infallible>> {
 ///
 /// Whenever the status code is `StatusCode::OK` the text parameter should be
 /// valid JSON as the content type header will be set to `application/json'
-fn response<T: Into<BoxBody<Bytes, Infallible>>>(
-	status: StatusCode,
-	text: T,
-) -> Response<BoxBody<Bytes, Infallible>> {
+fn response<T: Into<ApiBody>>(status: StatusCode, text: T) -> Response<ApiBody> {
 	let mut builder = Response::builder();
 
 	builder = builder

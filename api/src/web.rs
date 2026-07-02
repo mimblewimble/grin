@@ -14,15 +14,13 @@
 
 use crate::rest::*;
 use crate::router::ResponseFuture;
-use bytes::Bytes;
+use crate::ApiBody;
 use futures::future::ok;
-use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::io::Cursor;
 use url::form_urlencoded;
 
@@ -88,7 +86,7 @@ where
 }
 
 /// Text response as HTTP response
-pub fn just_response(status: StatusCode, text: String) -> Response<BoxBody<Bytes, Infallible>> {
+pub fn just_response(status: StatusCode, text: String) -> Response<ApiBody> {
 	let mut resp = Response::new(Full::from(text).boxed());
 	*resp.status_mut() = status;
 	resp
@@ -145,8 +143,8 @@ impl From<Option<&str>> for QueryParams {
 	}
 }
 
-impl From<Request<BoxBody<Bytes, Infallible>>> for QueryParams {
-	fn from(req: Request<BoxBody<Bytes, Infallible>>) -> Self {
+impl From<Request<ApiBody>> for QueryParams {
+	fn from(req: Request<ApiBody>) -> Self {
 		Self::from(req.uri().query())
 	}
 }

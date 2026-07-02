@@ -30,9 +30,10 @@ lazy_static! {
 	static ref WILDCARD_STOP_HASH: u64 = calculate_hash(&"**");
 }
 
-pub type ResponseFuture = Pin<
-	Box<dyn Future<Output = Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error>> + Send>,
->;
+pub type ApiBody = BoxBody<Bytes, Infallible>;
+
+pub type ResponseFuture =
+	Pin<Box<dyn Future<Output = Result<Response<ApiBody>, hyper::Error>> + Send>>;
 
 pub trait Handler {
 	fn get(&self, _req: Request<Incoming>) -> ResponseFuture {
@@ -210,7 +211,7 @@ impl Router {
 }
 
 impl Service<Request<Incoming>> for Router {
-	type Response = Response<BoxBody<Bytes, Infallible>>;
+	type Response = Response<ApiBody>;
 	type Error = hyper::Error;
 	type Future = ResponseFuture;
 
@@ -370,10 +371,8 @@ mod tests {
 			res.unwrap()
 		};
 
-		println!("1");
 		assert_eq!(call_handler("/v1/users"), 101);
 
-		println!("2");
 		assert_eq!(call_handler("/v1/users/xxx"), 102);
 		assert!(routes.get("/v1/users/yyy").is_err());
 		assert_eq!(call_handler("/v1/users/xxx/yyy"), 103);
