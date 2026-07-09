@@ -711,28 +711,104 @@ impl WorkersList {
 
 	pub fn add_worker(&self, tx: Tx) -> usize {
 		let mut stratum_stats = self.stratum_stats.write();
-		let worker_id = stratum_stats.worker_stats.len();
-		let worker = Worker::new(worker_id, tx);
 		let mut workers_list = self.workers_list.write();
+
+		// Reuse a disconnected worker slot when available so the stats list
+		// does not grow without bound under reconnect churn (#2413).
+		let worker_id = stratum_stats
+			.worker_stats
+			.iter()
+			.position(|ws| !ws.is_connected)
+			.unwrap_or_else(|| stratum_stats.worker_stats.len());
+
+		let worker = Worker::new(worker_id, tx);
 		workers_list.insert(worker_id, worker);
 
 		let mut worker_stats = WorkerStats::default();
 		worker_stats.is_connected = true;
 		worker_stats.id = worker_id.to_string();
 		worker_stats.pow_difficulty = stratum_stats.minimum_share_difficulty;
-		stratum_stats.worker_stats.push(worker_stats);
+		// Reset counters for the (re)used slot.
+		if worker_id < stratum_stats.worker_stats.len() {
+			stratum_stats.worker_stats[worker_id] = worker_stats;
+		} else {
+			stratum_stats.worker_stats.push(worker_stats);
+		}
 		stratum_stats.num_workers = workers_list.len();
 		worker_id
 	}
+
 	pub fn remove_worker(&self, worker_id: usize) {
 		self.update_stats(worker_id, |ws| ws.is_connected = false);
+		let should_auto_prune = {
+			let mut stratum_stats = self.stratum_stats.write();
+			let mut workers_list = self.workers_list.write();
+			workers_list
+				.remove(&worker_id)
+				.expect("Stratum: no such addr in map");
+
+			stratum_stats.num_workers = workers_list.len();
+			// With no live workers it is safe to drop historical dead entries.
+			if workers_list.is_empty() {
+				stratum_stats.worker_stats.clear();
+				false
+			} else {
+				// Cap dead-slot buildup under reconnect churn without remapping on every leave.
+				let dead = stratum_stats
+					.worker_stats
+					.iter()
+					.filter(|ws| !ws.is_connected)
+					.count();
+				dead > 32
+			}
+		};
+		if should_auto_prune {
+			let n = self.prune_dead_workers();
+			if n > 0 {
+				debug!("Stratum: pruned {} disconnected worker stats", n);
+			}
+		}
+	}
+
+	/// Remove disconnected worker stats and reassign live worker IDs densely.
+	///
+	/// Safe to call while workers are connected: live workers are remapped
+	/// under a single write lock on both maps. Returns how many dead entries
+	/// were removed.
+	pub fn prune_dead_workers(&self) -> usize {
 		let mut stratum_stats = self.stratum_stats.write();
 		let mut workers_list = self.workers_list.write();
-		workers_list
-			.remove(&worker_id)
-			.expect("Stratum: no such addr in map");
 
+		let old_stats = std::mem::take(&mut stratum_stats.worker_stats);
+		let dead = old_stats.iter().filter(|ws| !ws.is_connected).count();
+		if dead == 0 {
+			stratum_stats.worker_stats = old_stats;
+			return 0;
+		}
+
+		let mut new_stats = Vec::with_capacity(old_stats.len() - dead);
+		let mut id_map: HashMap<usize, usize> = HashMap::new();
+		for (old_id, mut stats) in old_stats.into_iter().enumerate() {
+			if !stats.is_connected {
+				continue;
+			}
+			let new_id = new_stats.len();
+			stats.id = new_id.to_string();
+			id_map.insert(old_id, new_id);
+			new_stats.push(stats);
+		}
+
+		let old_workers = std::mem::take(&mut *workers_list);
+		for (old_id, mut worker) in old_workers {
+			if let Some(&new_id) = id_map.get(&old_id) {
+				worker.id = new_id;
+				workers_list.insert(new_id, worker);
+			}
+		}
+
+		stratum_stats.worker_stats = new_stats;
 		stratum_stats.num_workers = workers_list.len();
+		dead
 	}
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
@@ -918,6 +994,93 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn dummy_tx() -> Tx {
+		let (tx, _rx) = mpsc::unbounded();
+		tx
+	}
+
+	#[test]
+	fn add_worker_reuses_disconnected_slot() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats.clone());
+
+		let id0 = workers.add_worker(dummy_tx());
+		let id1 = workers.add_worker(dummy_tx());
+		assert_eq!(id0, 0);
+		assert_eq!(id1, 1);
+		assert_eq!(workers.count(), 2);
+		assert_eq!(stats.read().worker_stats.len(), 2);
+
+		workers.remove_worker(id0);
+		assert_eq!(workers.count(), 1);
+		assert!(!stats.read().worker_stats[0].is_connected);
+		// One worker still connected — dead stats kept until reuse / prune.
+		assert_eq!(stats.read().worker_stats.len(), 2);
+
+		// New connection should reuse slot 0, not grow the list.
+		let id_reused = workers.add_worker(dummy_tx());
+		assert_eq!(id_reused, 0);
+		assert_eq!(stats.read().worker_stats.len(), 2);
+		assert!(stats.read().worker_stats[0].is_connected);
+		assert_eq!(workers.count(), 2);
+	}
+
+	#[test]
+	fn remove_last_worker_clears_stats() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats.clone());
+
+		let id0 = workers.add_worker(dummy_tx());
+		workers.add_worker(dummy_tx());
+		workers.remove_worker(id0);
+		assert_eq!(stats.read().worker_stats.len(), 2);
+
+		workers.remove_worker(1);
+		assert_eq!(workers.count(), 0);
+		assert!(
+			stats.read().worker_stats.is_empty(),
+			"dead worker history should clear when idle"
+		);
+	}
+
+	#[test]
+	fn prune_dead_workers_remaps_live_ids() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats.clone());
+
+		let id0 = workers.add_worker(dummy_tx());
+		let id1 = workers.add_worker(dummy_tx());
+		let id2 = workers.add_worker(dummy_tx());
+		assert_eq!((id0, id1, id2), (0, 1, 2));
+
+		// Disconnect middle worker; leave 0 and 2 connected.
+		workers.remove_worker(id1);
+		assert_eq!(workers.count(), 2);
+		assert_eq!(stats.read().worker_stats.len(), 3);
+
+		// Bump counters on a live worker so we can check they survive prune.
+		workers.update_stats(id2, |ws| ws.num_accepted = 7);
+
+		let removed = workers.prune_dead_workers();
+		assert_eq!(removed, 1);
+		assert_eq!(workers.count(), 2);
+		assert_eq!(stats.read().worker_stats.len(), 2);
+		assert!(stats.read().worker_stats.iter().all(|ws| ws.is_connected));
+		// Live workers remapped to 0..1 densely.
+		assert!(workers.get_worker(0).is_ok());
+		assert!(workers.get_worker(1).is_ok());
+		// Old id 2 no longer valid.
+		assert!(workers.get_worker(2).is_err());
+		// Accepted counter preserved on remapped worker that was id2.
+		let accepted: Vec<_> = stats
+			.read()
+			.worker_stats
+			.iter()
+			.map(|ws| ws.num_accepted)
+			.collect();
+		assert!(accepted.contains(&7));
+	}
 
 	/// Tests deserializing an `RpcRequest` given a String as the id.
 	#[test]
