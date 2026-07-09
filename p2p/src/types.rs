@@ -671,6 +671,25 @@ impl PeerInfo {
 		live_info.total_difficulty = total_difficulty;
 		live_info.last_seen = Utc::now()
 	}
+
+	/// Update height/difficulty only when the peer advertises *more* work
+	/// (higher total_difficulty, or same difficulty at a greater height).
+	/// Used when a peer sends us a header/block/compact block so we do not wait
+	/// for the next ping/pong (up to ~10s) to reflect their chain tip.
+	pub fn update_if_better(&self, height: u64, total_difficulty: Difficulty) {
+		let mut live_info = self.live_info.write();
+		let better = total_difficulty > live_info.total_difficulty
+			|| (total_difficulty == live_info.total_difficulty && height > live_info.height);
+		if !better {
+			return;
+		}
+		if total_difficulty != live_info.total_difficulty {
+			live_info.stuck_detector = Utc::now();
+		}
+		live_info.height = height;
+		live_info.total_difficulty = total_difficulty;
+		live_info.last_seen = Utc::now()
+	}
 }
 
 /// Flatten out a PeerInfo and nested PeerLiveInfo (taking a read lock on it)
@@ -903,6 +922,8 @@ pub trait NetAdapter: ChainAdapter {
 	fn peer_addrs_received(&self, _: Vec<PeerAddr>);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
+	/// Header/block/compact-block receipts also update peer live info directly
+	/// via [`PeerInfo::update_if_better`] so tip tracking is not delayed until ping.
 	fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64);
 
 	/// Is this peer currently banned?
@@ -923,4 +944,57 @@ pub struct AttachmentUpdate {
 	pub read: usize,
 	pub left: usize,
 	pub meta: Arc<AttachmentMeta>,
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::core::ser::ProtocolVersion;
+	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+	fn test_peer_info(difficulty: Difficulty) -> PeerInfo {
+		PeerInfo {
+			capabilities: Capabilities::default(),
+			user_agent: "test".into(),
+			version: ProtocolVersion(1),
+			addr: PeerAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 3414)),
+			direction: Direction::Outbound,
+			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(difficulty))),
+		}
+	}
+
+	#[test]
+	fn update_if_better_increases_work() {
+		let peer = test_peer_info(Difficulty::from_num(10));
+		assert_eq!(peer.total_difficulty(), Difficulty::from_num(10));
+		assert_eq!(peer.height(), 0);
+
+		// lower difficulty is ignored
+		peer.update_if_better(5, Difficulty::from_num(5));
+		assert_eq!(peer.total_difficulty(), Difficulty::from_num(10));
+		assert_eq!(peer.height(), 0);
+
+		// equal difficulty, equal height ignored
+		peer.update_if_better(0, Difficulty::from_num(10));
+		assert_eq!(peer.height(), 0);
+
+		// equal difficulty, higher height accepted
+		peer.update_if_better(3, Difficulty::from_num(10));
+		assert_eq!(peer.total_difficulty(), Difficulty::from_num(10));
+		assert_eq!(peer.height(), 3);
+
+		// equal difficulty, lower height ignored
+		peer.update_if_better(1, Difficulty::from_num(10));
+		assert_eq!(peer.height(), 3);
+
+		// higher difficulty accepted
+		peer.update_if_better(4, Difficulty::from_num(20));
+		assert_eq!(peer.total_difficulty(), Difficulty::from_num(20));
+		assert_eq!(peer.height(), 4);
+
+		// absolute update still overwrites (ping/pong)
+		peer.update(2, Difficulty::from_num(15));
+		assert_eq!(peer.total_difficulty(), Difficulty::from_num(15));
+		assert_eq!(peer.height(), 2);
+	}
 }
