@@ -60,39 +60,70 @@ pub struct LogEntry {
 }
 
 /// Logging config
+///
+/// Missing keys in `grin-server.toml` fall back to these defaults (see #3002).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct LoggingConfig {
 	/// whether to log to stdout
+	#[serde(default = "default_true")]
 	pub log_to_stdout: bool,
 	/// logging level for stdout
+	#[serde(default = "default_stdout_log_level")]
 	pub stdout_log_level: Level,
 	/// whether to log to file
+	#[serde(default = "default_true")]
 	pub log_to_file: bool,
 	/// log file level
+	#[serde(default = "default_file_log_level")]
 	pub file_log_level: Level,
 	/// Log file path
+	#[serde(default = "default_log_file_path")]
 	pub log_file_path: String,
 	/// Whether to append to log or replace
+	#[serde(default = "default_true")]
 	pub log_file_append: bool,
 	/// Size of the log in bytes to rotate over (optional)
+	#[serde(default = "default_log_max_size")]
 	pub log_max_size: Option<u64>,
 	/// Number of the log files to rotate over (optional)
+	#[serde(default = "default_log_max_files")]
 	pub log_max_files: Option<u32>,
 	/// Whether the tui is running (optional)
+	#[serde(default)]
 	pub tui_running: Option<bool>,
+}
+
+fn default_true() -> bool {
+	true
+}
+fn default_stdout_log_level() -> Level {
+	Level::Warn
+}
+fn default_file_log_level() -> Level {
+	Level::Info
+}
+fn default_log_file_path() -> String {
+	String::from("grin.log")
+}
+fn default_log_max_size() -> Option<u64> {
+	Some(1024 * 1024 * 16) // 16 megabytes default
+}
+fn default_log_max_files() -> Option<u32> {
+	Some(DEFAULT_ROTATE_LOG_FILES)
 }
 
 impl Default for LoggingConfig {
 	fn default() -> LoggingConfig {
 		LoggingConfig {
-			log_to_stdout: true,
-			stdout_log_level: Level::Warn,
-			log_to_file: true,
-			file_log_level: Level::Info,
-			log_file_path: String::from("grin.log"),
-			log_file_append: true,
-			log_max_size: Some(1024 * 1024 * 16), // 16 megabytes default
-			log_max_files: Some(DEFAULT_ROTATE_LOG_FILES),
+			log_to_stdout: default_true(),
+			stdout_log_level: default_stdout_log_level(),
+			log_to_file: default_true(),
+			file_log_level: default_file_log_level(),
+			log_file_path: default_log_file_path(),
+			log_file_append: default_true(),
+			log_max_size: default_log_max_size(),
+			log_max_files: default_log_max_files(),
 			tui_running: None,
 		}
 	}

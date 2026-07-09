@@ -87,12 +87,15 @@ pub struct GlobalConfig {
 /// internal state that we don't necessarily
 /// want serialised or deserialised
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ConfigMembers {
 	/// Config file version (None == version 1)
+	#[serde(default)]
 	pub config_file_version: Option<u32>,
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Logging config
+	/// Logging config (optional section; missing keys use LoggingConfig defaults)
+	#[serde(default)]
 	pub logging: Option<LoggingConfig>,
 }

@@ -590,3 +590,62 @@ fn test_api_secret_paths_config_file() {
 		foreign_api_secret_exists,
 	);
 }
+
+/// Missing logging keys must fall back to defaults (issue #3002).
+#[test]
+fn test_logging_config_missing_keys_use_defaults() {
+	// Omitting log_to_file previously failed to parse; it must default to true.
+	let toml = r#"
+[server]
+db_root = "chain_data"
+api_http_addr = "127.0.0.1:3413"
+
+[logging]
+log_to_stdout = false
+"#;
+	let members: ConfigMembers = toml::from_str(toml).expect("minimal config should parse");
+	let logging = members.logging.expect("logging section present");
+	assert_eq!(logging.log_to_stdout, false);
+	assert_eq!(logging.log_to_file, true); // default
+	assert_eq!(logging.log_file_append, true); // default
+	assert_eq!(format!("{:?}", logging.stdout_log_level), "Warn");
+	assert_eq!(format!("{:?}", logging.file_log_level), "Info");
+}
+
+/// Entire [logging] section can be omitted.
+#[test]
+fn test_logging_section_optional() {
+	let toml = r#"
+[server]
+db_root = "chain_data"
+api_http_addr = "127.0.0.1:3413"
+"#;
+	let members: ConfigMembers = toml::from_str(toml).expect("config without logging should parse");
+	assert!(members.logging.is_none());
+	assert_eq!(members.server.db_root, "chain_data");
+	assert_eq!(members.server.api_http_addr, "127.0.0.1:3413");
+	// Other server fields use defaults
+	assert_eq!(members.server.run_tui, Some(true));
+}
+
+/// Partial [server.stratum_mining_config] uses stratum defaults.
+#[test]
+fn test_stratum_partial_config_defaults() {
+	let toml = r#"
+[server]
+db_root = "chain_data"
+
+[server.stratum_mining_config]
+enable_stratum_server = true
+"#;
+	let members: ConfigMembers = toml::from_str(toml).expect("partial stratum config should parse");
+	let stratum = members
+		.server
+		.stratum_mining_config
+		.expect("stratum section");
+	assert_eq!(stratum.enable_stratum_server, Some(true));
+	assert_eq!(stratum.attempt_time_per_block, 15);
+	assert_eq!(stratum.minimum_share_difficulty, 1);
+	assert_eq!(stratum.wallet_listener_url, "http://127.0.0.1:3415");
+	assert!(!stratum.burn_reward);
+}
