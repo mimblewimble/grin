@@ -21,6 +21,7 @@ use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{ChainHandler, KernelHandler, OutputHandler};
 use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
+use crate::handlers::utils::ensure_not_syncing;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
 use crate::types::{
@@ -236,6 +237,7 @@ where
 		include_proof: Option<bool>,
 		_include_merkle_proof: Option<bool>,
 	) -> Result<Vec<OutputPrintable>, Error> {
+		ensure_not_syncing(&self.sync_state)?;
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
@@ -267,6 +269,7 @@ where
 		max: u64,
 		include_proof: Option<bool>,
 	) -> Result<OutputListing, Error> {
+		ensure_not_syncing(&self.sync_state)?;
 		let output_handler = OutputHandler {
 			chain: self.chain.clone(),
 		};
@@ -288,6 +291,8 @@ where
 		start_block_height: u64,
 		end_block_height: Option<u64>,
 	) -> Result<OutputListing, Error> {
+		// Wallet scan/info hits this early; return a clear signal while syncing (#3546).
+		ensure_not_syncing(&self.sync_state)?;
 		let txhashset_handler = TxHashSetHandler {
 			chain: self.chain.clone(),
 		};
