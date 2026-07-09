@@ -77,6 +77,17 @@ fn compaction_wall_clock_ok(
 	}
 }
 
+/// Combined wall-clock + probabilistic gate used by `check_compact`.
+/// Returns true if a compact thread should be started (caller updates `last`).
+fn should_trigger_compaction(
+	last: Option<Instant>,
+	now: Instant,
+	min_interval: std::time::Duration,
+	dice_hit: bool,
+) -> bool {
+	compaction_wall_clock_ok(last, now, min_interval) && dice_hit
+}
+
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -986,35 +997,36 @@ where
 	}
 
 	fn check_compact(&self) {
-		// Wall-clock throttle first (cheap). During fast sync blocks arrive much
-		// faster than mainnet's 1/min, so the height-based dice alone is too aggressive.
+		// Wall-clock throttle + height-based dice. During fast sync blocks arrive much
+		// faster than mainnet's 1/min, so the dice alone is too aggressive (#3594).
 		let min_interval = std::time::Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
+		let now = Instant::now();
+		let dice_hit = {
+			let mut rng = thread_rng();
+			0 == rng.gen_range(0, global::COMPACTION_CHECK)
+		};
+
+		// Hold the write lock across check+stamp so concurrent process_block
+		// calls cannot double-trigger in the same window.
 		{
-			let last = self.last_compact_trigger.read();
-			if !compaction_wall_clock_ok(*last, Instant::now(), min_interval) {
+			let mut last = self.last_compact_trigger.write();
+			if !should_trigger_compaction(*last, now, min_interval, dice_hit) {
 				return;
 			}
+			*last = Some(now);
 		}
 
-		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
-		// uses a different thread to avoid blocking the caller thread (likely a peer)
-		let mut rng = thread_rng();
-		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
-			// Record trigger time before spawn so concurrent process_block calls
-			// cannot start multiple compactors in the same window.
-			*self.last_compact_trigger.write() = Some(Instant::now());
-
-			let chain = self.chain();
-			let syncing = self.sync_state.is_syncing();
-			let _ = thread::Builder::new()
-				.name("compactor".to_string())
-				.spawn(move || {
-					debug!("check_compact: starting compaction (syncing={})", syncing);
-					if let Err(e) = chain.compact() {
-						error!("Could not compact chain: {:?}", e);
-					}
-				});
-		}
+		let chain = self.chain();
+		let syncing = self.sync_state.is_syncing();
+		let _ = thread::Builder::new()
+			.name("compactor".to_string())
+			.spawn(move || {
+				// info: visible at default log level for ops verification of #3594
+				info!("check_compact: starting compaction (syncing={})", syncing);
+				if let Err(e) = chain.compact() {
+					error!("Could not compact chain: {:?}", e);
+				}
+			});
 	}
 
 	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {
@@ -1384,5 +1396,47 @@ mod tests {
 	#[test]
 	fn min_compaction_interval_is_one_hour() {
 		assert_eq!(global::MIN_COMPACTION_INTERVAL_SECS, 60 * 60);
+	}
+
+	/// Simulate fast sync: many blocks, dice always hits, wall clock fixed.
+	/// Compaction must trigger at most once per min_interval window.
+	#[test]
+	fn rapid_sync_compacts_at_most_once_per_wall_clock_window() {
+		let min = Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
+		let t0 = Instant::now();
+		let mut last: Option<Instant> = None;
+		let mut triggers = 0u32;
+
+		// 50k "blocks" in the same wall-clock instant (worst-case sync).
+		for _ in 0..50_000 {
+			if should_trigger_compaction(last, t0, min, true) {
+				triggers += 1;
+				last = Some(t0);
+			}
+		}
+		assert_eq!(
+			triggers, 1,
+			"expected exactly one compact trigger in a single wall-clock window"
+		);
+
+		// Still inside the window → no more triggers.
+		let t_mid = t0 + Duration::from_secs(min.as_secs() / 2);
+		for _ in 0..10_000 {
+			if should_trigger_compaction(last, t_mid, min, true) {
+				triggers += 1;
+				last = Some(t_mid);
+			}
+		}
+		assert_eq!(triggers, 1, "half-interval must not allow another compact");
+
+		// After full interval → one more trigger allowed.
+		let t_next = t0 + min;
+		assert!(should_trigger_compaction(last, t_next, min, true));
+		last = Some(t_next);
+		triggers += 1;
+		assert_eq!(triggers, 2);
+
+		// Dice miss even after interval → no trigger.
+		assert!(!should_trigger_compaction(last, t_next + min, min, false));
 	}
 }
