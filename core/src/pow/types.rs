@@ -330,12 +330,23 @@ impl ProofOfWork {
 /// (i+1) * edge_bits - 1, padding it with up to 7 0-bits to a multiple of 8 bits,
 /// writing as a little endian byte array, and hashing with blake2b using 256 bit digest.
 
-#[derive(Clone, PartialOrd, PartialEq, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
 	pub edge_bits: u8,
 	/// The nonces
 	pub nonces: Vec<u64>,
+	/// Cached packed nonces used for Hash (and full) serialization.
+	///
+	/// Populated when the proof is deserialized from the on-wire / on-disk bit
+	/// packing, so subsequent `hash()` / `write()` calls do not re-run the
+	/// relatively expensive bit-packing step. Not populated for locally
+	/// constructed proofs (mining / tests) unless filled explicitly.
+	///
+	/// **Important:** if you mutate `edge_bits` or `nonces` after construction,
+	/// call [`Proof::clear_packed_cache`] so a stale cache cannot poison hashes.
+	#[serde(skip)]
+	packed_nonces: Option<Vec<u8>>,
 }
 
 impl DefaultHashable for Proof {}
@@ -353,7 +364,27 @@ impl fmt::Debug for Proof {
 	}
 }
 
+impl PartialEq for Proof {
+	fn eq(&self, other: &Proof) -> bool {
+		self.edge_bits == other.edge_bits && self.nonces == other.nonces
+	}
+}
+
 impl Eq for Proof {}
+
+impl PartialOrd for Proof {
+	fn partial_cmp(&self, other: &Proof) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Proof {
+	fn cmp(&self, other: &Proof) -> std::cmp::Ordering {
+		self.edge_bits
+			.cmp(&other.edge_bits)
+			.then_with(|| self.nonces.cmp(&other.nonces))
+	}
+}
 
 impl Proof {
 	/// Builds a proof with provided nonces at default edge_bits
@@ -362,6 +393,7 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
+			packed_nonces: None,
 		}
 	}
 
@@ -370,6 +402,7 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: vec![0; proof_size],
+			packed_nonces: None,
 		}
 	}
 
@@ -394,6 +427,7 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: v,
+			packed_nonces: None,
 		}
 	}
 
@@ -402,8 +436,27 @@ impl Proof {
 		self.nonces.len()
 	}
 
-	/// Pack the nonces of the proof to their exact bit size as described above
+	/// Drop any cached packed nonces. Call this after mutating `edge_bits` or `nonces`.
+	pub fn clear_packed_cache(&mut self) {
+		self.packed_nonces = None;
+	}
+
+	/// Whether this proof currently holds a packed-nonces cache.
+	#[cfg(test)]
+	pub fn has_packed_cache(&self) -> bool {
+		self.packed_nonces.is_some()
+	}
+
+	/// Pack the nonces of the proof to their exact bit size as described above.
+	/// Uses the deserialized cache when available.
 	pub fn pack_nonces(&self) -> Vec<u8> {
+		if let Some(ref packed) = self.packed_nonces {
+			return packed.clone();
+		}
+		self.compute_packed_nonces()
+	}
+
+	fn compute_packed_nonces(&self) -> Vec<u8> {
 		let mut compressed = vec![0u8; Proof::pack_len(self.edge_bits)];
 		pack_bits(
 			self.edge_bits,
@@ -510,11 +563,17 @@ impl Readable for Proof {
 			if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
 				return Err(ser::Error::CorruptedData);
 			}
-			Ok(Proof { edge_bits, nonces })
+			// Cache the on-wire packed form so later hash()/write() skip re-packing.
+			Ok(Proof {
+				edge_bits,
+				nonces,
+				packed_nonces: Some(bits),
+			})
 		} else {
 			Ok(Proof {
 				edge_bits,
 				nonces: vec![],
+				packed_nonces: None,
 			})
 		}
 	}
@@ -525,7 +584,12 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		writer.write_fixed_bytes(&self.pack_nonces())
+		// Prefer the deserialized packed form (hash-hot path); otherwise pack on demand.
+		if let Some(ref packed) = self.packed_nonces {
+			writer.write_fixed_bytes(packed)
+		} else {
+			writer.write_fixed_bytes(&self.compute_packed_nonces())
+		}
 	}
 }
 
@@ -542,6 +606,7 @@ mod tests {
 		for edge_bits in 10..63 {
 			let mut proof = Proof::new(gen_proof(edge_bits as u32));
 			proof.edge_bits = edge_bits;
+			proof.clear_packed_cache();
 			let mut buf = Cursor::new(Vec::new());
 			let mut w = BinWriter::new(&mut buf, ProtocolVersion::local());
 			if let Err(e) = proof.write(&mut w) {
@@ -555,9 +620,41 @@ mod tests {
 			);
 			match Proof::read(&mut r) {
 				Err(e) => panic!("failed to read proof: {:?}", e),
-				Ok(p) => assert_eq!(p, proof),
+				Ok(p) => {
+					assert_eq!(p, proof);
+					assert!(
+						p.has_packed_cache(),
+						"deserialized proof should cache packed nonces"
+					);
+				}
 			}
 		}
+	}
+
+	#[test]
+	fn packed_cache_matches_recomputed_and_hash() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+		let mut proof = Proof::new(gen_proof(29));
+		proof.edge_bits = 29;
+		let hash_before = proof.hash();
+		let packed = proof.compute_packed_nonces();
+
+		// Simulate a deserialized proof: same nonces, cache filled.
+		let cached = Proof {
+			edge_bits: proof.edge_bits,
+			nonces: proof.nonces.clone(),
+			packed_nonces: Some(packed.clone()),
+		};
+		assert!(cached.has_packed_cache());
+		assert_eq!(cached.pack_nonces(), packed);
+		assert_eq!(cached.hash(), hash_before);
+
+		// Mutating nonces without clearing would be wrong; clear keeps hash correct.
+		let mut mutated = cached.clone();
+		mutated.nonces[0] = mutated.nonces[0].wrapping_add(1);
+		mutated.clear_packed_cache();
+		assert!(!mutated.has_packed_cache());
+		assert_ne!(mutated.hash(), hash_before);
 	}
 
 	fn gen_proof(bits: u32) -> Vec<u64> {

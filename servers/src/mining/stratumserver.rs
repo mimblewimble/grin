@@ -388,6 +388,8 @@ impl Handler {
 		b.header.pow.proof.edge_bits = params.edge_bits as u8;
 		b.header.pow.nonce = params.nonce;
 		b.header.pow.proof.nonces = params.pow;
+		// Mutating edge_bits/nonces must drop any packed-nonces cache.
+		b.header.pow.proof.clear_packed_cache();
 
 		if !b.header.pow.is_primary() && !b.header.pow.is_secondary() {
 			// Return error status
