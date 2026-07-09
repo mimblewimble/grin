@@ -1,60 +1,73 @@
 # Grin/Mimblewimble for Bitcoiners
 
-*Read this in other languages:[Korean](translations/grin4bitcoiners_KR.md)
+*Read this in other languages: [Korean](translations/grin4bitcoiners_KR.md), [Chinese](translations/grin4bitcoiners_ZH-CN.md)*
+
+This page is a short comparison for readers familiar with Bitcoin. For a deeper treatment of what Grin does and does not hide, see the
+[Grin Privacy Primer](https://github.com/mimblewimble/docs/wiki/Grin-Privacy-Primer).
 
 ## Privacy and Fungibility
 
-There are 3 main properties of Grin transactions that make them private:
+Grin transactions are private in ways that Bitcoin’s transparent UTXO model is not. Three properties matter most:
 
-1. There are no addresses.
-1. There are no amounts.
-1. 2 transactions, one spending the other, can be merged in a block to form only one, removing all intermediary information.
+1. **No addresses.** Outputs are one-shot curve points. There is no reusable “payment address” that links payments over time.
+2. **No amounts.** Every transaction uses confidential transactions (CT). Amounts sit inside Pedersen commitments with range proofs, so outsiders cannot read transfer values.
+3. **Cut-through and aggregation.** When an output is spent, Mimblewimble can remove the spent input/output pair from the long-term chain state. Inside a block, many transactions are merged into one aggregate set of inputs, outputs, and kernels, so a confirmed block does not look like a list of labeled payments.
 
-The 2 first properties mean that all transactions are indistinguishable from one another. Unless you directly participated in the transaction, all inputs and outputs look like random pieces of data (in lingo, they're all random curve points).
+Because of (1) and (2), unspent outputs and kernels all look like random-looking data unless you participated in building them. Nodes can still verify that no money was created out of thin air by checking that commitments balance (homomorphic structure) and that range proofs and signatures are valid.
 
-Moreover, there are no more transactions in a block. A Grin block looks just like one giant transaction and all original association between inputs and outputs is lost.
+### What cut-through does *not* erase
+
+It is easy to overstate the third point. **Cut-through improves scalability and reduces long-term history, but it does not make input↔output linking impossible.**
+
+- While a transaction is **relayed** (before or while it is mined), observers can still see which commitments are spent and which new ones appear. That is a real information channel.
+- **Taint / hop analysis** can follow known “marked” outputs across spends if an adversary can introduce or learn those outputs (for example by paying you, or by watching the network closely). Aggregation and Dandelion make this harder, but they are not perfect anonymity.
+- After cut-through, the **kernel** of a transaction remains as a permanent ~100-byte footprint. The chain still records that “some” balanced state change occurred, even when the intermediate UTXOs are gone.
+
+So: Grin hides amounts and addresses strongly; it **weakens but does not eliminate** graph-style analysis of which outputs feed which later spends. That matches the Privacy Primer’s view that addresses and amounts are checked off as strong wins, while **input/output linking** remains an area of residual leakage and ongoing research.
 
 ## Scalability
 
-As explained in the previous section, thanks to the Mimblewimble transaction and block format we can merge transactions when an output is directly spent by the input of another. It's as if when Alice gives money to Bob, and then Bob gives it all to Carol, Bob was never involved and his transaction is actually never even seen on the blockchain.
+Because spent outputs can be removed from the active UTXO set, a Grin node’s long-term storage grows primarily with **unspent outputs** (users holding coins), not with every historical payment. Full verification still needs kernels and headers; kernels are the main “per-transaction” residue that remains after cut-through.
 
-Pushing that further, between blocks, most outputs end up being spent sooner or later by another input. So *all spent outputs can be safely removed*. And the whole blockchain can be stored, downloaded and fully verified in just a few gigabytes or less (assuming a number of transactions similar to bitcoin).
-
-This means that the Grin blockchain scales with the number of users (unspent outputs), not the number of transactions. At the moment, there is one caveat to that: a small piece of data (called a *kernel*, about 100 bytes) needs to stay around for each transaction. But we're working on optimizing that as well.
+In practice the chain stays far smaller than a transparent UTXO chain with the same activity, but it is not free—range proofs and kernels have a cost, and sync still requires downloading state (for example via PIBD or a txhashset snapshot).
 
 ## Scripting
 
-Maybe you've heard that Mimblewimble doesn't support scripts. And in some way, that's true. But thanks to cryptographic trickery, many contracts that in Bitcoin would require a script can be achieved with Grin using properties of Elliptic Curve Cryptography. So far, we know how to do:
+Mimblewimble does not carry Bitcoin-style scripts on the chain. Many contracts that Bitcoin implements with Script can still be built using elliptic-curve techniques and interactive protocols, for example:
 
-* Multi-signature transactions.
-* Atomic swaps.
-* Time-locked transactions and outputs.
-* Lightning Network
+* Multi-signature transactions
+* Atomic swaps
+* Time-locked transactions and outputs
+* Payment-channel style constructions (e.g. Lightning-like designs)
+
+Those constructions live more in wallet protocols than in on-chain script programs.
 
 ## Emission Rate
 
-Bitcoin's 10 minute block time has its initial 50 btc reward cut in half every 4 years until there are 21 million bitcoin in circulation. Grin's emission rate is linear, meaning it never drops. The block reward is currently set at 60 grin with a block goal of 60 seconds. This still works because 1) dilution trends toward zero and 2) a non-negligible amount of coins gets lost or destroyed every year.
+Bitcoin’s block subsidy halves over time toward a fixed supply. Grin’s base emission is **linear** (a constant block reward), so supply grows without a hard cap. Dilution trends toward zero as the monetary base grows, and coins are also lost over time. The block target is on the order of one minute (see current consensus parameters for the exact reward).
 
 ## FAQ
 
 ### Wait, what!? No address?
 
-Nope, no address. All outputs in Grin are unique and have no common data with any previous output. Instead of relying on a known address to send money, transactions have to be built interactively, with two (or more) wallets exchanging data with one another. This interaction **does not require both parties to be online at the same time**. Practically speaking, there are many ways for two programs to interact privately and securely. This interaction could even take place over email or Signal (or carrier pigeons).
+Correct—no reusable addresses. Outputs are unique and do not share an address field with earlier outputs. Wallets build transactions **interactively** (or via a slate/exchange of messages). Both parties do not need to be online at the same instant; the handshake can happen over any private channel (including offline media).
 
 ### If transaction information gets removed, can I just cheat and create money?
 
-No, and this is where Mimblewimble and Grin shine. Confidential transactions are a form of [homomorphic encryption](https://en.wikipedia.org/wiki/Homomorphic_encryption). Without revealing any amount, Grin can verify that the sum of all transaction inputs equal the sum of transaction outputs, plus the fee. Going even further, comparing the sum of all money created by mining with the total sum of money that's being held, Grin nodes can check the correctness of the total money supply.
+No. Confidential transactions are designed so nodes can check that the sum of inputs equals the sum of outputs plus the fee **without** learning the amounts. Across the whole chain, nodes also check consistency of total supply against coinbase issuance. Cut-through removes spent UTXOs; it does not remove the need for those balance checks.
 
-### If I listen to transaction relay, can't I just figure out who they belong to before being cut-through?
+### If I listen to transaction relay, can’t I just figure out who they belong to before cut-through?
 
-You can figure out which outputs are being spent by which transaction, but the trail of data stops here. All inputs and outputs look like random pieces of data, so you can't tell if the money was transferred, still belongs to the same person, which output is the actual transfer and which is the change, etc. Grin transactions are built with *no identifiable piece of information*.
+You can observe **which** outputs are spent and **which** new outputs appear in a given transaction or stem. You generally **cannot** read amounts or reuse addresses to label “who paid whom” the way you can on Bitcoin.
 
-In addition, Grin leverages [Dandelion relay](dandelion/dandelion.md), which provides additional anonymity as to which IP or client the transaction originated from, and allows for transactions to be aggregated.
+What you *can* still do, with extra information, is **link** spends: for example by paying someone a known output and watching how related commitments move, or by combining relay timing with other metadata. Dandelion stem relay reduces the reliability of “this IP originated this tx,” and stem aggregation can blur some couplings, but they do not make the network a black box.
 
-### What about the quantum computaggedon?
+For a careful split of “what Grin hides” vs “what still leaks,” read the [Privacy Primer](https://github.com/mimblewimble/docs/wiki/Grin-Privacy-Primer).
 
-In every Grin output, we also include a bit of hashed data, which is quantum safe. If quantum computing was to become a reality, we can safely introduce additional verification that would protect existing coins from being hacked.
+### What about quantum computers?
+
+Commitments and signatures used today are not quantum-safe in the usual sense. Outputs also carry hash material that can support future migration plans if quantum threats become practical. Treat long-range quantum risk like other cryptocurrencies: monitor standards and upgrades; do not assume current crypto is forever.
 
 ### How does all this magic work?
 
-See our [technical introduction](intro.md) to get started.
+See our [technical introduction](intro.md) and the [Privacy Primer](https://github.com/mimblewimble/docs/wiki/Grin-Privacy-Primer).
