@@ -1057,9 +1057,206 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::chain::types::{NoopAdapter, SyncStatus};
+	use crate::core::genesis;
+	use crate::core::global::{self, ChainTypes};
+	use std::io::{Read, Write};
+	use std::net::TcpStream as StdTcpStream;
+	use std::path::Path;
+	use std::sync::mpsc::sync_channel;
 
 	fn dummy_tx() -> (Tx, mpsc::Receiver<String>) {
 		mpsc::channel(WORKER_QUEUE_SIZE)
+	}
+
+	fn count_open_fds() -> Option<usize> {
+		// macOS / Linux: count process FDs. Best-effort leak signal.
+		std::fs::read_dir("/dev/fd").ok().map(|d| d.count())
+	}
+
+	fn setup_handler(dir: &str) -> Arc<Handler> {
+		global::set_local_chain_type(ChainTypes::AutomatedTesting);
+		let _ = std::fs::remove_dir_all(dir);
+		let chain = Arc::new(
+			chain::Chain::init(
+				dir.to_string(),
+				Arc::new(NoopAdapter {}),
+				genesis::genesis_dev(),
+				pow::verify_size,
+				false,
+				None,
+			)
+			.unwrap(),
+		);
+		let stratum_stats = Arc::new(RwLock::new(StratumStats::default()));
+		let sync_state = Arc::new(SyncState::new());
+		sync_state.update(SyncStatus::NoSync);
+		Arc::new(Handler::new(
+			String::from("test"),
+			stratum_stats,
+			sync_state,
+			1,
+			chain,
+		))
+	}
+
+	/// Start the real accept loop on an ephemeral port; return the bound address.
+	fn start_test_stratum(handler: Arc<Handler>) -> SocketAddr {
+		let (addr_tx, addr_rx) = sync_channel(1);
+		thread::spawn(move || {
+			let rt = Runtime::new().unwrap();
+			rt.block_on(async move {
+				let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+				let addr = listener.local_addr().unwrap();
+				addr_tx.send(addr).unwrap();
+				loop {
+					match listener.accept().await {
+						Ok((socket, peer_addr)) => {
+							if handler.workers.count() >= MAX_STRATUM_WORKERS {
+								drop(socket);
+								continue;
+							}
+							let handler = handler.clone();
+							tokio::spawn(async move {
+								let _ = socket.set_nodelay(true);
+								handle_connection(socket, peer_addr, handler).await;
+							});
+						}
+						Err(_) => {
+							tokio::time::sleep(Duration::from_millis(50)).await;
+						}
+					}
+				}
+			});
+		});
+		addr_rx
+			.recv_timeout(Duration::from_secs(5))
+			.expect("stratum test listener failed to start")
+	}
+
+	fn stratum_login(stream: &mut StdTcpStream) {
+		let req = r#"{"id":1,"jsonrpc":"2.0","method":"login","params":{"login":"miner","pass":"x","agent":"test"}}"#;
+		stream.write_all(req.as_bytes()).unwrap();
+		stream.write_all(b"\n").unwrap();
+		stream.flush().unwrap();
+		// Best-effort read of the login response (do not block forever).
+		let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
+		let mut buf = [0u8; 512];
+		let _ = stream.read(&mut buf);
+	}
+
+	fn wait_workers(handler: &Handler, pred: impl Fn(usize) -> bool, label: &str) -> usize {
+		for _ in 0..100 {
+			let n = handler.workers.count();
+			if pred(n) {
+				return n;
+			}
+			thread::sleep(Duration::from_millis(50));
+		}
+		let n = handler.workers.count();
+		panic!("{}: last worker count was {}", label, n);
+	}
+
+	/// Live stratum listener: reconnect storm must not leave workers or FDs behind.
+	#[test]
+	fn test_live_reconnect_storm_workers_and_fds_bounded() {
+		let dir = ".grin_stratum_live_reconnect";
+		let handler = setup_handler(dir);
+		let addr = start_test_stratum(handler.clone());
+
+		let fd_before = count_open_fds();
+
+		// Reconnecting miner simulation: open, login, drop — many times.
+		const CYCLES: usize = 150;
+		for _ in 0..CYCLES {
+			let mut stream = StdTcpStream::connect_timeout(&addr, Duration::from_secs(2))
+				.expect("connect");
+			stratum_login(&mut stream);
+			drop(stream);
+		}
+
+		wait_workers(&handler, |n| n == 0, "drain after reconnect storm");
+
+		// Concurrent holds then release.
+		let mut held = Vec::new();
+		const CONCURRENT: usize = 40;
+		for _ in 0..CONCURRENT {
+			let mut stream = StdTcpStream::connect_timeout(&addr, Duration::from_secs(2))
+				.expect("connect concurrent");
+			stratum_login(&mut stream);
+			held.push(stream);
+		}
+		let concurrent = wait_workers(
+			&handler,
+			|n| n > 0 && n <= CONCURRENT,
+			"concurrent workers",
+		);
+		assert!(concurrent <= CONCURRENT);
+		drop(held);
+
+		wait_workers(&handler, |n| n == 0, "drain after concurrent release");
+
+		if let (Some(before), Some(after)) = (fd_before, count_open_fds()) {
+			// Listener + misc FDs may grow slightly; must not track ~CYCLES connections.
+			assert!(
+				after < before + 80,
+				"possible FD leak: before={} after={} (cycles={})",
+				before,
+				after,
+				CYCLES
+			);
+		}
+
+		// worker_stats must not grow with every reconnect (slot reuse).
+		assert!(
+			handler.workers.stratum_stats.read().worker_stats.len() <= CONCURRENT + 5,
+			"worker_stats grew unboundedly: {}",
+			handler.workers.stratum_stats.read().worker_stats.len()
+		);
+
+		let _ = std::fs::remove_dir_all(Path::new(dir));
+	}
+
+	/// When at max workers, further accepts are closed immediately and count stays capped.
+	#[test]
+	fn test_live_max_workers_cap() {
+		let dir = ".grin_stratum_live_max";
+		let handler = setup_handler(dir);
+		let addr = start_test_stratum(handler.clone());
+
+		// Hold more connections than the cap.
+		let mut held = Vec::new();
+		for i in 0..(MAX_STRATUM_WORKERS + 16) {
+			match StdTcpStream::connect_timeout(&addr, Duration::from_secs(2)) {
+				Ok(mut stream) => {
+					let _ = stream.set_nodelay(true);
+					if i < MAX_STRATUM_WORKERS {
+						stratum_login(&mut stream);
+					}
+					held.push(stream);
+				}
+				Err(_) => break,
+			}
+		}
+		// Give accept loop time to reject surplus.
+		thread::sleep(Duration::from_millis(500));
+		let count = handler.workers.count();
+		assert!(
+			count <= MAX_STRATUM_WORKERS,
+			"worker count exceeded cap: {} > {}",
+			count,
+			MAX_STRATUM_WORKERS
+		);
+		assert!(
+			count >= MAX_STRATUM_WORKERS.saturating_sub(5),
+			"expected near-cap workers, got {}",
+			count
+		);
+
+		drop(held);
+		wait_workers(&handler, |n| n == 0, "drain after max-cap release");
+
+		let _ = std::fs::remove_dir_all(Path::new(dir));
 	}
 
 	#[test]
