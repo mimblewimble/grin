@@ -72,6 +72,10 @@ pub enum Error {
 	InvalidBlockVersion,
 	/// Unsupported protocol version
 	UnsupportedProtocolVersion,
+	/// Block/header timestamp is beyond the future time limit.
+	/// Not corrupted data — peer clocks may simply disagree; treat as non-fatal
+	/// for peer reputation (see #3360).
+	FutureTimeLimit,
 }
 
 impl From<io::Error> for Error {
@@ -102,6 +106,7 @@ impl fmt::Display for Error {
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 			Error::InvalidBlockVersion => f.write_str("invalid block version"),
 			Error::UnsupportedProtocolVersion => f.write_str("unsupported protocol version"),
+			Error::FutureTimeLimit => f.write_str("future time limit exceeded"),
 		}
 	}
 }
@@ -126,6 +131,7 @@ impl error::Error for Error {
 			Error::HexError(_) => "hex error",
 			Error::InvalidBlockVersion => "invalid block version",
 			Error::UnsupportedProtocolVersion => "unsupported protocol version",
+			Error::FutureTimeLimit => "future time limit exceeded",
 		}
 	}
 }

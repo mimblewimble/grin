@@ -448,14 +448,16 @@ impl Readable for UntrustedBlockHeader {
 		let header = read_block_header(reader)?;
 		let ftl = global::get_future_time_limit();
 		if header.timestamp > Utc::now() + Duration::seconds(ftl as i64) {
-			// refuse blocks whose timestamp is too far in the future
-			// this future_time_limit (FTL) is specified in grin-server.toml
-			// TODO add warning in p2p code if local time is too different from peers
-			error!(
-				"block header {} validation error: block time is more than {} seconds in the future",
+			// Refuse blocks whose timestamp is too far in the future.
+			// FTL is configured in grin-server.toml. This is *not* corrupted data —
+			// local clocks differ; use a dedicated error so peers are not treated
+			// as sending garbage (#3360).
+			// TODO: warn in p2p if local time is systematically different from peers
+			warn!(
+				"block header {} rejected: block time is more than {} seconds in the future (clock skew?)",
 				header.hash(), ftl
 			);
-			return Err(ser::Error::CorruptedData);
+			return Err(ser::Error::FutureTimeLimit);
 		}
 
 		// Check the block version before proceeding any further.
