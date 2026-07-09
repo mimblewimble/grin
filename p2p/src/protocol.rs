@@ -289,12 +289,17 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
-				if !self.state_sync_requested.load(Ordering::Relaxed) {
+				// Atomically claim the outstanding state-sync request so two
+				// concurrent archive messages cannot both observe "requested"
+				// and proceed (load+store race; see #3588).
+				if self
+					.state_sync_requested
+					.compare_exchange(true, false, Ordering::SeqCst, Ordering::Relaxed)
+					.is_err()
+				{
 					error!("handle_payload: txhashset archive received but from the wrong peer",);
 					return Err(Error::BadMessage);
 				}
-				// Update the sync state requested status
-				self.state_sync_requested.store(false, Ordering::Relaxed);
 
 				let start_time = Utc::now();
 				self.adapter
