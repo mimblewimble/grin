@@ -61,6 +61,22 @@ const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
+/// Whether enough wall-clock time has passed since the last compaction trigger.
+/// `None` means never compacted yet (always allowed).
+fn compaction_wall_clock_ok(
+	last: Option<Instant>,
+	now: Instant,
+	min_interval: std::time::Duration,
+) -> bool {
+	match last {
+		None => true,
+		Some(t) => now
+			.checked_duration_since(t)
+			.map(|d| d >= min_interval)
+			.unwrap_or(true),
+	}
+}
+
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -76,6 +92,9 @@ where
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
+	/// Wall-clock time of last successful compaction *trigger* (not completion).
+	/// Used with `MIN_COMPACTION_INTERVAL_SECS` to avoid compact storms during sync.
+	last_compact_trigger: RwLock<Option<Instant>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -708,6 +727,7 @@ where
 			config,
 			hooks,
 			header_segment_requests: RwLock::new(HashMap::new()),
+			last_compact_trigger: RwLock::new(None),
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -966,14 +986,30 @@ where
 	}
 
 	fn check_compact(&self) {
+		// Wall-clock throttle first (cheap). During fast sync blocks arrive much
+		// faster than mainnet's 1/min, so the height-based dice alone is too aggressive.
+		let min_interval = std::time::Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
+		{
+			let last = self.last_compact_trigger.read();
+			if !compaction_wall_clock_ok(*last, Instant::now(), min_interval) {
+				return;
+			}
+		}
+
 		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
 		// uses a different thread to avoid blocking the caller thread (likely a peer)
 		let mut rng = thread_rng();
 		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
+			// Record trigger time before spawn so concurrent process_block calls
+			// cannot start multiple compactors in the same window.
+			*self.last_compact_trigger.write() = Some(Instant::now());
+
 			let chain = self.chain();
+			let syncing = self.sync_state.is_syncing();
 			let _ = thread::Builder::new()
 				.name("compactor".to_string())
 				.spawn(move || {
+					debug!("check_compact: starting compaction (syncing={})", syncing);
 					if let Err(e) = chain.compact() {
 						error!("Could not compact chain: {:?}", e);
 					}
@@ -1299,5 +1335,54 @@ impl pool::BlockChain for PoolToChainAdapter {
 		self.chain()
 			.verify_tx_lock_height(tx)
 			.map_err(|_| pool::PoolError::ImmatureTransaction)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::time::Duration;
+
+	#[test]
+	fn compaction_wall_clock_allows_first_run() {
+		let now = Instant::now();
+		assert!(compaction_wall_clock_ok(
+			None,
+			now,
+			Duration::from_secs(3600)
+		));
+	}
+
+	#[test]
+	fn compaction_wall_clock_blocks_inside_interval() {
+		let start = Instant::now();
+		// Simulate "last" slightly in the past by sleeping a tiny amount is flaky;
+		// use checked path: last == now means zero elapsed < 1h.
+		assert!(!compaction_wall_clock_ok(
+			Some(start),
+			start,
+			Duration::from_secs(3600)
+		));
+	}
+
+	#[test]
+	fn compaction_wall_clock_allows_after_interval() {
+		let start = Instant::now();
+		// Instant cannot be advanced artificially; use a zero min interval.
+		assert!(compaction_wall_clock_ok(
+			Some(start),
+			start + Duration::from_secs(1),
+			Duration::from_secs(0)
+		));
+		assert!(compaction_wall_clock_ok(
+			Some(start),
+			start + Duration::from_secs(3600),
+			Duration::from_secs(3600)
+		));
+	}
+
+	#[test]
+	fn min_compaction_interval_is_one_hour() {
+		assert_eq!(global::MIN_COMPACTION_INTERVAL_SECS, 60 * 60);
 	}
 }
