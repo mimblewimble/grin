@@ -595,6 +595,10 @@ impl<'a> Reader for StreamingReader<'a> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		// Match BinReader / BufReader: refuse huge single reads that would OOM or panic.
+		if len > 100_000 {
+			return Err(Error::TooLargeReadErr);
+		}
 		let mut buf = vec![0u8; len];
 		self.stream.read_exact(&mut buf)?;
 		self.total_bytes_read += len as u64;
