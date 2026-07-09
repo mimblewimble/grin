@@ -37,7 +37,7 @@ use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip, StopState};
 use crate::SyncState;
 use croaring::Bitmap;
-use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
+use grin_store::pmmr::PMMRBackend;
 use std::cmp::Ordering;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -2056,6 +2056,61 @@ impl<'a> Extension<'a> {
 	}
 }
 
+/// Remove other `txhashset_snapshot_*.zip` files in `data_dir`, keeping only
+/// the snapshot for the header currently being served (`keep`).
+///
+/// Snapshot zips are multi-GB; retaining more than one wastes disk and can
+/// exhaust low-end nodes (see #3647). Cleanup runs on every `zip_read`,
+/// including when reusing an existing zip, so stale files do not linger when
+/// no new archive is created.
+pub fn cleanup_old_txhashset_zips(data_dir: &Path, keep: &Path) -> u32 {
+	let prefix = format!("{}_", TXHASHSET_ZIP);
+	let keep_name = keep.file_name();
+
+	let entries = match fs::read_dir(data_dir) {
+		Ok(entries) => entries,
+		Err(e) => {
+			debug!(
+				"cleanup_old_txhashset_zips: cannot read {:?}: {}",
+				data_dir, e
+			);
+			return 0;
+		}
+	};
+
+	let mut removed = 0u32;
+	for entry in entries.flatten() {
+		let path = entry.path();
+		if !path.is_file() {
+			continue;
+		}
+		if keep_name.is_some() && path.file_name() == keep_name {
+			continue;
+		}
+		let name = match entry.file_name().into_string() {
+			Ok(n) => n,
+			Err(_) => continue,
+		};
+		// Match `txhashset_snapshot_<hash>.zip` only.
+		if !name.starts_with(&prefix) || !name.ends_with(".zip") {
+			continue;
+		}
+		match fs::remove_file(&path) {
+			Ok(()) => {
+				debug!("cleanup_old_txhashset_zips: removed {:?}", path);
+				removed += 1;
+			}
+			Err(e) => {
+				warn!(
+					"cleanup_old_txhashset_zips: failed to remove {:?}: {}",
+					path, e
+				);
+			}
+		}
+	}
+	removed
+}
+
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
 pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
@@ -2064,9 +2119,18 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(txhashset_zip);
 
+	// Always free disk: keep at most the zip for this header.
+	let n = cleanup_old_txhashset_zips(Path::new(&root_dir), &zip_path);
+	if n > 0 {
+		debug!(
+			"zip_read: cleaned up {} old txhashset zip file(s) in {:?}",
+			n,
+			Path::new(&root_dir)
+		);
+	}
+
 	// if file exist, just re-use it
-	let zip_file = File::open(zip_path.clone());
-	if let Ok(zip) = zip_file {
+	if let Ok(zip) = File::open(zip_path.clone()) {
 		debug!(
 			"zip_read: {} at {}: reusing existing zip file: {:?}",
 			header.hash(),
@@ -2074,18 +2138,6 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 			zip_path
 		);
 		return Ok(zip);
-	} else {
-		// clean up old zips.
-		// Theoretically, we only need clean-up those zip files older than STATE_SYNC_THRESHOLD.
-		// But practically, these zip files are not small ones, we just keep the zips in last 24 hours
-		let data_dir = Path::new(&root_dir);
-		let pattern = format!("{}_", TXHASHSET_ZIP);
-		if let Ok(n) = clean_files_by_prefix(data_dir, &pattern, 24 * 60 * 60) {
-			debug!(
-				"{} zip files have been clean up in folder: {:?}",
-				n, data_dir
-			);
-		}
 	}
 
 	// otherwise, create the zip archive

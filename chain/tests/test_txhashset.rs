@@ -115,3 +115,37 @@ fn test_unexpected_zip() {
 	// Cleanup chain directory
 	clean_output_dir(&db_root);
 }
+
+#[test]
+fn test_cleanup_old_txhashset_zips() {
+	let db_root = Path::new(".grin_txhashset_zip_cleanup");
+	let _ = fs::remove_dir_all(db_root);
+	fs::create_dir_all(db_root).unwrap();
+
+	let keep = db_root.join("txhashset_snapshot_keepme.zip");
+	let old_a = db_root.join("txhashset_snapshot_aaaa.zip");
+	let old_b = db_root.join("txhashset_snapshot_bbbb.zip");
+	let unrelated = db_root.join("other_file.bin");
+	let not_zip = db_root.join("txhashset_snapshot_cccc.txt");
+
+	File::create(&keep).unwrap();
+	File::create(&old_a).unwrap();
+	File::create(&old_b).unwrap();
+	File::create(&unrelated).unwrap();
+	File::create(&not_zip).unwrap();
+
+	let removed = txhashset::cleanup_old_txhashset_zips(db_root, &keep);
+	assert_eq!(removed, 2);
+	assert!(keep.exists());
+	assert!(!old_a.exists());
+	assert!(!old_b.exists());
+	assert!(unrelated.exists());
+	assert!(not_zip.exists());
+
+	// Second pass: only the keep file remains matching the pattern.
+	let removed_again = txhashset::cleanup_old_txhashset_zips(db_root, &keep);
+	assert_eq!(removed_again, 0);
+	assert!(keep.exists());
+
+	let _ = fs::remove_dir_all(db_root);
+}
