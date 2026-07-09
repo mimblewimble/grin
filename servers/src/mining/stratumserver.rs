@@ -84,7 +84,7 @@ struct RpcError {
 impl RpcError {
 	pub fn internal_error() -> Self {
 		RpcError {
-			code: 32603,
+			code: -32603,
 			message: "Internal error".to_owned(),
 		}
 	}
@@ -931,6 +931,11 @@ mod tests {
 		let _ = fs::remove_dir_all(dir_name);
 	}
 
+	/// Path under `target/tmp/` so interrupted tests do not leave dirs in the repo root.
+	fn test_chain_dir(name: &str) -> String {
+		format!("target/tmp/{}", name)
+	}
+
 	fn dummy_tx() -> Tx {
 		let (tx, _rx) = mpsc::unbounded();
 		tx
@@ -1126,7 +1131,7 @@ mod tests {
 	#[test]
 	fn test_rpc_error_constructors() {
 		let cases = vec![
-			(RpcError::internal_error(), 32603, "Internal error"),
+			(RpcError::internal_error(), -32603, "Internal error"),
 			(
 				RpcError::node_is_syncing(),
 				-32000,
@@ -1346,8 +1351,8 @@ mod tests {
 
 	#[test]
 	fn test_handle_keepalive() {
-		let dir = ".grin_stratum_test_keepalive";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_keepalive");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1357,13 +1362,13 @@ mod tests {
 		assert_eq!(resp.result, Some(Value::String("ok".to_string())));
 		assert_eq!(resp.method, "keepalive");
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_method_not_found() {
-		let dir = ".grin_stratum_test_method_not_found";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_method_not_found");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1374,13 +1379,13 @@ mod tests {
 		assert_eq!(err["code"], -32601);
 		assert_eq!(err["message"], "Method not found");
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_login_ok() {
-		let dir = ".grin_stratum_test_login_ok";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_login_ok");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let params = serde_json::json!({
@@ -1399,29 +1404,28 @@ mod tests {
 		assert_eq!(worker.agent, "test-agent");
 		assert!(worker.authenticated);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_login_invalid_params() {
-		let dir = ".grin_stratum_test_login_bad";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_login_bad");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
-		let resp = parse_rpc_response(
-			&handler.handle_rpc_requests(rpc_request("login", None), worker_id),
-		);
+		let resp =
+			parse_rpc_response(&handler.handle_rpc_requests(rpc_request("login", None), worker_id));
 		assert!(resp.result.is_none());
 		let err = resp.error.unwrap();
 		assert_eq!(err["code"], -32600);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_getjobtemplate_while_syncing() {
-		let dir = ".grin_stratum_test_job_syncing";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_job_syncing");
+		let handler = setup_handler(&dir, 1);
 		// Force syncing state
 		handler.sync_state.update(SyncStatus::HeaderSync {
 			sync_head: handler.chain.head().unwrap(),
@@ -1438,13 +1442,13 @@ mod tests {
 		assert_eq!(err["code"], -32000);
 		assert_eq!(err["message"], "Node is syncing - Please wait");
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_getjobtemplate_ok() {
-		let dir = ".grin_stratum_test_job_ok";
-		let handler = setup_handler(dir, 7);
+		let dir = test_chain_dir("grin_stratum_test_job_ok");
+		let handler = setup_handler(&dir, 7);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1457,13 +1461,13 @@ mod tests {
 		assert_eq!(result["difficulty"], 7);
 		assert!(result["pre_pow"].as_str().unwrap().len() > 0);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_status() {
-		let dir = ".grin_stratum_test_status";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_status");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 		handler.workers.update_stats(worker_id, |ws| {
 			ws.num_accepted = 10;
@@ -1484,13 +1488,13 @@ mod tests {
 		assert_eq!(result["rejected"], 2);
 		assert_eq!(result["stale"], 1);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_submit_too_late() {
-		let dir = ".grin_stratum_test_submit_late";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_submit_late");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		// Wrong height vs current block version (height 0) => stale share
@@ -1511,13 +1515,13 @@ mod tests {
 		let ws = handler.workers.get_stats(worker_id).unwrap();
 		assert_eq!(ws.num_stale, 1);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_handle_submit_invalid_job_id() {
-		let dir = ".grin_stratum_test_submit_bad_job";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_submit_bad_job");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		// job_id out of range of current_block_versions
@@ -1535,13 +1539,13 @@ mod tests {
 		assert_eq!(resp.error.unwrap()["code"], -32503);
 		assert_eq!(handler.workers.get_stats(worker_id).unwrap().num_stale, 1);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_build_block_template() {
-		let dir = ".grin_stratum_test_template";
-		let handler = setup_handler(dir, 11);
+		let dir = test_chain_dir("grin_stratum_test_template");
+		let handler = setup_handler(&dir, 11);
 		let template = handler.build_block_template();
 		assert_eq!(template.height, 0);
 		assert_eq!(template.job_id, 0);
@@ -1550,13 +1554,13 @@ mod tests {
 		// pre_pow is hex-encoded header bytes
 		assert!(template.pre_pow.chars().all(|c| c.is_ascii_hexdigit()));
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 
 	#[test]
 	fn test_last_seen_updates() {
-		let dir = ".grin_stratum_test_last_seen";
-		let handler = setup_handler(dir, 1);
+		let dir = test_chain_dir("grin_stratum_test_last_seen");
+		let handler = setup_handler(&dir, 1);
 		let worker_id = handler.workers.add_worker(dummy_tx());
 		let before = handler.workers.get_stats(worker_id).unwrap().last_seen;
 
@@ -1566,6 +1570,6 @@ mod tests {
 		let after = handler.workers.get_stats(worker_id).unwrap().last_seen;
 		assert!(after >= before);
 
-		clean_output_dir(dir);
+		clean_output_dir(&dir);
 	}
 }
