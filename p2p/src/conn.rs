@@ -32,11 +32,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub const SEND_CHANNEL_CAP: usize = 100;
 
 const CHANNEL_TIMEOUT: Duration = Duration::from_millis(1000);
+
+/// How long to wait when sending a *response* to a peer request.
+/// Request/response traffic (e.g. full tx after GetTransaction) must not be
+/// silently dropped when the outbound queue is briefly full — that is a likely
+/// cause of large txs never completing broadcast (#3392).
+const RESPONSE_SEND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
@@ -120,15 +126,55 @@ impl ConnHandle {
 	/// and we do not want to close the connection. We drop the msg rather than blocking here.
 	/// If the buffer is full because there is an underlying issue with the peer
 	/// and potentially the peer connection. We assume this will be handled at the peer level.
+	///
+	/// Prefer [`send_response`] for messages that answer a peer request.
 	pub fn send(&self, msg: Msg) -> Result<(), Error> {
+		let msg_type = msg.msg_type();
+		let body_len = msg.body_len();
 		match self.send_channel.try_send(msg) {
 			Ok(()) => Ok(()),
 			Err(mpsc::TrySendError::Disconnected(_)) => {
 				Err(Error::Send("try_send disconnected".to_owned()))
 			}
 			Err(mpsc::TrySendError::Full(_)) => {
-				debug!("conn_handle: try_send but buffer is full, dropping msg");
+				// Unsolicited traffic (broadcasts, stems, etc.) can drop under load.
+				debug!(
+					"conn_handle: try_send buffer full, dropping {:?} ({} bytes)",
+					msg_type, body_len
+				);
 				Ok(())
+			}
+		}
+	}
+
+	/// Send a response to a peer request, waiting briefly if the outbound buffer is full.
+	///
+	/// Unlike [`send`], this does not drop immediately on a full channel. Dropping a
+	/// `GetTransaction` / `GetBlock` response leaves the peer without data and can
+	/// stall propagation of large transactions.
+	pub fn send_response(&self, msg: Msg) -> Result<(), Error> {
+		let msg_type = msg.msg_type();
+		let body_len = msg.body_len();
+		let deadline = Instant::now() + RESPONSE_SEND_TIMEOUT;
+		let mut pending = msg;
+		loop {
+			match self.send_channel.try_send(pending) {
+				Ok(()) => return Ok(()),
+				Err(mpsc::TrySendError::Disconnected(_)) => {
+					return Err(Error::Send("send_response disconnected".to_owned()));
+				}
+				Err(mpsc::TrySendError::Full(msg)) => {
+					if Instant::now() >= deadline {
+						warn!(
+							"conn_handle: send_response timed out after {:?}, dropping {:?} ({} bytes)",
+							RESPONSE_SEND_TIMEOUT, msg_type, body_len
+						);
+						return Ok(());
+					}
+					pending = msg;
+					// Yield so the writer thread can drain the channel.
+					thread::sleep(Duration::from_millis(10));
+				}
 			}
 		}
 	}
@@ -302,8 +348,9 @@ where
 
 				let consumed = try_break!(handler.consume(message)).unwrap_or(Consumed::None);
 				match consumed {
+					// Wait for buffer space rather than dropping request responses.
 					Consumed::Response(resp_msg) => {
-						try_break!(conn_handle.send(resp_msg));
+						try_break!(conn_handle.send_response(resp_msg));
 					}
 					Consumed::Attachment(meta, file) => {
 						// Start attachment
@@ -358,4 +405,65 @@ where
 			let _ = writer.shutdown(Shutdown::Both);
 		})?;
 	Ok((reader_thread, writer_thread))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::core::global;
+	use crate::core::pow::Difficulty;
+	use crate::core::ser::ProtocolVersion;
+	use crate::msg::{Msg, Ping, Type};
+
+	fn dummy_msg() -> Msg {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		Msg::new(
+			Type::Ping,
+			Ping {
+				total_difficulty: Difficulty::min_dma(),
+				height: 0,
+			},
+			ProtocolVersion::local(),
+		)
+		.unwrap()
+	}
+
+	#[test]
+	fn try_send_drops_when_channel_full() {
+		let (tx, _rx) = mpsc::sync_channel(1);
+		let handle = ConnHandle { send_channel: tx };
+		// Fill the channel (capacity 1).
+		handle.send(dummy_msg()).unwrap();
+		// Second try_send must not error — it drops instead of blocking.
+		handle.send(dummy_msg()).unwrap();
+	}
+
+	#[test]
+	fn send_response_waits_for_space() {
+		let (tx, rx) = mpsc::sync_channel(1);
+		let handle = ConnHandle { send_channel: tx };
+		handle.send_response(dummy_msg()).unwrap();
+
+		// Consumer frees a slot after a short delay; response send should wait.
+		let consumer = thread::spawn(move || {
+			thread::sleep(Duration::from_millis(50));
+			let _ = rx.recv();
+			// Keep rx until after the second send completes.
+			thread::sleep(Duration::from_millis(50));
+			let _ = rx.recv();
+		});
+
+		// Channel is full until consumer runs — send_response should block briefly then succeed.
+		let start = Instant::now();
+		handle.send_response(dummy_msg()).unwrap();
+		assert!(
+			start.elapsed() >= Duration::from_millis(40),
+			"send_response should wait for space rather than drop immediately"
+		);
+		assert!(
+			start.elapsed() < Duration::from_secs(2),
+			"send_response should not hang for the full timeout when space frees"
+		);
+		consumer.join().unwrap();
+	}
 }
