@@ -642,7 +642,7 @@ fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 						if let Err(e) = socket.set_nodelay(true) {
 							debug!("Stratum: set_nodelay failed for {}: {}", peer_addr, e);
 						}
-						handle_connection(socket, peer_addr, handler).await;
+						handle_connection(socket, peer_addr, handler, WORKER_IDLE_TIMEOUT).await;
 					});
 				}
 				Err(e) => {
@@ -659,7 +659,15 @@ fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 }
 
 /// Run a single stratum client connection until it ends, then always free the worker slot.
-async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Arc<Handler>) {
+///
+/// `idle_timeout` is how long a session may sit with no successful read/write before
+/// being closed (production uses [`WORKER_IDLE_TIMEOUT`]; tests may pass a shorter value).
+async fn handle_connection(
+	socket: TcpStream,
+	peer_addr: SocketAddr,
+	handler: Arc<Handler>,
+	idle_timeout: Duration,
+) {
 	let (tx, mut rx) = mpsc::channel(WORKER_QUEUE_SIZE);
 	let worker_id = handler.workers.add_worker(tx);
 	info!("Worker {} connected from {}", worker_id, peer_addr);
@@ -689,7 +697,7 @@ async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Ar
 	let framed = Framed::new(socket, LinesCodec::new_with_max_length(MAX_RPC_LINE_BYTES));
 	let (mut writer, mut reader) = framed.split();
 
-	let mut idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+	let mut idle_deadline = Instant::now() + idle_timeout;
 
 	loop {
 		tokio::select! {
@@ -698,7 +706,7 @@ async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Ar
 			line = reader.try_next() => {
 				match line {
 					Ok(Some(line)) => {
-						idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+						idle_deadline = Instant::now() + idle_timeout;
 						let request = match serde_json::from_str(&line) {
 							Ok(r) => r,
 							Err(e) => {
@@ -733,7 +741,7 @@ async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Ar
 			msg = rx.recv() => {
 				match msg {
 					Some(line) => {
-						idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+						idle_deadline = Instant::now() + idle_timeout;
 						// Bound write time so a stalled peer cannot pin the task forever.
 						match timeout(Duration::from_secs(30), writer.send(line)).await {
 							Ok(Ok(())) => {}
@@ -762,9 +770,9 @@ async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Ar
 
 			_ = tokio::time::sleep_until(idle_deadline) => {
 				warn!(
-					"Worker {}: idle timeout ({}s) from {}, closing",
+					"Worker {}: idle timeout ({:?}) from {}, closing",
 					worker_id,
-					WORKER_IDLE_TIMEOUT.as_secs(),
+					idle_timeout,
 					peer_addr
 				);
 				break;
@@ -1102,6 +1110,10 @@ mod tests {
 
 	/// Start the real accept loop on an ephemeral port; return the bound address.
 	fn start_test_stratum(handler: Arc<Handler>) -> SocketAddr {
+		start_test_stratum_with_idle(handler, WORKER_IDLE_TIMEOUT)
+	}
+
+	fn start_test_stratum_with_idle(handler: Arc<Handler>, idle_timeout: Duration) -> SocketAddr {
 		let (addr_tx, addr_rx) = sync_channel(1);
 		thread::spawn(move || {
 			let rt = Runtime::new().unwrap();
@@ -1119,7 +1131,7 @@ mod tests {
 							let handler = handler.clone();
 							tokio::spawn(async move {
 								let _ = socket.set_nodelay(true);
-								handle_connection(socket, peer_addr, handler).await;
+								handle_connection(socket, peer_addr, handler, idle_timeout).await;
 							});
 						}
 						Err(_) => {
@@ -1155,6 +1167,54 @@ mod tests {
 		}
 		let n = handler.workers.count();
 		panic!("{}: last worker count was {}", label, n);
+	}
+
+	/// Idle sessions are closed after the idle timeout (production: 5 minutes).
+	/// Uses a short timeout so the test does not wait wall-clock 5 minutes.
+	#[test]
+	fn test_live_idle_miner_disconnected() {
+		let dir = ".grin_stratum_live_idle";
+		let handler = setup_handler(dir);
+		// Short idle timeout for the test; same code path as WORKER_IDLE_TIMEOUT.
+		let idle = Duration::from_millis(800);
+		let addr = start_test_stratum_with_idle(handler.clone(), idle);
+
+		// Connect and complete login (counts as activity), then go silent.
+		let mut stream =
+			StdTcpStream::connect_timeout(&addr, Duration::from_secs(2)).expect("connect");
+		stratum_login(&mut stream);
+		// Keep the socket open but send nothing further (idle miner).
+		let _ = stream.set_read_timeout(Some(Duration::from_millis(200)));
+
+		wait_workers(&handler, |n| n >= 1, "worker should register after login");
+
+		// Before idle timeout, worker must still be present.
+		thread::sleep(idle / 2);
+		assert!(
+			handler.workers.count() >= 1,
+			"worker should still be connected before idle timeout"
+		);
+
+		// After idle timeout (+ slack for task scheduling), worker must be gone.
+		wait_workers(
+			&handler,
+			|n| n == 0,
+			"worker should be removed after idle timeout",
+		);
+
+		// Peer should observe the server closed the connection (read EOF / error).
+		let mut buf = [0u8; 64];
+		let read_res = stream.read(&mut buf);
+		assert!(
+			matches!(read_res, Ok(0) | Err(_)),
+			"expected EOF or error after idle disconnect, got {:?}",
+			read_res
+		);
+
+		// Production constant is 5 minutes (document the contract this test stands in for).
+		assert_eq!(WORKER_IDLE_TIMEOUT, Duration::from_secs(5 * 60));
+
+		let _ = std::fs::remove_dir_all(Path::new(dir));
 	}
 
 	/// Live stratum listener: reconnect storm must not leave workers or FDs behind.
