@@ -48,7 +48,7 @@ pub use crate::auth::{
 pub use crate::foreign::Foreign;
 pub use crate::foreign_rpc::ForeignRpc;
 pub use crate::handlers::node_apis;
-pub use crate::owner::Owner;
+pub use crate::owner::{MiningStatsProvider, Owner};
 pub use crate::owner_rpc::OwnerRpc;
 pub use crate::rest::*;
 pub use crate::router::*;

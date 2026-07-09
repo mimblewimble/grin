@@ -104,6 +104,72 @@ impl Status {
 	}
 }
 
+/// Stratum worker statistics exposed via the Owner mining API.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct WorkerInfo {
+	/// Unique ID for this worker
+	pub id: String,
+	/// Whether the stratum worker is currently connected
+	pub is_connected: bool,
+	/// Unix timestamp (seconds) of most recent communication with this worker
+	pub last_seen: u64,
+	/// Block height the worker started mining at
+	pub initial_block_height: u64,
+	/// PoW difficulty this worker is using
+	pub pow_difficulty: u64,
+	/// Number of valid shares submitted
+	pub num_accepted: u64,
+	/// Number of invalid shares submitted
+	pub num_rejected: u64,
+	/// Number of shares submitted too late
+	pub num_stale: u64,
+	/// Number of valid blocks found by this worker
+	pub num_blocks_found: u64,
+}
+
+/// Mining / stratum status available via the Owner API (and `grin client miningstatus`).
+/// Mirrors the stats shown on the TUI mining tab so headless operators can query them.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct MiningStatus {
+	/// Whether the stratum server is enabled in config
+	pub is_enabled: bool,
+	/// Whether the stratum server is currently running
+	pub is_running: bool,
+	/// Number of currently connected workers
+	pub num_workers: usize,
+	/// Block height currently being mined
+	pub block_height: u64,
+	/// Current network difficulty
+	pub network_difficulty: u64,
+	/// Edge bits (cuckoo size) for the current network target
+	pub edge_bits: u16,
+	/// Total blocks found by all workers
+	pub blocks_found: u16,
+	/// Estimated network hashrate for the current edge_bits
+	pub network_hashrate: f64,
+	/// Minimum share difficulty requested from miners
+	pub minimum_share_difficulty: u64,
+	/// Per-worker status
+	pub worker_stats: Vec<WorkerInfo>,
+}
+
+impl Default for MiningStatus {
+	fn default() -> MiningStatus {
+		MiningStatus {
+			is_enabled: false,
+			is_running: false,
+			num_workers: 0,
+			block_height: 0,
+			network_difficulty: 0,
+			edge_bits: 32,
+			blocks_found: 0,
+			network_hashrate: 0.0,
+			minimum_share_difficulty: 1,
+			worker_stats: Vec::new(),
+		}
+	}
+}
+
 /// TxHashSet
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxHashSet {
@@ -780,5 +846,46 @@ mod test {
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
+	}
+
+	#[test]
+	fn mining_status_default_is_disabled() {
+		let status = MiningStatus::default();
+		assert!(!status.is_enabled);
+		assert!(!status.is_running);
+		assert_eq!(status.num_workers, 0);
+		assert!(status.worker_stats.is_empty());
+	}
+
+	#[test]
+	fn serialize_mining_status_roundtrip() {
+		let status = MiningStatus {
+			is_enabled: true,
+			is_running: true,
+			num_workers: 1,
+			block_height: 1000,
+			network_difficulty: 42,
+			edge_bits: 29,
+			blocks_found: 3,
+			network_hashrate: 1.5,
+			minimum_share_difficulty: 1,
+			worker_stats: vec![WorkerInfo {
+				id: "0".into(),
+				is_connected: true,
+				last_seen: 1609459200,
+				initial_block_height: 990,
+				pow_difficulty: 1,
+				num_accepted: 10,
+				num_rejected: 0,
+				num_stale: 0,
+				num_blocks_found: 1,
+			}],
+		};
+		let json = serde_json::to_string(&status).unwrap();
+		let back: MiningStatus = serde_json::from_str(&json).unwrap();
+		assert_eq!(back, status);
+		assert!(json.contains("\"is_enabled\":true"));
+		assert!(json.contains("\"num_workers\":1"));
+		assert!(json.contains("\"num_accepted\":10"));
 	}
 }

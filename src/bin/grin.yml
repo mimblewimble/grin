@@ -56,6 +56,8 @@ subcommands:
       subcommands:
         - status:
             about: Current status of the Grin chain
+        - miningstatus:
+            about: Current stratum mining status and connected workers
         - listconnectedpeers:
             about: Print a list of currently connected peers
         - ban:
