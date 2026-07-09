@@ -15,7 +15,7 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use crate::util::RwLock;
+use crate::util::{RwLock, StopState};
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
@@ -76,6 +76,8 @@ where
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
+	/// Shared shutdown flag so compaction can abort cleanly (#3842).
+	stop_state: Arc<StopState>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -698,6 +700,7 @@ where
 		tx_pool: Arc<RwLock<pool::TransactionPool<B, P>>>,
 		config: ServerConfig,
 		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
+		stop_state: Arc<StopState>,
 	) -> Self {
 		let (tx, rx) = mpsc::sync_channel(WORKER_CHANNEL_BUFFER_SIZE);
 		let adapter = NetToChainAdapter {
@@ -708,6 +711,7 @@ where
 			config,
 			hooks,
 			header_segment_requests: RwLock::new(HashMap::new()),
+			stop_state,
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -966,15 +970,25 @@ where
 	}
 
 	fn check_compact(&self) {
+		// Do not start long-running compaction while the node is shutting down.
+		if self.stop_state.is_stopped() {
+			return;
+		}
+
 		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
 		// uses a different thread to avoid blocking the caller thread (likely a peer)
 		let mut rng = thread_rng();
 		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
 			let chain = self.chain();
+			let stop_state = self.stop_state.clone();
 			let _ = thread::Builder::new()
 				.name("compactor".to_string())
 				.spawn(move || {
-					if let Err(e) = chain.compact() {
+					if stop_state.is_stopped() {
+						debug!("compactor: not starting, node is stopping");
+						return;
+					}
+					if let Err(e) = chain.compact_with_stop(Some(stop_state)) {
 						error!("Could not compact chain: {:?}", e);
 					}
 				});

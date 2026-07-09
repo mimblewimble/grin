@@ -18,6 +18,7 @@ use crate::grin_core::ser::{
 	self, BinWriter, DeserializationMode, ProtocolVersion, Readable, Reader, StreamingReader,
 	Writeable, Writer,
 };
+use log::warn;
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
@@ -158,6 +159,11 @@ where
 		// Need to convert from 1-index to 0-index (don't ask).
 		let prune_idx: Vec<_> = prune_pos.iter().map(|x| x - 1).collect();
 		self.file.write_tmp_pruned(prune_idx.as_slice())
+	}
+
+	/// Discard any temporary pruned file without applying it.
+	pub fn discard_tmp(&self) {
+		self.file.discard_tmp()
 	}
 
 	/// Replace with file at tmp path.
@@ -519,6 +525,16 @@ where
 		}
 		buf_writer.flush()?;
 		Ok(())
+	}
+
+	/// Drop any `.tmp` companion file without replacing the live file.
+	pub fn discard_tmp(&self) {
+		let tmp = self.tmp_path();
+		if tmp.exists() {
+			if let Err(e) = fs::remove_file(&tmp) {
+				warn!("discard_tmp: failed to remove {:?}: {}", tmp, e);
+			}
+		}
 	}
 
 	/// Replace the underlying file with the file at tmp path.

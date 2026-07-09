@@ -414,7 +414,27 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
 	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
+		self.check_compact_until(cutoff_pos, rewind_rm_pos, || false)
+	}
+
+	/// Compact backend files, optionally aborting before live files are replaced
+	/// when `should_abort` returns true (e.g. node shutdown). Aborted compaction
+	/// discards `.tmp` files and leaves the live PMMR files untouched (#3842).
+	pub fn check_compact_until<F>(
+		&mut self,
+		cutoff_pos: u64,
+		rewind_rm_pos: &Bitmap,
+		should_abort: F,
+	) -> io::Result<bool>
+	where
+		F: Fn() -> bool,
+	{
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
+
+		if should_abort() {
+			debug!("compact: aborted before writing tmp files");
+			return Ok(false);
+		}
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
@@ -445,6 +465,15 @@ impl<T: PMMRable> PMMRBackend<T> {
 			});
 
 			self.data_file.write_tmp_pruned(&pos_to_rm)?;
+		}
+
+		// Critical section: do not replace live files if we are shutting down.
+		// Leaving a half-applied replace causes Invalid Root on next start (#3842).
+		if should_abort() {
+			info!("compact: aborted before replace; discarding tmp files");
+			self.hash_file.discard_tmp();
+			self.data_file.discard_tmp();
+			return Ok(false);
 		}
 
 		// Replace hash and data files with compact copies.

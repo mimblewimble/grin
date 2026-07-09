@@ -214,6 +214,36 @@ fn pmmr_compact_leaf_sibling() {
 	teardown(data_dir);
 }
 
+/// Aborting compaction before replace must leave live files intact (#3842).
+#[test]
+fn pmmr_compact_abort_before_replace() {
+	let (data_dir, elems) = setup("compact_abort");
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		let mmr_size = load(0, &elems[..], &mut backend);
+		backend.sync().unwrap();
+		let root_before = {
+			let pmmr = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+
+		// Always abort: should not replace live files.
+		let done = backend
+			.check_compact_until(2, &Bitmap::new(), || true)
+			.unwrap();
+		assert!(!done);
+
+		let root_after = {
+			let pmmr = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+		assert_eq!(root_before, root_after);
+	}
+	teardown(data_dir);
+}
+
 #[test]
 fn pmmr_prune_compact() {
 	let (data_dir, elems) = setup("prune_compact");

@@ -223,6 +223,7 @@ impl Server {
 			tx_pool.clone(),
 			config.clone(),
 			init_net_hooks(&config)?,
+			stop_state.clone(),
 		));
 
 		// Initialize our capabilities.

@@ -1329,6 +1329,23 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
+		self.compact_with_stop(None)
+	}
+
+	/// Compact the chain, optionally aborting if `stop_state` is stopped.
+	/// Used on shutdown so long compaction does not keep rewriting files after
+	/// the node was asked to stop (#3842).
+	pub fn compact_with_stop(
+		&self,
+		stop_state: Option<Arc<crate::util::StopState>>,
+	) -> Result<(), Error> {
+		let should_abort = || stop_state.as_ref().map(|s| s.is_stopped()).unwrap_or(false);
+
+		if should_abort() {
+			info!("compact: not starting, node is stopping");
+			return Ok(());
+		}
+
 		// A node may be restarted multiple times in a short period of time.
 		// We compact at most once per 60 blocks in this situation by comparing
 		// current "head" and "tail" height to our cut-through horizon and
@@ -1364,7 +1381,13 @@ impl Chain {
 			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
-			txhashset.compact(&horizon_header, &batch)?;
+			txhashset.compact_until(&horizon_header, &batch, should_abort)?;
+		}
+
+		if should_abort() {
+			info!("compact: aborted after txhashset compact (node stopping)");
+			// Do not commit further DB changes if we aborted mid-flight.
+			return Ok(());
 		}
 
 		// If we are not in archival mode remove historical blocks from the db.
