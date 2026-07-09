@@ -14,11 +14,11 @@
 
 //! Mining Stratum Server
 
-use futures::channel::mpsc;
-use futures::pin_mut;
 use futures::{SinkExt, StreamExt, TryStreamExt};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
+use tokio::time::{timeout, Instant};
 use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::util::RwLock;
@@ -43,7 +43,24 @@ use crate::mining::mine_block;
 use crate::util::ToHex;
 use crate::ServerTxPool;
 
-type Tx = mpsc::UnboundedSender<String>;
+/// Tokio bounded sender: `try_send` is `&self` and enforces capacity without
+/// clone-to-bypass issues that futures::mpsc has when cloning senders.
+type Tx = mpsc::Sender<String>;
+
+/// Max concurrent stratum worker connections. Beyond this, new accepts are
+/// closed immediately so we do not exhaust file descriptors.
+const MAX_STRATUM_WORKERS: usize = 256;
+
+/// Bound outbound per-worker queue. If a worker cannot keep up, the connection
+/// is dropped rather than buffering forever.
+const WORKER_QUEUE_SIZE: usize = 64;
+
+/// Drop connections with no successful read/write for this long. Prevents
+/// half-open / abandoned TCP sessions from accumulating (see #3867).
+const WORKER_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+/// Cap a single RPC line to avoid unbounded memory from a bad client.
+const MAX_RPC_LINE_BYTES: usize = 64 * 1024;
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -605,70 +622,156 @@ fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
 		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		let server = async_stream::stream! {
-			loop {
-				match listener.accept().await {
-					Ok((socket, _)) => yield socket,
-					Err(e) => {
-						error!("accept error = {:?}", e);
+
+		loop {
+			match listener.accept().await {
+				Ok((socket, peer_addr)) => {
+					// Hard cap concurrent workers to avoid FD exhaustion.
+					if handler.workers.count() >= MAX_STRATUM_WORKERS {
+						warn!(
+							"Stratum: rejecting connection from {} (at max {} workers)",
+							peer_addr, MAX_STRATUM_WORKERS
+						);
+						// Drop socket immediately (close FD).
+						drop(socket);
 						continue;
 					}
+
+					let handler = handler.clone();
+					tokio::spawn(async move {
+						if let Err(e) = socket.set_nodelay(true) {
+							debug!("Stratum: set_nodelay failed for {}: {}", peer_addr, e);
+						}
+						handle_connection(socket, peer_addr, handler).await;
+					});
+				}
+				Err(e) => {
+					error!("Stratum accept error = {:?}", e);
+					// Avoid busy-looping on EMFILE / transient accept failures.
+					tokio::time::sleep(Duration::from_millis(100)).await;
 				}
 			}
 		}
-		.for_each(move |socket| {
-			let handler = handler.clone();
-			async move {
-				// Spawn a task to process the connection
-				let (tx, mut rx) = mpsc::unbounded();
-
-				let worker_id = handler.workers.add_worker(tx);
-				info!("Worker {} connected", worker_id);
-
-				let framed = Framed::new(socket, LinesCodec::new());
-				let (mut writer, mut reader) = framed.split();
-
-				let h = handler.clone();
-				let read = async move {
-					while let Some(line) = reader
-						.try_next()
-						.await
-						.map_err(|e| error!("error reading line: {}", e))?
-					{
-						let request = serde_json::from_str(&line)
-							.map_err(|e| error!("error serializing line: {}", e))?;
-						let resp = h.handle_rpc_requests(request, worker_id);
-						h.workers.send_to(worker_id, resp);
-					}
-
-					Result::<_, ()>::Ok(())
-				};
-
-				let write = async move {
-					while let Some(line) = rx.next().await {
-						writer
-							.send(line)
-							.await
-							.map_err(|e| error!("error writing line: {}", e))?;
-					}
-
-					Result::<_, ()>::Ok(())
-				};
-
-				let task = async move {
-					pin_mut!(read, write);
-					futures::future::select(read, write).await;
-					handler.workers.remove_worker(worker_id);
-					info!("Worker {} disconnected", worker_id);
-				};
-				tokio::spawn(task);
-			}
-		});
-		server.await
 	};
 
 	let rt = Runtime::new().unwrap();
 	rt.block_on(task);
+}
+
+/// Run a single stratum client connection until it ends, then always free the worker slot.
+async fn handle_connection(socket: TcpStream, peer_addr: SocketAddr, handler: Arc<Handler>) {
+	let (tx, mut rx) = mpsc::channel(WORKER_QUEUE_SIZE);
+	let worker_id = handler.workers.add_worker(tx);
+	info!("Worker {} connected from {}", worker_id, peer_addr);
+
+	// Ensure the worker is always removed, even if the session future panics
+	// or returns early (connection leak fix).
+	struct WorkerGuard {
+		handler: Arc<Handler>,
+		worker_id: usize,
+		peer_addr: SocketAddr,
+	}
+	impl Drop for WorkerGuard {
+		fn drop(&mut self) {
+			self.handler.workers.remove_worker(self.worker_id);
+			info!(
+				"Worker {} disconnected ({})",
+				self.worker_id, self.peer_addr
+			);
+		}
+	}
+	let _guard = WorkerGuard {
+		handler: handler.clone(),
+		worker_id,
+		peer_addr,
+	};
+
+	let framed = Framed::new(socket, LinesCodec::new_with_max_length(MAX_RPC_LINE_BYTES));
+	let (mut writer, mut reader) = framed.split();
+
+	let mut idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+
+	loop {
+		tokio::select! {
+			biased;
+
+			line = reader.try_next() => {
+				match line {
+					Ok(Some(line)) => {
+						idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+						let request = match serde_json::from_str(&line) {
+							Ok(r) => r,
+							Err(e) => {
+								error!(
+									"Worker {}: invalid JSON from {}: {}",
+									worker_id, peer_addr, e
+								);
+								break;
+							}
+						};
+						let resp = handler.handle_rpc_requests(request, worker_id);
+						if !handler.workers.try_send_to(worker_id, resp) {
+							// Queue full or worker gone — drop the connection.
+							warn!(
+								"Worker {}: outbound queue full or closed, dropping {}",
+								worker_id, peer_addr
+							);
+							break;
+						}
+					}
+					Ok(None) => {
+						// Clean peer EOF.
+						break;
+					}
+					Err(e) => {
+						error!("Worker {}: read error from {}: {}", worker_id, peer_addr, e);
+						break;
+					}
+				}
+			}
+
+			msg = rx.recv() => {
+				match msg {
+					Some(line) => {
+						idle_deadline = Instant::now() + WORKER_IDLE_TIMEOUT;
+						// Bound write time so a stalled peer cannot pin the task forever.
+						match timeout(Duration::from_secs(30), writer.send(line)).await {
+							Ok(Ok(())) => {}
+							Ok(Err(e)) => {
+								error!(
+									"Worker {}: write error to {}: {}",
+									worker_id, peer_addr, e
+								);
+								break;
+							}
+							Err(_) => {
+								warn!(
+									"Worker {}: write timeout to {}, dropping",
+									worker_id, peer_addr
+								);
+								break;
+							}
+						}
+					}
+					None => {
+						// All senders dropped.
+						break;
+					}
+				}
+			}
+
+			_ = tokio::time::sleep_until(idle_deadline) => {
+				warn!(
+					"Worker {}: idle timeout ({}s) from {}, closing",
+					worker_id,
+					WORKER_IDLE_TIMEOUT.as_secs(),
+					peer_addr
+				);
+				break;
+			}
+		}
+	}
+	// WorkerGuard drops here → remove_worker + FD released with Framed.
 }
 
 // ----------------------------------------
@@ -711,28 +814,52 @@ impl WorkersList {
 
 	pub fn add_worker(&self, tx: Tx) -> usize {
 		let mut stratum_stats = self.stratum_stats.write();
-		let worker_id = stratum_stats.worker_stats.len();
-		let worker = Worker::new(worker_id, tx);
 		let mut workers_list = self.workers_list.write();
+
+		// Reuse a free worker_stats slot so reconnect storms do not grow
+		// the stats vector without bound.
+		let worker_id = match stratum_stats
+			.worker_stats
+			.iter()
+			.position(|ws| !ws.is_connected)
+		{
+			Some(id) => id,
+			None => {
+				let id = stratum_stats.worker_stats.len();
+				stratum_stats.worker_stats.push(WorkerStats::default());
+				id
+			}
+		};
+
+		let worker = Worker::new(worker_id, tx);
 		workers_list.insert(worker_id, worker);
 
 		let mut worker_stats = WorkerStats::default();
 		worker_stats.is_connected = true;
 		worker_stats.id = worker_id.to_string();
 		worker_stats.pow_difficulty = stratum_stats.minimum_share_difficulty;
-		stratum_stats.worker_stats.push(worker_stats);
+		stratum_stats.worker_stats[worker_id] = worker_stats;
 		stratum_stats.num_workers = workers_list.len();
 		worker_id
 	}
-	pub fn remove_worker(&self, worker_id: usize) {
-		self.update_stats(worker_id, |ws| ws.is_connected = false);
-		let mut stratum_stats = self.stratum_stats.write();
-		let mut workers_list = self.workers_list.write();
-		workers_list
-			.remove(&worker_id)
-			.expect("Stratum: no such addr in map");
 
-		stratum_stats.num_workers = workers_list.len();
+	pub fn remove_worker(&self, worker_id: usize) {
+		let mut workers_list = self.workers_list.write();
+		if workers_list.remove(&worker_id).is_none() {
+			// Already removed (e.g. concurrent cleanup); still refresh counts.
+			let mut stratum_stats = self.stratum_stats.write();
+			stratum_stats.num_workers = workers_list.len();
+			return;
+		}
+		drop(workers_list);
+
+		// Mark slot free for reuse; keep historical counters.
+		self.update_stats(worker_id, |ws| {
+			ws.is_connected = false;
+			ws.last_seen = SystemTime::now();
+		});
+		let mut stratum_stats = self.stratum_stats.write();
+		stratum_stats.num_workers = self.workers_list.read().len();
 	}
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
@@ -777,19 +904,31 @@ impl WorkersList {
 		f(&mut stratum_stats.worker_stats[worker_id]);
 	}
 
-	pub fn send_to(&self, worker_id: usize, msg: String) {
-		let _ = self
-			.workers_list
-			.read()
-			.get(&worker_id)
-			.unwrap()
-			.tx
-			.unbounded_send(msg);
+	/// Queue a message for a single worker. Returns false if the worker is gone
+	/// or its outbound queue is full (caller should drop the connection).
+	pub fn try_send_to(&self, worker_id: usize, msg: String) -> bool {
+		let workers = self.workers_list.read();
+		let worker = match workers.get(&worker_id) {
+			Some(w) => w,
+			None => return false,
+		};
+		worker.tx.try_send(msg).is_ok()
 	}
 
 	pub fn broadcast(&self, msg: String) {
-		for worker in self.workers_list.read().values() {
-			let _ = worker.tx.unbounded_send(msg.clone());
+		// Collect ids of workers whose queue is full so we can drop them.
+		let mut slow = Vec::new();
+		{
+			let workers = self.workers_list.read();
+			for (id, worker) in workers.iter() {
+				if worker.tx.try_send(msg.clone()).is_err() {
+					slow.push(*id);
+				}
+			}
+		}
+		for id in slow {
+			warn!("Stratum: dropping slow/disconnected worker {}", id);
+			self.remove_worker(id);
 		}
 	}
 
@@ -918,6 +1057,65 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn dummy_tx() -> (Tx, mpsc::Receiver<String>) {
+		mpsc::channel(WORKER_QUEUE_SIZE)
+	}
+
+	#[test]
+	fn test_worker_slot_reuse_after_disconnect() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats.clone());
+
+		let (tx0, _rx0) = dummy_tx();
+		let id0 = workers.add_worker(tx0);
+		assert_eq!(id0, 0);
+		assert_eq!(workers.count(), 1);
+		assert_eq!(stats.read().worker_stats.len(), 1);
+
+		workers.remove_worker(id0);
+		assert_eq!(workers.count(), 0);
+		assert!(!stats.read().worker_stats[0].is_connected);
+
+		// Next connection must reuse slot 0 rather than growing the vec.
+		let (tx1, _rx1) = dummy_tx();
+		let id1 = workers.add_worker(tx1);
+		assert_eq!(id1, 0);
+		assert_eq!(stats.read().worker_stats.len(), 1);
+		assert!(stats.read().worker_stats[0].is_connected);
+		assert_eq!(workers.count(), 1);
+	}
+
+	#[test]
+	fn test_try_send_to_missing_full_and_ok() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats);
+
+		assert!(!workers.try_send_to(0, "nope".into()));
+
+		let (tx, mut rx) = mpsc::channel(1);
+		let id = workers.add_worker(tx);
+		assert!(workers.try_send_to(id, "one".into()));
+		// Tokio bounded channel: second send fails while first is pending.
+		assert!(!workers.try_send_to(id, "two".into()));
+		assert_eq!(rx.try_recv().unwrap(), "one");
+		assert!(workers.try_send_to(id, "three".into()));
+
+		workers.remove_worker(id);
+		assert!(!workers.try_send_to(id, "after-remove".into()));
+	}
+
+	#[test]
+	fn test_remove_worker_is_idempotent() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats);
+		let (tx, _rx) = dummy_tx();
+		let id = workers.add_worker(tx);
+		workers.remove_worker(id);
+		// Second remove must not panic.
+		workers.remove_worker(id);
+		assert_eq!(workers.count(), 0);
+	}
 
 	/// Tests deserializing an `RpcRequest` given a String as the id.
 	#[test]
@@ -1059,3 +1257,5 @@ mod tests {
 		assert_eq!(expected_deserialized, actual_deserialized);
 	}
 }
+
+// temp
