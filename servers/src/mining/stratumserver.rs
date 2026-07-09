@@ -1169,8 +1169,8 @@ mod tests {
 		// Reconnecting miner simulation: open, login, drop — many times.
 		const CYCLES: usize = 150;
 		for _ in 0..CYCLES {
-			let mut stream = StdTcpStream::connect_timeout(&addr, Duration::from_secs(2))
-				.expect("connect");
+			let mut stream =
+				StdTcpStream::connect_timeout(&addr, Duration::from_secs(2)).expect("connect");
 			stratum_login(&mut stream);
 			drop(stream);
 		}
@@ -1186,11 +1186,7 @@ mod tests {
 			stratum_login(&mut stream);
 			held.push(stream);
 		}
-		let concurrent = wait_workers(
-			&handler,
-			|n| n > 0 && n <= CONCURRENT,
-			"concurrent workers",
-		);
+		let concurrent = wait_workers(&handler, |n| n > 0 && n <= CONCURRENT, "concurrent workers");
 		assert!(concurrent <= CONCURRENT);
 		drop(held);
 
@@ -1218,43 +1214,68 @@ mod tests {
 	}
 
 	/// When at max workers, further accepts are closed immediately and count stays capped.
+	///
+	/// We pre-fill the worker table (no real sockets) so the test does not depend on
+	/// opening 256 concurrent TCP connections — which is flaky under CI/load.
 	#[test]
 	fn test_live_max_workers_cap() {
 		let dir = ".grin_stratum_live_max";
 		let handler = setup_handler(dir);
 		let addr = start_test_stratum(handler.clone());
 
-		// Hold more connections than the cap.
-		let mut held = Vec::new();
-		for i in 0..(MAX_STRATUM_WORKERS + 16) {
+		// Fill to the hard cap with dummy channels (kept alive so slots stay "connected").
+		let mut keep_alive: Vec<mpsc::Receiver<String>> = Vec::with_capacity(MAX_STRATUM_WORKERS);
+		for _ in 0..MAX_STRATUM_WORKERS {
+			let (tx, rx) = mpsc::channel(1);
+			handler.workers.add_worker(tx);
+			keep_alive.push(rx);
+		}
+		assert_eq!(
+			handler.workers.count(),
+			MAX_STRATUM_WORKERS,
+			"pre-fill should reach exact cap"
+		);
+
+		// Extra TCP connects must not register more workers (accept drops them).
+		let mut rejected = Vec::new();
+		for _ in 0..16 {
 			match StdTcpStream::connect_timeout(&addr, Duration::from_secs(2)) {
-				Ok(mut stream) => {
+				Ok(stream) => {
 					let _ = stream.set_nodelay(true);
-					if i < MAX_STRATUM_WORKERS {
-						stratum_login(&mut stream);
-					}
-					held.push(stream);
+					rejected.push(stream);
 				}
 				Err(_) => break,
 			}
 		}
-		// Give accept loop time to reject surplus.
-		thread::sleep(Duration::from_millis(500));
-		let count = handler.workers.count();
-		assert!(
-			count <= MAX_STRATUM_WORKERS,
-			"worker count exceeded cap: {} > {}",
-			count,
-			MAX_STRATUM_WORKERS
-		);
-		assert!(
-			count >= MAX_STRATUM_WORKERS.saturating_sub(5),
-			"expected near-cap workers, got {}",
-			count
+		thread::sleep(Duration::from_millis(300));
+		assert_eq!(
+			handler.workers.count(),
+			MAX_STRATUM_WORKERS,
+			"accept path must not exceed MAX_STRATUM_WORKERS under surplus connects"
 		);
 
-		drop(held);
+		// Free pre-filled slots; surplus TCP clients (if any still open) should not
+		// leave the table permanently non-empty after we drop everything.
+		drop(keep_alive);
+		// Manually remove dummy workers (Drop on Receiver does not call remove_worker).
+		// Re-read ids from stats / map:
+		let ids: Vec<usize> = handler
+			.workers
+			.workers_list
+			.read()
+			.keys()
+			.copied()
+			.collect();
+		for id in ids {
+			handler.workers.remove_worker(id);
+		}
+		drop(rejected);
+
 		wait_workers(&handler, |n| n == 0, "drain after max-cap release");
+		assert!(
+			handler.workers.count() <= MAX_STRATUM_WORKERS,
+			"cap invariant"
+		);
 
 		let _ = std::fs::remove_dir_all(Path::new(dir));
 	}
