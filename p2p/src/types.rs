@@ -460,6 +460,19 @@ pub struct P2PConfig {
 	pub peer_listener_buffer_count: Option<u32>,
 
 	pub dandelion_peer: Option<PeerAddr>,
+
+	/// Encrypt P2P traffic with TLS (privacy against passive observers).
+	/// Both peers must enable TLS to connect. Default: false (plaintext).
+	#[serde(default)]
+	pub tls_enabled: bool,
+
+	/// Path to PEM certificate file for P2P TLS (server side).
+	/// If unset while `tls_enabled`, a self-signed cert is auto-generated
+	/// under the node data directory (`p2p_tls/`).
+	pub tls_certificate_file: Option<String>,
+
+	/// Path to PEM private key for the P2P TLS certificate.
+	pub tls_certificate_key: Option<String>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -480,6 +493,9 @@ impl Default for P2PConfig {
 			peer_min_preferred_outbound_count: None,
 			peer_listener_buffer_count: None,
 			dandelion_peer: None,
+			tls_enabled: false,
+			tls_certificate_file: None,
+			tls_certificate_key: None,
 		}
 	}
 }

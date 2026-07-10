@@ -28,12 +28,12 @@ use crate::{
 	core::core::block::{BlockHeader, UntrustedBlockHeader},
 	msg::HeadersData,
 };
+use crate::stream::Stream;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use core::ser::Reader;
 use std::cmp::min;
 use std::io::Read;
 use std::mem;
-use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use MsgHeaderWrapper::*;
@@ -65,14 +65,14 @@ impl State {
 
 pub struct Codec {
 	pub version: ProtocolVersion,
-	stream: TcpStream,
+	stream: Stream,
 	buffer: BytesMut,
 	state: State,
 	bytes_read: usize,
 }
 
 impl Codec {
-	pub fn new(version: ProtocolVersion, stream: TcpStream) -> Self {
+	pub fn new(version: ProtocolVersion, stream: Stream) -> Self {
 		Self {
 			version,
 			stream,
@@ -82,8 +82,8 @@ impl Codec {
 		}
 	}
 
-	/// Destroy the codec and return the reader
-	pub fn stream(self) -> TcpStream {
+	/// Destroy the codec and return the underlying stream
+	pub fn stream(self) -> Stream {
 		self.stream
 	}
 
