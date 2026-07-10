@@ -34,6 +34,7 @@ pub mod macros;
 
 pub mod consensus;
 pub mod core;
+pub mod flyclient;
 pub mod genesis;
 pub mod global;
 pub mod libtx;
