@@ -1,78 +1,87 @@
-# QEMU / weak-VPS compaction crash stress
+# QEMU / weak-VPS / testnet-like compaction stress
 
-Reproduces the failure mode from low-end VPS hosts (issue #3872):
+Reproduces slow compaction and hard-kill mid-compact (issue #3872).
 
-1. **Slow compaction** — large prune set rewritten under a throttled CPU
-2. **Hard kill mid-compact** — `SIGKILL` while staging files or after the journal
-3. **Recovery on reopen** — root must still match; no leftover journal
+## Why testnet is worse than mainnet
 
-## Pieces
+Cut-through horizon is the same on both chains (one week of blocks), but in
+practice **testnet is usually the easier and heavier repro**, even on a local PC:
+
+| Factor | Testnet | Long-running mainnet |
+|--------|---------|----------------------|
+| Spent / UTXO churn | High (faucets, testing, spam) | Lower relative churn |
+| Typical compact delta | Often large | Incremental small rewrites |
+| After PIBD / fresh node | First compact rewrites almost all hash+data against a huge prune set | Same worst case if you never compacted, but less often |
+| Desktoplocal timing | Easy to notice multi-second / multi-minute runs | Often mild if node has been compacting for months |
+
+So: **reproduce on testnet first**, then use this harness to isolate the PMMR
+rewrite + kill/recovery path without running a full node.
+
+## Real testnet repro (full node)
+
+```bash
+# Sync testnet (PIBD or existing chain_data), then force/wait for compact.
+# In another shell, when logs show compact starting:
+kill -9 $(pgrep -f 'grin.*testnet')   # hard kill mid-compact
+# Restart; with the journal fix the node should recover without a bad root.
+grin --testnet
+```
+
+Watch for `txhashset: starting compaction` / `check_compact` and for a long
+`Loading database` / high iowait during rewrite (same class of load as #3872).
+
+## Harness pieces
 
 | Path | Role |
 |------|------|
-| `store/examples/compact_crash_stress.rs` | Harness: prepare / compact / verify / kill-test |
-| `etc/qemu-compact-stress/run.sh` | Runner: native, qemu-user, or Docker+QEMU weak VPS |
-| `GRIN_COMPACT_*` env hooks in `store/src/pmmr.rs` | Pause at a compact phase so the parent can kill reliably |
+| `store/examples/compact_crash_stress.rs` | prepare / compact / verify / kill-test |
+| `etc/qemu-compact-stress/run.sh` | native · testnet-like · qemu-user · Docker weak VPS |
+| `GRIN_COMPACT_*` env hooks in `store/src/pmmr.rs` | pause at a phase so parent can SIGKILL |
 
-Test hooks are **no-ops** unless the env vars are set (production paths unchanged).
+Hooks are **no-ops** unless env vars are set.
 
-## Quick start (native)
+## Quick start
 
 ```bash
-# Kill at journal commit (the critical hard-kill window), 20k leaves
-./etc/qemu-compact-stress/run.sh
+# Testnet-like: ~100k leaves, ~92% pruned, time first vs second compact
+./etc/qemu-compact-stress/run.sh --testnet-like
 
-# All phases: pre-journal staging + journal
+# Kill at journal with a dense prune set (closer to post-PIBD)
+LEAVES=50000 PRUNE_PCT=92 ./etc/qemu-compact-stress/run.sh
+
+# All kill windows
 ./etc/qemu-compact-stress/run.sh --all-phases
 
-# Time a slow compact only (no kill)
-./etc/qemu-compact-stress/run.sh --slow-only LEAVES=50000
+# Weak VPS: Docker linux/amd64 + 0.5 CPU + 512MB (QEMU TCG on Apple Silicon)
+./etc/qemu-compact-stress/run.sh --weak --testnet-like
 
-# Or call the example directly
+# Direct example
 cargo run -p grin_store --example compact_crash_stress --release -- \
-  kill-test ./target/tmp/my-kill 10000 journal
+  prepare ./target/tmp/tn 100000 92
+cargo run -p grin_store --example compact_crash_stress --release -- \
+  compact ./target/tmp/tn
 ```
 
-## Weak VPS via Docker + QEMU
+`compact` prints **first** and **second** pass times:
 
-Uses `linux/amd64` under Docker. On Apple Silicon this is **QEMU TCG** emulation,
-plus cgroup limits (`0.5` CPU, `512MB`) — close to a cheap VPS.
+- **first** ≈ testnet / first compact after a dense prune set  
+- **second** ≈ incremental mainnet-style compact (no new prunes)  
 
-```bash
-# Expect multi-minute runs on arm hosts
-./etc/qemu-compact-stress/run.sh --weak
-
-# Slow compact only under the same constraints
-./etc/qemu-compact-stress/run.sh --weak --slow-only
-
-# Override leaf count / phase
-LEAVES=5000 PHASE=journal ./etc/qemu-compact-stress/run.sh --weak
-```
-
-Requirements: Docker with buildx/platform emulation enabled.
-
-## qemu-user (Linux CI / x86_64 host)
-
-```bash
-# Install qemu-user, then:
-./etc/qemu-compact-stress/run.sh --qemu-user --slow-only LEAVES=10000
-```
-
-TCG user-mode intentionally slows the binary to stress the rewrite path.
+Expect first ≫ second; that gap is exactly why testnet “feels heavier”.
 
 ## Kill phases
 
 | Phase | When | Expected recovery |
 |-------|------|-------------------|
-| `hash_tmp` | After hash staging file written | Discard orphans; pre-compact live files |
-| `data_tmp` | After data staging file written | Same |
-| `journal` | After journal fsynced, before renames | Roll renames forward; post-compact state |
+| `hash_tmp` | After hash staging | Discard orphans; keep pre-compact live files |
+| `data_tmp` | After data staging | Same |
+| `journal` | After journal fsync, before renames | Roll renames forward; post-compact state |
 
-## Manual env for debugging
+## Manual env
 
 ```bash
 export GRIN_COMPACT_READY_FILE=/tmp/compact_ready
 export GRIN_COMPACT_PAUSE_PHASE=journal
 export GRIN_COMPACT_CRASH_PAUSE_MS=60000
-# run compact in one terminal, kill -9 when ready file says "journal"
+# run compact in one terminal; kill -9 when ready file says "journal"
 ```

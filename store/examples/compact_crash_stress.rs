@@ -17,17 +17,21 @@
 //! Used by `etc/qemu-compact-stress/run.sh` to simulate a low-end VPS
 //! (slow CPU via QEMU, tight RAM) and hard-kill mid-compaction.
 //!
+//! **Testnet is usually the easiest real-world repro** — often heavier than
+//! mainnet even on a desktop: more spent/UTXO churn, and the first compact
+//! after PIBD rewrites almost the entire hash/data files against a huge prune
+//! set. Long-running mainnet nodes compact incrementally (smaller deltas).
+//! Use a high `prune_pct` (runner `--testnet-like`) to model that case.
+//!
 //! Subcommands:
-//! - `prepare <dir> <leaves>` — build a large prunable PMMR, prune half the
-//!   leaves, write `root.txt` / `mmr_size.txt`
-//! - `compact <dir>` — open and run `check_compact`, print duration
+//! - `prepare <dir> <leaves> [prune_pct]` — build PMMR, prune pct% of leaves
+//! - `compact <dir>` — run `check_compact`, print duration (and a 2nd pass)
 //! - `verify <dir>` — open and check root matches `root.txt`
-//! - `kill-test <dir> <leaves> <phase>` — prepare, spawn compact child paused
-//!   at `phase`, SIGKILL it, reopen and verify recovery
+//! - `kill-test <dir> <leaves> <phase> [prune_pct]` — SIGKILL mid-compact
 //!
 //! Env (also used by check_compact test hooks):
 //! - `GRIN_COMPACT_READY_FILE`, `GRIN_COMPACT_PAUSE_PHASE`,
-//!   `GRIN_COMPACT_CRASH_PAUSE_MS`
+//!   `GRIN_COMPACT_CRASH_PAUSE_MS`, `GRIN_COMPACT_PRUNE_PCT`
 
 use croaring::Bitmap;
 use grin_core::core::hash::{DefaultHashable, Hash};
@@ -75,15 +79,30 @@ impl Readable for TestElem {
 fn usage() -> ! {
 	eprintln!(
 		"usage:
-  compact_crash_stress prepare <data_dir> <n_leaves>
+  compact_crash_stress prepare <data_dir> <n_leaves> [prune_pct]
   compact_crash_stress compact <data_dir>
   compact_crash_stress verify  <data_dir>
-  compact_crash_stress kill-test <data_dir> <n_leaves> <phase>
+  compact_crash_stress kill-test <data_dir> <n_leaves> <phase> [prune_pct]
+
+prune_pct: 0-99 percent of leaves to prune before compact (default 50).
+  Testnet-like first compact after heavy spend/PIBD: try 90-95.
 
 phases for kill-test: hash_tmp | data_tmp | journal
 "
 	);
 	std::process::exit(2);
+}
+
+fn parse_prune_pct(arg: Option<String>) -> u32 {
+	let pct = arg
+		.or_else(|| env::var("GRIN_COMPACT_PRUNE_PCT").ok())
+		.map(|s| s.parse::<u32>().expect("prune_pct u32"))
+		.unwrap_or(50);
+	assert!(
+		pct < 100,
+		"prune_pct must be 0..99 (keep at least some UTXOs)"
+	);
+	pct
 }
 
 fn root_path(dir: &Path) -> PathBuf {
@@ -118,9 +137,13 @@ fn open_backend(dir: &Path) -> PMMRBackend<TestElem> {
 	PMMRBackend::new(dir, true, ProtocolVersion(1), None).expect("open backend")
 }
 
-/// Build a prunable PMMR with `n_leaves`, prune every other leaf (stable root),
-/// sync, and persist root/size metadata.
-fn cmd_prepare(dir: &Path, n_leaves: u32) {
+/// Build a prunable PMMR with `n_leaves`, prune `prune_pct`% of leaves
+/// (stable root), sync, and persist root/size metadata.
+///
+/// High prune_pct (90–95) models testnet / post-PIBD first compact: a large
+/// prune set and a full hash+data file rewrite, which is much heavier than
+/// the small deltas a continuously compacting mainnet node typically sees.
+fn cmd_prepare(dir: &Path, n_leaves: u32, prune_pct: u32) {
 	if dir.exists() {
 		fs::remove_dir_all(dir).unwrap();
 	}
@@ -137,14 +160,18 @@ fn cmd_prepare(dir: &Path, n_leaves: u32) {
 	drop(mmr);
 	backend.sync().unwrap();
 
-	// Prune ~half the leaves so compaction has a large rewrite workload.
+	// Keep every Nth leaf so (prune_pct)% are removed. N = 100 / (100 - pct).
+	// e.g. prune_pct=50 → keep every 2nd; prune_pct=90 → keep every 10th.
+	let keep_every = (100u32 / (100 - prune_pct)).max(1);
+	let mut pruned = 0u32;
 	{
 		let mut mmr = PMMR::at(&mut backend, mmr_size);
 		for i in 0..n_leaves {
-			if i % 2 == 0 {
-				// leaf insertion index i → pmmr leaf pos
+			if i % keep_every != 0 {
 				let pos0 = grin_core::core::pmmr::insertion_to_pmmr_index(i as u64);
-				let _ = mmr.prune(pos0);
+				if mmr.prune(pos0).unwrap_or(false) {
+					pruned += 1;
+				}
 			}
 		}
 	}
@@ -158,8 +185,11 @@ fn cmd_prepare(dir: &Path, n_leaves: u32) {
 		.map(|m| m.len())
 		.unwrap_or(0);
 	println!(
-		"prepare: leaves={} mmr_size={} hash_bytes={} data_bytes={} root={} took={:.2}s",
+		"prepare: leaves={} pruned={} (~{}%, keep_every={}) mmr_size={} hash_bytes={} data_bytes={} root={} took={:.2}s",
 		n_leaves,
+		pruned,
+		prune_pct,
+		keep_every,
 		mmr_size,
 		hash_bytes,
 		data_bytes,
@@ -170,22 +200,41 @@ fn cmd_prepare(dir: &Path, n_leaves: u32) {
 
 fn cmd_compact(dir: &Path) {
 	let (expected_root, mmr_size) = read_meta(dir);
-	let t0 = Instant::now();
 	let mut backend = open_backend(dir);
+
+	// First compact: full rewrite against the accumulated prune set
+	// (testnet / post-PIBD worst case).
+	let t0 = Instant::now();
 	backend
 		.check_compact(mmr_size, &Bitmap::new())
 		.expect("check_compact");
 	backend.sync().unwrap();
-	let elapsed = t0.elapsed();
+	let first = t0.elapsed();
+
+	// Second compact with no new prunes: should be much cheaper — closer to
+	// a long-running mainnet node that only rewrites a small delta.
+	let t1 = Instant::now();
+	backend
+		.check_compact(mmr_size, &Bitmap::new())
+		.expect("check_compact second");
+	backend.sync().unwrap();
+	let second = t1.elapsed();
 
 	let pmmr = PMMR::at(&mut backend, mmr_size);
 	let root = pmmr.root().unwrap();
 	assert_eq!(root, expected_root, "root must be unchanged by compact");
 	println!(
-		"compact: ok root={} took={:.3}s ({:.0} ms)",
+		"compact: ok root={} first={:.3}s ({:.0} ms) second={:.3}s ({:.0} ms) ratio={:.1}x",
 		root,
-		elapsed.as_secs_f64(),
-		elapsed.as_secs_f64() * 1000.0
+		first.as_secs_f64(),
+		first.as_secs_f64() * 1000.0,
+		second.as_secs_f64(),
+		second.as_secs_f64() * 1000.0,
+		if second.as_secs_f64() > 0.0 {
+			first.as_secs_f64() / second.as_secs_f64()
+		} else {
+			0.0
+		}
 	);
 }
 
@@ -199,13 +248,15 @@ fn cmd_verify(dir: &Path) {
 		"root mismatch after open/recovery: got {} want {}",
 		root, expected_root
 	);
-	// Spot-check an unpruned leaf still present.
-	if mmr_size > 4 {
-		assert!(
-			pmmr.get_data(3).is_some() || pmmr.get_data(1).is_some(),
-			"expected at least one unpruned leaf readable"
-		);
-	}
+	// Spot-check: leaf insertion index 0 is always kept by prepare (keep_every).
+	assert!(
+		pmmr.n_unpruned_leaves() > 0,
+		"expected unpruned leaves after compact/recovery"
+	);
+	assert!(
+		pmmr.get_data(0).is_some(),
+		"expected first leaf (insertion 0) still readable"
+	);
 	assert!(
 		!dir.join("pmmr_compact.journal").exists(),
 		"journal must not remain after successful open"
@@ -227,7 +278,7 @@ fn wait_for_phase(ready_file: &Path, phase: &str, timeout: Duration) -> bool {
 }
 
 /// Prepare dataset, spawn `compact` child paused at `phase`, SIGKILL it, verify.
-fn cmd_kill_test(dir: &Path, n_leaves: u32, phase: &str) {
+fn cmd_kill_test(dir: &Path, n_leaves: u32, phase: &str, prune_pct: u32) {
 	match phase {
 		"hash_tmp" | "data_tmp" | "journal" => {}
 		_ => {
@@ -236,7 +287,7 @@ fn cmd_kill_test(dir: &Path, n_leaves: u32, phase: &str) {
 		}
 	}
 
-	cmd_prepare(dir, n_leaves);
+	cmd_prepare(dir, n_leaves, prune_pct);
 	let (expected_root, _) = read_meta(dir);
 
 	let ready_file = dir.join("compact_ready");
@@ -307,7 +358,8 @@ fn main() {
 				.unwrap_or_else(|| usage())
 				.parse()
 				.expect("n_leaves");
-			cmd_prepare(&dir, n);
+			let prune_pct = parse_prune_pct(args.next());
+			cmd_prepare(&dir, n, prune_pct);
 		}
 		"compact" => {
 			let dir = PathBuf::from(args.next().unwrap_or_else(|| usage()));
@@ -325,7 +377,8 @@ fn main() {
 				.parse()
 				.expect("n_leaves");
 			let phase = args.next().unwrap_or_else(|| usage());
-			cmd_kill_test(&dir, n, &phase);
+			let prune_pct = parse_prune_pct(args.next());
+			cmd_kill_test(&dir, n, &phase, prune_pct);
 		}
 		_ => usage(),
 	}
