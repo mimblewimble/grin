@@ -507,7 +507,9 @@ where
 		let mut current_pos = 0;
 		let mut prune_pos = prune_pos;
 		while let Ok(elmt) = T::read(&mut streaming_reader) {
-			if prune_pos.contains(&current_pos) {
+			// prune_pos is ordered so we only ever need to check the head,
+			// avoiding a scan of the remaining positions for every element.
+			if prune_pos.first() == Some(&current_pos) {
 				// Pruned pos, moving on.
 				prune_pos = &prune_pos[1..];
 			} else {
