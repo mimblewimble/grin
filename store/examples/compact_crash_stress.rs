@@ -143,6 +143,19 @@ fn open_backend(dir: &Path) -> PMMRBackend<TestElem> {
 /// High prune_pct (90–95) models testnet / post-PIBD first compact: a large
 /// prune set and a full hash+data file rewrite, which is much heavier than
 /// the small deltas a continuously compacting mainnet node typically sees.
+fn progress(label: &str, done: u32, total: u32, t0: Instant) {
+	if done == 0 || done == total || done % 10_000 == 0 {
+		eprintln!(
+			"  ... {}: {}/{} ({:.0}%) elapsed={:.1}s",
+			label,
+			done,
+			total,
+			100.0 * f64::from(done) / f64::from(total.max(1)),
+			t0.elapsed().as_secs_f64()
+		);
+	}
+}
+
 fn cmd_prepare(dir: &Path, n_leaves: u32, prune_pct: u32) {
 	if dir.exists() {
 		fs::remove_dir_all(dir).unwrap();
@@ -150,15 +163,27 @@ fn cmd_prepare(dir: &Path, n_leaves: u32, prune_pct: u32) {
 	fs::create_dir_all(dir).unwrap();
 
 	let t0 = Instant::now();
+	eprintln!(
+		"prepare: building {} leaves (prune_pct={}) under {} — do not kill, wait for 'prepare: leaves=...'",
+		n_leaves,
+		prune_pct,
+		dir.display()
+	);
+
 	let mut backend = open_backend(dir);
 	let mut mmr = PMMR::new(&mut backend);
 	for i in 0..n_leaves {
 		mmr.push(&TestElem(i)).unwrap();
+		progress("push", i + 1, n_leaves, t0);
 	}
 	let mmr_size = mmr.unpruned_size();
 	let root = mmr.root().unwrap();
 	drop(mmr);
 	backend.sync().unwrap();
+	eprintln!(
+		"prepare: push done in {:.1}s, pruning...",
+		t0.elapsed().as_secs_f64()
+	);
 
 	// Keep every Nth leaf so (prune_pct)% are removed. N = 100 / (100 - pct).
 	// e.g. prune_pct=50 → keep every 2nd; prune_pct=90 → keep every 10th.
@@ -173,6 +198,7 @@ fn cmd_prepare(dir: &Path, n_leaves: u32, prune_pct: u32) {
 					pruned += 1;
 				}
 			}
+			progress("prune", i + 1, n_leaves, t0);
 		}
 	}
 	backend.sync().unwrap();
@@ -204,15 +230,21 @@ fn cmd_compact(dir: &Path) {
 
 	// First compact: full rewrite against the accumulated prune set
 	// (testnet / post-PIBD worst case).
+	eprintln!(
+		"compact: first pass (dense prune rewrite) mmr_size={} — no kill needed in --slow-only/--testnet-like",
+		mmr_size
+	);
 	let t0 = Instant::now();
 	backend
 		.check_compact(mmr_size, &Bitmap::new())
 		.expect("check_compact");
 	backend.sync().unwrap();
 	let first = t0.elapsed();
+	eprintln!("compact: first pass done in {:.3}s", first.as_secs_f64());
 
 	// Second compact with no new prunes: should be much cheaper — closer to
 	// a long-running mainnet node that only rewrites a small delta.
+	eprintln!("compact: second pass (incremental / already compacted)...");
 	let t1 = Instant::now();
 	backend
 		.check_compact(mmr_size, &Bitmap::new())

@@ -40,19 +40,31 @@ Watch for `txhashset: starting compaction` / `check_compact` and for a long
 
 Hooks are **no-ops** unless env vars are set.
 
+## Do I need to kill anything?
+
+| Command | Kill? |
+|---------|--------|
+| `./run.sh --testnet-like` | **No** — timing only. Wait for progress lines and final `OK:` |
+| `./run.sh --slow-only` | **No** |
+| `./run.sh` / `--all-phases` | **No** — harness auto-`SIGKILL`s a child when the phase is ready |
+| Real `grin --testnet` node | Optional: `kill -9` only if you are testing full-node recovery by hand |
+
+`--testnet-like` used to look “stuck” because prepare only printed at the end.
+It now prints progress every 10k leaves on **stderr**.
+
 ## Quick start
 
 ```bash
-# Testnet-like: ~100k leaves, ~92% pruned, time first vs second compact
+# Testnet-like: dense prune set, time first vs second compact (no kill)
 ./etc/qemu-compact-stress/run.sh --testnet-like
 
-# Kill at journal with a dense prune set (closer to post-PIBD)
+# Kill recovery (automatic): dense prune + SIGKILL at journal
 LEAVES=50000 PRUNE_PCT=92 ./etc/qemu-compact-stress/run.sh
 
 # All kill windows
 ./etc/qemu-compact-stress/run.sh --all-phases
 
-# Weak VPS: Docker linux/amd64 + 0.5 CPU + 512MB (QEMU TCG on Apple Silicon)
+# Weak VPS: Docker with 0.5 CPU + 512MB on the *host* arch (not forced amd64)
 ./etc/qemu-compact-stress/run.sh --weak --testnet-like
 
 # Direct example
@@ -65,9 +77,9 @@ cargo run -p grin_store --example compact_crash_stress --release -- \
 `compact` prints **first** and **second** pass times:
 
 - **first** ≈ testnet / first compact after a dense prune set  
-- **second** ≈ incremental mainnet-style compact (no new prunes)  
+- **second** ≈ already-compacted rewrite  
 
-Expect first ≫ second; that gap is exactly why testnet “feels heavier”.
+Expect first to dominate on large/dense datasets (why testnet “feels heavier”).
 
 ## Kill phases
 
