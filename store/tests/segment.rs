@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::core::core::hash::DefaultHashable;
+use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr;
-use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier};
+use crate::core::core::pmmr::segment::{Segment, SegmentError, SegmentIdentifier};
 use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR, PMMR};
 use crate::core::ser::{
 	BinReader, BinWriter, DeserializationMode, Error, PMMRable, ProtocolVersion, Readable, Reader,
@@ -322,6 +322,103 @@ fn pruned_segment() {
 	);
 	assert!(segment.root(last_pos, Some(&bitmap)).unwrap().is_some());
 	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	std::mem::drop(ba);
+	fs::remove_dir_all(&data_dir).unwrap();
+}
+
+#[test]
+fn segment_carried_hash_verification() {
+	let t = Utc::now();
+	let data_dir = format!(
+		"./target/tmp/{}.{}-carried_hashes",
+		t.timestamp(),
+		t.timestamp_subsec_nanos()
+	);
+	fs::create_dir_all(&data_dir).unwrap();
+
+	let n_leaves = 16;
+	let mut ba = PMMRBackend::new(&data_dir, true, ProtocolVersion(1), None).unwrap();
+	let mut mmr = PMMR::new(&mut ba);
+	for i in 0..n_leaves {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	}
+	let last_pos = mmr.unpruned_size();
+	let root = mmr.root().unwrap();
+
+	let mut bitmap = Bitmap::new();
+	bitmap.add_range(0..n_leaves);
+
+	// An unpruned segment carries hashes that root reconstruction recomputes
+	// from the leaves. Corrupting one of them must be rejected even though
+	// it does not affect the reconstructed root.
+	let id = SegmentIdentifier { height: 2, idx: 0 };
+	let ro_mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &ro_mmr, true).unwrap();
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+	let (sid, hash_pos, mut hashes, leaf_pos, leaf_data, proof) = segment.parts();
+	let idx = hash_pos.iter().position(|&p| p == 2).unwrap();
+	hashes[idx] = Hash::default();
+	let tampered = Segment::from_parts(sid, hash_pos, hashes, leaf_pos, leaf_data, proof);
+	assert_eq!(
+		tampered.validate(last_pos, Some(&bitmap), root),
+		Err(SegmentError::UnverifiableHash(2))
+	);
+
+	// Prune all leaves of segment 1, remembering the interior hashes as an
+	// uncompacted peer would still serve them, then compact so the segment
+	// carries a single hash: the pruned subtree root at pos 13.
+	let mut mmr = PMMR::at(&mut ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[4, 5, 6, 7]);
+	ba.sync().unwrap();
+	let h9 = ba.get_hash(9).unwrap();
+	let h12 = ba.get_hash(12).unwrap();
+	ba.check_compact(last_pos, &Bitmap::new()).unwrap();
+	ba.sync().unwrap();
+
+	let id = SegmentIdentifier { height: 2, idx: 1 };
+	let ro_mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &ro_mmr, true).unwrap();
+	assert_eq!(segment.hash_iter().count(), 1);
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// A segment from an uncompacted peer additionally carries the children
+	// of the pruned subtree root. They hash into the (proof-bound) root at
+	// pos 13, so the segment must validate.
+	let (sid, hash_pos, hashes, leaf_pos, leaf_data, proof) = segment.parts();
+	let mut dense_hash_pos = hash_pos.clone();
+	let mut dense_hashes = hashes.clone();
+	dense_hash_pos.splice(0..0, [9, 12]);
+	dense_hashes.splice(0..0, [h9, h12]);
+	let dense = Segment::from_parts(
+		sid,
+		dense_hash_pos,
+		dense_hashes,
+		leaf_pos.clone(),
+		leaf_data.clone(),
+		proof.clone(),
+	);
+	dense.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// Root reconstruction never looks beneath the pruned subtree root, but
+	// apply pushes every carried hash into the local PMMR. An extra hash
+	// beneath the root that cannot be verified against it must be rejected.
+	let mut tampered_hash_pos = hash_pos.clone();
+	let mut tampered_hashes = hashes.clone();
+	tampered_hash_pos.insert(0, 9);
+	tampered_hashes.insert(0, Hash::default());
+	let tampered = Segment::from_parts(
+		sid,
+		tampered_hash_pos,
+		tampered_hashes,
+		leaf_pos,
+		leaf_data,
+		proof,
+	);
+	assert_eq!(
+		tampered.validate(last_pos, Some(&bitmap), root),
+		Err(SegmentError::UnverifiableHash(9))
+	);
 
 	std::mem::drop(ba);
 	fs::remove_dir_all(&data_dir).unwrap();

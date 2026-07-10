@@ -19,6 +19,7 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 const MAX_SEGMENT_READ_ITEMS: u64 = 1_000_000;
@@ -102,6 +103,9 @@ pub enum SegmentError {
 	/// Mismatch between expected and actual root hash
 	#[error("Root hash mismatch")]
 	Mismatch,
+	/// A hash included in the segment could not be verified against the segment root
+	#[error("Unverifiable hash at pos {0}")]
+	UnverifiableHash(u64),
 }
 
 /// Tuple that defines a segment of a given PMMR
@@ -415,6 +419,19 @@ where
 		mmr_size: u64,
 		bitmap: Option<&Bitmap>,
 	) -> Result<Option<Hash>, SegmentError> {
+		self.root_with_known(mmr_size, bitmap).map(|(root, _)| root)
+	}
+
+	/// As `root`, but also returns the hash of every position that was bound
+	/// during the reconstruction: leaf hashes, computed parent hashes and the
+	/// segment hashes consumed at pruning boundaries. Used to verify that the
+	/// remaining hashes carried by the segment are consistent with the root.
+	fn root_with_known(
+		&self,
+		mmr_size: u64,
+		bitmap: Option<&Bitmap>,
+	) -> Result<(Option<Hash>, HashMap<u64, Hash>), SegmentError> {
+		let mut known = HashMap::new();
 		let (segment_first_pos, segment_last_pos) = self.segment_pos_range(mmr_size);
 		let mut hashes = Vec::<Option<Hash>>::with_capacity(2 * (self.identifier.height as usize));
 		let mut leaves0 = self.leaf_pos.iter().zip(&self.leaf_data);
@@ -462,10 +479,12 @@ where
 						(Some(l), Some(r)) => Some((l, r).hash_with_index(pos0)),
 						(None, Some(r)) => {
 							let l = self.get_hash(left_child_pos - 1)?;
+							known.insert(left_child_pos - 1, l);
 							Some((l, r).hash_with_index(pos0))
 						}
 						(Some(l), None) => {
 							let r = self.get_hash(right_child_pos - 1)?;
+							known.insert(right_child_pos - 1, r);
 							Some((l, r).hash_with_index(pos0))
 						}
 					}
@@ -481,12 +500,15 @@ where
 					)
 				}
 			};
+			if let Some(h) = hash {
+				known.insert(pos0, h);
+			}
 			hashes.push(hash);
 		}
 
 		if self.full_segment(mmr_size) {
 			// Full segment: last position of segment is subtree root
-			Ok(hashes.pop().unwrap())
+			Ok((hashes.pop().unwrap(), known))
 		} else {
 			// Not full (only final segment): peaks in segment, bag them together
 			let peaks = pmmr::peaks(mmr_size)
@@ -500,7 +522,9 @@ where
 					.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 				if lhash.is_none() && bitmap.is_some() {
 					// If this entire peak is pruned, load it from the segment hashes
-					lhash = Some(self.get_hash(pos0)?);
+					let h = self.get_hash(pos0)?;
+					known.insert(pos0, h);
+					lhash = Some(h);
 				}
 				let lhash = lhash.ok_or_else(|| SegmentError::MissingHash(1 + pos0))?;
 
@@ -509,7 +533,7 @@ where
 					Some(rhash) => Some((lhash, rhash).hash_with_index(mmr_size)),
 				};
 			}
-			Ok(Some(hash.unwrap()))
+			Ok((Some(hash.unwrap()), known))
 		}
 	}
 
@@ -519,10 +543,21 @@ where
 		mmr_size: u64,
 		bitmap: Option<&Bitmap>,
 	) -> Result<(Hash, u64), SegmentError> {
-		let root = self.root(mmr_size, bitmap)?;
+		self.first_unpruned_parent_with_known(mmr_size, bitmap)
+			.map(|(res, _)| res)
+	}
+
+	/// As `first_unpruned_parent`, but also returns the hashes bound during
+	/// root reconstruction (see `root_with_known`).
+	fn first_unpruned_parent_with_known(
+		&self,
+		mmr_size: u64,
+		bitmap: Option<&Bitmap>,
+	) -> Result<((Hash, u64), HashMap<u64, Hash>), SegmentError> {
+		let (root, mut known) = self.root_with_known(mmr_size, bitmap)?;
 		let (_, last) = self.segment_pos_range(mmr_size);
 		if let Some(root) = root {
-			return Ok((root, 1 + last));
+			return Ok(((root, 1 + last), known));
 		}
 		let bitmap = bitmap.unwrap();
 		let n_leaves = pmmr::n_leaves(mmr_size);
@@ -533,10 +568,11 @@ where
 		let mut family_branch = pmmr::family_branch(last, mmr_size).into_iter();
 		while cardinality == 0 {
 			hash = self.get_hash(pos0).map(|h| (h, 1 + pos0));
-			if hash.is_ok() {
+			if let Ok((h, pos1)) = hash {
 				// Return early in case a lower level hash is already present
 				// This can occur if both child trees are pruned but compaction hasn't run yet
-				return hash;
+				known.insert(pos1 - 1, h);
+				return Ok(((h, pos1), known));
 			}
 
 			if let Some((p0, _)) = family_branch.next() {
@@ -548,7 +584,61 @@ where
 				break;
 			}
 		}
-		hash
+		let (h, pos1) = hash?;
+		known.insert(pos1 - 1, h);
+		Ok(((h, pos1), known))
+	}
+
+	/// Verify that every hash carried by this segment is bound to the segment
+	/// root that the merkle proof validates. Root reconstruction only consumes
+	/// hashes at pruning boundaries: any additional hashes would otherwise be
+	/// applied to the local PMMR unchecked, allowing a peer to hand us a
+	/// segment that passes root validation but corrupts the reconstructed MMR,
+	/// which only surfaces (without attribution) at full state validation.
+	/// A hash is accepted if it was consumed during reconstruction, or if it
+	/// hashes into an already accepted parent together with its sibling.
+	fn verify_carried_hashes(&self, mut known: HashMap<u64, Hash>) -> Result<(), SegmentError> {
+		// Descending position order: in postorder a parent position is always
+		// greater than its children, so a bound parent can bind its children
+		// before they are visited.
+		for (&pos0, hash) in self.hash_pos.iter().zip(&self.hashes).rev() {
+			let bound = match known.get(&pos0) {
+				Some(h) => {
+					if h != hash {
+						return Err(SegmentError::UnverifiableHash(pos0));
+					}
+					*h
+				}
+				// Not bound (yet): if no parent binds it, we fail below.
+				None => continue,
+			};
+			let height = pmmr::bintree_postorder_height(pos0);
+			if height == 0 {
+				continue;
+			}
+			let left_pos0 = pos0 - (1 << height);
+			let right_pos0 = pos0 - 1;
+			let left = known
+				.get(&left_pos0)
+				.copied()
+				.or_else(|| self.get_hash(left_pos0).ok());
+			let right = known
+				.get(&right_pos0)
+				.copied()
+				.or_else(|| self.get_hash(right_pos0).ok());
+			if let (Some(l), Some(r)) = (left, right) {
+				if (l, r).hash_with_index(pos0) == bound {
+					known.insert(left_pos0, l);
+					known.insert(right_pos0, r);
+				}
+			}
+		}
+		for &pos0 in &self.hash_pos {
+			if !known.contains_key(&pos0) {
+				return Err(SegmentError::UnverifiableHash(pos0));
+			}
+		}
+		Ok(())
 	}
 
 	/// Check validity of the segment by calculating its root and validating the merkle proof
@@ -559,7 +649,8 @@ where
 		mmr_root: Hash,
 	) -> Result<(), SegmentError> {
 		let (first, last) = self.segment_pos_range(mmr_size);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(mmr_size, bitmap)?;
+		let ((segment_root, segment_unpruned_pos), known) =
+			self.first_unpruned_parent_with_known(mmr_size, bitmap)?;
 		self.proof.validate(
 			mmr_size,
 			mmr_root,
@@ -567,7 +658,8 @@ where
 			last,
 			segment_root,
 			segment_unpruned_pos,
-		)
+		)?;
+		self.verify_carried_hashes(known)
 	}
 
 	/// Check validity of the segment by calculating its root and validating the merkle proof
@@ -582,7 +674,8 @@ where
 		other_is_left: bool,
 	) -> Result<(), SegmentError> {
 		let (first, last) = self.segment_pos_range(mmr_size);
-		let (segment_root, segment_unpruned_pos) = self.first_unpruned_parent(mmr_size, bitmap)?;
+		let ((segment_root, segment_unpruned_pos), known) =
+			self.first_unpruned_parent_with_known(mmr_size, bitmap)?;
 		self.proof.validate_with(
 			mmr_size,
 			mmr_root,
@@ -593,7 +686,8 @@ where
 			hash_last_pos,
 			other_root,
 			other_is_left,
-		)
+		)?;
+		self.verify_carried_hashes(known)
 	}
 }
 
