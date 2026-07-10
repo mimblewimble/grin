@@ -81,11 +81,17 @@ fn p2p_server_with_tls(
 		tls_enabled,
 		..p2p::P2PConfig::default()
 	};
+	// Mirror server.rs: advertise TLS capability when transport encryption is on.
+	let capabilities = if tls_enabled {
+		p2p::Capabilities::TLS
+	} else {
+		p2p::Capabilities::UNKNOWN
+	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
 		p2p::Server::new(
 			dir,
-			p2p::Capabilities::UNKNOWN,
+			capabilities,
 			p2p_config.clone(),
 			net_adapter.clone(),
 			Hash::from_vec(&vec![]),
@@ -223,6 +229,9 @@ fn peer_handshake_tls() {
 			.user_agent
 			.ends_with(format!("{}{}", env!("CARGO_PKG_VERSION"), git_hash).as_str()));
 
+		// Remote peer advertised TLS capability during handshake.
+		assert!(peer.info.capabilities.contains(p2p::Capabilities::TLS));
+
 		thread::sleep(time::Duration::from_secs(1));
 
 		peer.send_ping(Difficulty::min_dma(), 0).unwrap();
@@ -233,6 +242,7 @@ fn peer_handshake_tls() {
 			.get_connected_peer(PeerAddr(peer_addr))
 			.unwrap();
 		assert_eq!(server_peer.info.total_difficulty(), Difficulty::min_dma());
+		assert!(server_peer.info.capabilities.contains(p2p::Capabilities::TLS));
 		assert!(server.peers.iter().connected().count() > 0);
 	}
 
