@@ -372,16 +372,24 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
+	///
+	/// On failure the error is mapped to a clear out-of-disk-space message when
+	/// appropriate (#3425). Callers should discard the extension and not commit
+	/// the corresponding DB batch.
 	pub fn sync(&mut self) -> io::Result<()> {
-		Ok(())
-			.and(self.hash_file.flush())
-			.and(self.data_file.flush())
-			.and(self.sync_leaf_set())
-			.and(self.prune_list.flush())
+		self.hash_file
+			.flush()
+			.and_then(|_| self.data_file.flush())
+			.and_then(|_| self.sync_leaf_set())
+			.and_then(|_| self.prune_list.flush())
 			.map_err(|e| {
+				let e = crate::map_io_err(e);
+				if crate::is_out_of_disk_space(&e) {
+					error!("PMMR sync failed — out of disk space: {}", e);
+				}
 				io::Error::new(
-					io::ErrorKind::Interrupted,
-					format!("Could not sync pmmr to disk: {:?}", e),
+					e.kind(),
+					format!("Could not sync pmmr to disk: {}", e),
 				)
 			})
 	}
