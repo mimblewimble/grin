@@ -9,8 +9,8 @@ This page is a short comparison for readers familiar with Bitcoin. For a deeper 
 
 Grin transactions are private in ways that Bitcoin’s transparent UTXO model is not. Three properties matter most:
 
-1. **No addresses.** Outputs are one-shot curve points. There is no reusable “payment address” that links payments over time.
-2. **No amounts.** Every transaction uses confidential transactions (CT). Amounts sit inside Pedersen commitments with range proofs, so outsiders cannot read transfer values.
+1. **No on-chain addresses.** Outputs are one-shot curve points. There is no reusable on-chain “payment address” (no Bitcoin-style address or scriptPubKey reuse) that links payments over time. Wallets may still use an *off-chain* contact handle for interaction—for example a slatepack address, Tor onion, or account public key—but that identifier never appears on the chain as a field tying outputs together.
+2. **No amounts.** Every transaction uses confidential transactions (CT). Amounts sit inside [Pedersen commitments](intro.md#balance) with [range proofs](intro.md#range-proofs) (Grin uses [Bulletproofs](https://eprint.iacr.org/2017/1066.pdf)), so outsiders cannot read transfer values.
 3. **Cut-through and aggregation.** When an output is spent, Mimblewimble can remove the spent input/output pair from the long-term chain state. Inside a block, many transactions are merged into one aggregate set of inputs, outputs, and kernels, so a confirmed block does not look like a list of labeled payments.
 
 Because of (1) and (2), unspent outputs and kernels all look like random-looking data unless you participated in building them. Nodes can still verify that no money was created out of thin air by checking that commitments balance (homomorphic structure) and that range proofs and signatures are valid.
@@ -20,10 +20,10 @@ Because of (1) and (2), unspent outputs and kernels all look like random-looking
 It is easy to overstate the third point. **Cut-through improves scalability and reduces long-term history, but it does not make input↔output linking impossible.**
 
 - While a transaction is **relayed** (before or while it is mined), observers can still see which commitments are spent and which new ones appear. That is a real information channel.
-- **Taint / hop analysis** can follow known “marked” outputs across spends if an adversary can introduce or learn those outputs (for example by paying you, or by watching the network closely). Aggregation and Dandelion make this harder, but they are not perfect anonymity.
+- **Taint / hop analysis** can follow known “marked” outputs across spends if an adversary can introduce or learn those outputs (for example by paying you, or by watching the network closely). Aggregation and Dandelion make this harder, but they are not perfect anonymity. Interactive constructions such as **payjoins** (both parties contribute inputs so a simple “one payer → one payee + change” pattern is less obvious) can further blur linkage; that work lives in wallet and contract protocols rather than consensus rules.
 - After cut-through, the **kernel** of a transaction remains as a permanent ~100-byte footprint. The chain still records that “some” balanced state change occurred, even when the intermediate UTXOs are gone.
 
-So: Grin hides amounts and addresses strongly; it **weakens but does not eliminate** graph-style analysis of which outputs feed which later spends. That matches the Privacy Primer’s view that addresses and amounts are checked off as strong wins, while **input/output linking** remains an area of residual leakage and ongoing research.
+So: Grin hides amounts and *on-chain* addresses strongly; it **weakens but does not eliminate** graph-style analysis of which outputs feed which later spends. That matches the Privacy Primer’s view that addresses and amounts are checked off as strong wins, while **input/output linking** remains an area of residual leakage and ongoing research.
 
 ## Scalability
 
@@ -39,6 +39,7 @@ Mimblewimble does not carry Bitcoin-style scripts on the chain. Many contracts t
 * Atomic swaps
 * Time-locked transactions and outputs
 * Payment-channel style constructions (e.g. Lightning-like designs)
+* Payjoin-style collaborative transactions (wallet/contract protocol work)
 
 Those constructions live more in wallet protocols than in on-chain script programs.
 
@@ -50,7 +51,9 @@ Bitcoin’s block subsidy halves over time toward a fixed supply. Grin’s base 
 
 ### Wait, what!? No address?
 
-Correct—no reusable addresses. Outputs are unique and do not share an address field with earlier outputs. Wallets build transactions **interactively** (or via a slate/exchange of messages). Both parties do not need to be online at the same instant; the handshake can happen over any private channel (including offline media).
+Correct—there is **no reusable on-chain address** on outputs. Each output is a unique commitment; nothing like a Bitcoin address is written into the UTXO and reused across payments.
+
+That is different from how wallets *find each other*. To build a transaction interactively, one party still needs a way to contact the other—often a public key, slatepack address, Tor hidden service, or similar. Those are **interaction endpoints**, not on-chain address fields. Both parties do not need to be online at the same instant; the handshake can happen over any private channel (including offline media).
 
 ### If transaction information gets removed, can I just cheat and create money?
 
@@ -58,7 +61,7 @@ No. Confidential transactions are designed so nodes can check that the sum of in
 
 ### If I listen to transaction relay, can’t I just figure out who they belong to before cut-through?
 
-You can observe **which** outputs are spent and **which** new outputs appear in a given transaction or stem. You generally **cannot** read amounts or reuse addresses to label “who paid whom” the way you can on Bitcoin.
+You can observe **which** outputs are spent and **which** new outputs appear in a given transaction or stem. You generally **cannot** read amounts, and there is no on-chain reusable address to label “who paid whom” the way a Bitcoin explorer does from scriptPubKeys.
 
 What you *can* still do, with extra information, is **link** spends: for example by paying someone a known output and watching how related commitments move, or by combining relay timing with other metadata. Dandelion stem relay reduces the reliability of “this IP originated this tx,” and stem aggregation can blur some couplings, but they do not make the network a black box.
 
@@ -66,7 +69,7 @@ For a careful split of “what Grin hides” vs “what still leaks,” read the
 
 ### What about quantum computers?
 
-Commitments and signatures used today are not quantum-safe in the usual sense. Outputs also carry hash material that can support future migration plans if quantum threats become practical. Treat long-range quantum risk like other cryptocurrencies: monitor standards and upgrades; do not assume current crypto is forever.
+Commitments and signatures used today are not quantum-safe in the usual sense. Outputs also carry hash material that can support future migration plans if quantum threats become practical. Even if a quantum attacker could strip the cryptographic hiding of historical commitments, amounts are not known in advance—so there is no reliable way to pick “high-value” transactions to attack first. Treat long-range quantum risk like other cryptocurrencies: monitor standards and upgrades; do not assume current crypto is forever.
 
 ### How does all this magic work?
 
