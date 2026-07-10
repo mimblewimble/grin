@@ -813,6 +813,170 @@ fn compact_twice() {
 	teardown(data_dir);
 }
 
+/// Compaction must leave no journal or staging files behind on success.
+#[test]
+fn compact_clears_journal() {
+	let (data_dir, elems) = setup("compact_clears_journal");
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		let mmr_size = load(0, &elems[0..8], &mut backend);
+		backend.sync().unwrap();
+		{
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
+			pmmr.prune(1).unwrap();
+		}
+		backend.sync().unwrap();
+		backend.check_compact(mmr_size, &Bitmap::new()).unwrap();
+
+		let dir = std::path::Path::new(&data_dir);
+		assert!(!dir.join("pmmr_compact.journal").exists());
+		assert!(!dir.join("pmmr_hash.tmp").exists());
+		assert!(!dir.join("pmmr_data.tmp").exists());
+		assert!(!dir.join("pmmr_prun.bin.compact").exists());
+		assert!(!dir.join("pmmr_leaf.bin.compact").exists());
+	}
+	teardown(data_dir);
+}
+
+/// If a journal is present with staged files, open rolls renames forward and
+/// yields a consistent PMMR (simulates hard kill after journal, before apply).
+#[test]
+fn compact_journal_recovery_roll_forward() {
+	let (data_dir, elems) = setup("compact_journal_recovery");
+	let dir = std::path::Path::new(&data_dir);
+
+	let (root, mmr_size) = {
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		let mmr_size = load(0, &elems[0..8], &mut backend);
+		backend.sync().unwrap();
+		let root = {
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+		{
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
+			pmmr.prune(1).unwrap();
+			pmmr.prune(3).unwrap();
+		}
+		backend.sync().unwrap();
+
+		// Snapshot pre-compact live files.
+		let pre_hash = fs::read(dir.join("pmmr_hash.bin")).unwrap();
+		let pre_data = fs::read(dir.join("pmmr_data.bin")).unwrap();
+		let pre_prun = fs::read(dir.join("pmmr_prun.bin")).unwrap_or_default();
+		let pre_leaf = fs::read(dir.join("pmmr_leaf.bin")).unwrap();
+
+		backend.check_compact(mmr_size, &Bitmap::new()).unwrap();
+
+		// Snapshot post-compact live files (the committed new state).
+		let post_hash = fs::read(dir.join("pmmr_hash.bin")).unwrap();
+		let post_data = fs::read(dir.join("pmmr_data.bin")).unwrap();
+		let post_prun = fs::read(dir.join("pmmr_prun.bin")).unwrap();
+		let post_leaf = fs::read(dir.join("pmmr_leaf.bin")).unwrap();
+
+		// Simulate crash after journal write, before renames:
+		// live files are still pre-compact; temps hold post-compact content.
+		fs::write(dir.join("pmmr_hash.bin"), &pre_hash).unwrap();
+		fs::write(dir.join("pmmr_data.bin"), &pre_data).unwrap();
+		fs::write(dir.join("pmmr_prun.bin"), &pre_prun).unwrap();
+		fs::write(dir.join("pmmr_leaf.bin"), &pre_leaf).unwrap();
+		fs::write(dir.join("pmmr_hash.tmp"), &post_hash).unwrap();
+		fs::write(dir.join("pmmr_data.tmp"), &post_data).unwrap();
+		fs::write(dir.join("pmmr_prun.bin.compact"), &post_prun).unwrap();
+		fs::write(dir.join("pmmr_leaf.bin.compact"), &post_leaf).unwrap();
+		fs::write(dir.join("pmmr_compact.journal"), b"1").unwrap();
+
+		(root, mmr_size)
+	};
+
+	// Re-open: recovery should roll forward and leave a consistent store.
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		assert!(!dir.join("pmmr_compact.journal").exists());
+		assert!(!dir.join("pmmr_hash.tmp").exists());
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root().unwrap());
+		assert_eq!(pmmr.get_data(4).unwrap(), TestElem(4));
+	}
+	teardown(data_dir);
+}
+
+/// Staging files without a journal are abandoned prep — discarded on open,
+/// leaving the pre-compact live files intact.
+#[test]
+fn compact_orphan_temps_discarded() {
+	let (data_dir, elems) = setup("compact_orphan_temps");
+	let dir = std::path::Path::new(&data_dir);
+
+	let (root, mmr_size, pre_hash_len) = {
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		let mmr_size = load(0, &elems[0..8], &mut backend);
+		backend.sync().unwrap();
+		let root = {
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+		{
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			pmmr.prune(0).unwrap();
+			pmmr.prune(1).unwrap();
+		}
+		backend.sync().unwrap();
+
+		let pre_hash = fs::read(dir.join("pmmr_hash.bin")).unwrap();
+		let pre_data = fs::read(dir.join("pmmr_data.bin")).unwrap();
+		let pre_prun = fs::read(dir.join("pmmr_prun.bin")).unwrap_or_default();
+		let pre_leaf = fs::read(dir.join("pmmr_leaf.bin")).unwrap();
+		let pre_hash_len = pre_hash.len();
+
+		backend.check_compact(mmr_size, &Bitmap::new()).unwrap();
+
+		let post_hash = fs::read(dir.join("pmmr_hash.bin")).unwrap();
+		let post_data = fs::read(dir.join("pmmr_data.bin")).unwrap();
+		let post_prun = fs::read(dir.join("pmmr_prun.bin")).unwrap();
+		let post_leaf = fs::read(dir.join("pmmr_leaf.bin")).unwrap();
+
+		// Full pre-compact live state + post content staged as temps, no journal.
+		fs::write(dir.join("pmmr_hash.bin"), &pre_hash).unwrap();
+		fs::write(dir.join("pmmr_data.bin"), &pre_data).unwrap();
+		fs::write(dir.join("pmmr_prun.bin"), &pre_prun).unwrap();
+		fs::write(dir.join("pmmr_leaf.bin"), &pre_leaf).unwrap();
+		fs::write(dir.join("pmmr_hash.tmp"), &post_hash).unwrap();
+		fs::write(dir.join("pmmr_data.tmp"), &post_data).unwrap();
+		fs::write(dir.join("pmmr_prun.bin.compact"), &post_prun).unwrap();
+		fs::write(dir.join("pmmr_leaf.bin.compact"), &post_leaf).unwrap();
+
+		(root, mmr_size, pre_hash_len)
+	};
+
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		assert!(!dir.join("pmmr_hash.tmp").exists());
+		assert!(!dir.join("pmmr_data.tmp").exists());
+		assert!(!dir.join("pmmr_prun.bin.compact").exists());
+		assert!(!dir.join("pmmr_leaf.bin.compact").exists());
+		assert_eq!(
+			fs::metadata(dir.join("pmmr_hash.bin")).unwrap().len() as usize,
+			pre_hash_len
+		);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root().unwrap());
+	}
+	teardown(data_dir);
+}
+
 #[test]
 fn cleanup_rewind_files_test() {
 	let expected = 10;

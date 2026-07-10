@@ -13,8 +13,9 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::fs;
-use std::{io, time};
+use std::fs::{self, File};
+use std::io::{self, Write};
+use std::time;
 
 use crate::grin_core::core::hash::{Hash, Hashed};
 use crate::grin_core::core::pmmr::{self, family, Backend};
@@ -32,6 +33,12 @@ const PMMR_DATA_FILE: &str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
 const PMMR_SIZE_FILE: &str = "pmmr_size.bin";
+/// Marker written after all compact temps are durable and before any live
+/// file is replaced. Presence means an interrupted compact must roll forward.
+const PMMR_COMPACT_JOURNAL: &str = "pmmr_compact.journal";
+/// Suffix appended to leaf/prune paths for pre-commit compact temps
+/// (`pmmr_prun.bin.compact`). Distinct from `.tmp` used by single-file flushes.
+const PMMR_COMPACT_SUFFIX: &str = ".compact";
 const REWIND_FILE_CLEANUP_DURATION_SECONDS: u64 = 60 * 60 * 24; // 24 hours as seconds
 
 /// The list of PMMR_Files for internal purposes
@@ -41,6 +48,105 @@ pub const PMMR_FILES: [&str; 4] = [
 	PMMR_LEAF_FILE,
 	PMMR_PRUN_FILE,
 ];
+
+/// Path for a leaf/prune compact staging file: `foo.bin` → `foo.bin.compact`.
+fn compact_staging_path(path: &Path) -> PathBuf {
+	let mut os = path.as_os_str().to_os_string();
+	os.push(PMMR_COMPACT_SUFFIX);
+	PathBuf::from(os)
+}
+
+/// Rename `from` over `to` if `from` exists. No-op if the temp is absent
+/// (already applied during a previous partial recovery).
+fn replace_if_present(from: &Path, to: &Path) -> io::Result<()> {
+	if !from.exists() {
+		return Ok(());
+	}
+	// Windows cannot rename over an existing file; Unix replace is atomic.
+	if to.exists() {
+		fs::remove_file(to)?;
+	}
+	fs::rename(from, to)?;
+	Ok(())
+}
+
+/// Apply any durable compact temps into place and clear the journal.
+/// Safe to call when some temps are already gone (partial prior apply).
+fn apply_compact_temps(data_dir: &Path) -> io::Result<()> {
+	replace_if_present(
+		&data_dir.join(PMMR_HASH_FILE).with_extension("tmp"),
+		&data_dir.join(PMMR_HASH_FILE),
+	)?;
+	replace_if_present(
+		&data_dir.join(PMMR_DATA_FILE).with_extension("tmp"),
+		&data_dir.join(PMMR_DATA_FILE),
+	)?;
+	// Size file is optional (fixed-size backends never create one).
+	replace_if_present(
+		&data_dir.join(PMMR_SIZE_FILE).with_extension("tmp"),
+		&data_dir.join(PMMR_SIZE_FILE),
+	)?;
+
+	let prune_path = data_dir.join(PMMR_PRUN_FILE);
+	replace_if_present(&compact_staging_path(&prune_path), &prune_path)?;
+
+	let leaf_path = data_dir.join(PMMR_LEAF_FILE);
+	replace_if_present(&compact_staging_path(&leaf_path), &leaf_path)?;
+
+	let journal = data_dir.join(PMMR_COMPACT_JOURNAL);
+	if journal.exists() {
+		fs::remove_file(&journal)?;
+	}
+	Ok(())
+}
+
+/// Drop orphaned compact staging files left by a crash during prep (no journal).
+fn cleanup_orphan_compact_temps(data_dir: &Path) -> io::Result<()> {
+	let orphans = [
+		data_dir.join(PMMR_HASH_FILE).with_extension("tmp"),
+		data_dir.join(PMMR_DATA_FILE).with_extension("tmp"),
+		data_dir.join(PMMR_SIZE_FILE).with_extension("tmp"),
+		compact_staging_path(&data_dir.join(PMMR_PRUN_FILE)),
+		compact_staging_path(&data_dir.join(PMMR_LEAF_FILE)),
+	];
+	for path in &orphans {
+		if path.exists() {
+			fs::remove_file(path)?;
+		}
+	}
+	Ok(())
+}
+
+/// On open: roll forward a committed compact, or discard uncommitted prep temps.
+fn recover_compact(data_dir: &Path) -> io::Result<()> {
+	let journal = data_dir.join(PMMR_COMPACT_JOURNAL);
+	if journal.exists() {
+		debug!(
+			"pmmr: completing interrupted compaction via journal in {:?}",
+			data_dir
+		);
+		apply_compact_temps(data_dir)?;
+	} else {
+		cleanup_orphan_compact_temps(data_dir)?;
+	}
+	Ok(())
+}
+
+fn write_compact_journal(data_dir: &Path) -> io::Result<()> {
+	let path = data_dir.join(PMMR_COMPACT_JOURNAL);
+	let mut file = File::create(&path)?;
+	// Version byte — existence of the file is the commit signal.
+	file.write_all(b"1")?;
+	file.sync_all()?;
+	// Best-effort directory fsync so the journal entry itself is durable.
+	#[cfg(unix)]
+	{
+		if let Ok(dir) = File::open(data_dir) {
+			let _ = dir.sync_all();
+		}
+	}
+	Ok(())
+}
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
@@ -289,6 +395,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 	) -> io::Result<PMMRBackend<T>> {
 		let data_dir = data_dir.as_ref();
 
+		// Complete or abandon an interrupted compaction before opening files so
+		// hash/data/prune/leaf never disagree after a hard kill mid-compact.
+		if prunable {
+			recover_compact(data_dir)?;
+		}
+
 		// Are we dealing with "fixed size" data elements or "variable size" data elements
 		// maintained in an associated size file?
 		let size_info = if let Some(fixed_size) = T::elmt_size() {
@@ -413,12 +525,20 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// aligned. The block_marker in the db/index for the particular block
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
+	///
+	/// Crash safety: all new files are written to staging paths first, then a
+	/// journal marker is fsynced. Only after the journal is durable are live
+	/// files replaced. If the process is killed mid-replace, the next
+	/// `PMMRBackend::new` rolls the renames forward from the journal so
+	/// hash/data/prune/leaf stay consistent.
 	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
+
+		// --- Phase 1: write all staging files (live files untouched) ---
 
 		// Save compact copy of the hash file, skipping removed data.
 		{
@@ -447,26 +567,35 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.data_file.write_tmp_pruned(&pos_to_rm)?;
 		}
 
-		// Replace hash and data files with compact copies.
-		// Rebuild and intialize from the new files.
-		{
-			debug!("compact: about to replace hash and data files and rebuild...");
-			self.hash_file.replace_with_tmp()?;
-			self.data_file.replace_with_tmp()?;
-			debug!("compact: ...finished replacing and rebuilding");
-		}
+		// Stage the post-compact prune list and leaf set next to the data temps.
+		let mut new_prune_bitmap = self.prune_list.bitmap();
+		new_prune_bitmap.or_inplace(&leaves_removed);
+		let prune_path = self.data_dir.join(PMMR_PRUN_FILE);
+		let prune_staging = compact_staging_path(&prune_path);
+		let new_prune = PruneList::new(Some(prune_path), new_prune_bitmap);
+		new_prune.write_to(&prune_staging)?;
 
-		// Update the prune list and write to disk.
-		{
-			let mut bitmap = self.prune_list.bitmap();
-			bitmap.or_inplace(&leaves_removed);
-			self.prune_list = PruneList::new(Some(self.data_dir.join(PMMR_PRUN_FILE)), bitmap);
-			self.prune_list.flush()?;
-		}
+		let leaf_staging = compact_staging_path(&self.data_dir.join(PMMR_LEAF_FILE));
+		self.leaf_set.write_to(&leaf_staging)?;
 
-		// Write the leaf_set to disk.
-		// Optimize the bitmap storage in the process.
-		self.leaf_set.flush()?;
+		// --- Phase 2: journal commit point (temps are durable) ---
+		write_compact_journal(&self.data_dir)?;
+
+		// --- Phase 3: replace live files, then clear journal ---
+		debug!("compact: applying journaled file replacements...");
+		// Release mmaps/handles so renames succeed on all platforms.
+		self.hash_file.release();
+		self.data_file.release();
+		apply_compact_temps(&self.data_dir)?;
+
+		// Re-open hash/data from the new files (rebuilds size file if needed).
+		self.hash_file.reinit_from_disk()?;
+		self.data_file.reinit_from_disk()?;
+		debug!("compact: ...finished applying replacements");
+
+		// In-memory state matches the files we just installed.
+		self.prune_list = new_prune;
+		self.leaf_set.mark_flushed();
 
 		self.clean_rewind_files()?;
 
