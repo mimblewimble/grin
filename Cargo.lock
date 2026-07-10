@@ -236,6 +236,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bufstream"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40e38929add23cdf8a366df9b0e088953150724bcbe5fc330b0d8eb3b328eec8"
+
+[[package]]
 name = "built"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1123,6 +1129,21 @@ dependencies = [
  "siphasher 0.3.11",
  "thiserror 1.0.69",
  "zeroize",
+]
+
+[[package]]
+name = "grin_integration"
+version = "5.5.1-alpha.0"
+dependencies = [
+ "bufstream",
+ "futures 0.3.32",
+ "grin_api",
+ "grin_core",
+ "grin_p2p",
+ "grin_servers",
+ "grin_util",
+ "log",
+ "serde_json",
 ]
 
 [[package]]
