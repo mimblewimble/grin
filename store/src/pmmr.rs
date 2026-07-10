@@ -15,7 +15,8 @@
 
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::time;
+use std::thread;
+use std::time::{self, Duration};
 
 use crate::grin_core::core::hash::{Hash, Hashed};
 use crate::grin_core::core::pmmr::{self, family, Backend};
@@ -27,6 +28,39 @@ use crate::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 use croaring::Bitmap;
 use std::convert::TryInto;
 use std::path::{Path, PathBuf};
+
+/// Test-only hooks for simulating a hard kill mid-compaction (weak-VPS /
+/// qemu stress harness). Production runs leave these env vars unset so this
+/// is a pure no-op.
+///
+/// - `GRIN_COMPACT_READY_FILE`: path written with the current phase name when
+///   that phase is reached (`hash_tmp`, `data_tmp`, `journal`, `applied`).
+/// - `GRIN_COMPACT_PAUSE_PHASE`: if set to a phase name, sleep while at that
+///   phase so an external watchdog can SIGKILL the process.
+/// - `GRIN_COMPACT_CRASH_PAUSE_MS`: sleep duration in ms (default 5000 when
+///   pause phase is set).
+fn compact_test_hook(phase: &str) {
+	if let Ok(path) = std::env::var("GRIN_COMPACT_READY_FILE") {
+		if !path.is_empty() {
+			let _ = fs::write(&path, phase.as_bytes());
+		}
+	}
+	let pause_phase = match std::env::var("GRIN_COMPACT_PAUSE_PHASE") {
+		Ok(p) if p == phase => p,
+		_ => return,
+	};
+	let ms = std::env::var("GRIN_COMPACT_CRASH_PAUSE_MS")
+		.ok()
+		.and_then(|s| s.parse::<u64>().ok())
+		.unwrap_or(5_000);
+	if ms > 0 {
+		debug!(
+			"compact: test hook pausing {}ms at phase '{}' (env)",
+			ms, pause_phase
+		);
+		thread::sleep(Duration::from_millis(ms));
+	}
+}
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -549,6 +583,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 			self.hash_file.write_tmp_pruned(&pos_to_rm)?;
 		}
+		compact_test_hook("hash_tmp");
 
 		// Save compact copy of the data file, skipping removed leaves.
 		{
@@ -566,6 +601,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 			self.data_file.write_tmp_pruned(&pos_to_rm)?;
 		}
+		compact_test_hook("data_tmp");
 
 		// Stage the post-compact prune list and leaf set next to the data temps.
 		let mut new_prune_bitmap = self.prune_list.bitmap();
@@ -580,6 +616,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// --- Phase 2: journal commit point (temps are durable) ---
 		write_compact_journal(&self.data_dir)?;
+		compact_test_hook("journal");
 
 		// --- Phase 3: replace live files, then clear journal ---
 		debug!("compact: applying journaled file replacements...");
@@ -592,6 +629,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.hash_file.reinit_from_disk()?;
 		self.data_file.reinit_from_disk()?;
 		debug!("compact: ...finished applying replacements");
+		compact_test_hook("applied");
 
 		// In-memory state matches the files we just installed.
 		self.prune_list = new_prune;
