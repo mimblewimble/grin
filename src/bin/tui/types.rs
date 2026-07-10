@@ -15,18 +15,9 @@
 //! Types specific to the UI module
 
 use crate::servers::ServerStats;
-use cursive::Cursive;
 
 /// Main message struct to communicate between the UI and
 /// the main process
 pub enum UIMessage {
 	UpdateStatus(ServerStats),
-}
-
-/// Trait for a UI element that receives status update messages
-/// and updates itself
-
-pub trait TUIStatusListener {
-	/// Update according to status update contents
-	fn update(c: &mut Cursive, stats: &ServerStats);
 }

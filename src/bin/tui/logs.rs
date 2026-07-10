@@ -12,93 +12,104 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cursive::theme::{BaseColor, Color, ColorStyle};
-use cursive::traits::Nameable;
-use cursive::view::View;
-use cursive::views::ResizedView;
-use cursive::{Cursive, Printer};
+//! TUI log display: newest entries anchored to the bottom of the pane,
+//! matching the behavior of the previous cursive-based log view.
 
-use crate::tui::constants::VIEW_LOGS;
-use cursive::utils::lines::spans::{LinesIterator, Row};
-use cursive::utils::markup::StyledString;
-use grin_util::logger::LogEntry;
+use ratatui::layout::Rect;
+use ratatui::style::Color;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
+use ratatui::Frame;
+
+use crate::tui::app::App;
 use log::Level;
-use std::collections::VecDeque;
 
-pub struct TUILogsView;
-
-impl TUILogsView {
-	pub fn create() -> impl View {
-		let logs_view = ResizedView::with_full_screen(LogBufferView::new(200).with_name("logs"));
-		logs_view.with_name(VIEW_LOGS)
-	}
-
-	pub fn update(c: &mut Cursive, entry: LogEntry) {
-		c.call_on_name("logs", |t: &mut LogBufferView| {
-			t.update(entry);
-		});
+fn color(level: Level) -> Color {
+	match level {
+		Level::Info => Color::Green,
+		Level::Warn => Color::Yellow,
+		Level::Error => Color::Red,
+		_ => Color::White,
 	}
 }
 
-struct LogBufferView {
-	buffer: VecDeque<LogEntry>,
-}
-
-impl LogBufferView {
-	fn new(size: usize) -> Self {
-		let mut buffer = VecDeque::new();
-		buffer.resize(
-			size,
-			LogEntry {
-				log: String::new(),
-				level: Level::Info,
-			},
-		);
-
-		LogBufferView { buffer }
-	}
-
-	fn update(&mut self, entry: LogEntry) {
-		self.buffer.push_front(entry);
-		self.buffer.pop_back();
-	}
-
-	fn color(level: Level) -> ColorStyle {
-		match level {
-			Level::Info => ColorStyle::new(
-				Color::Light(BaseColor::Green),
-				Color::Dark(BaseColor::Black),
-			),
-			Level::Warn => ColorStyle::new(
-				Color::Light(BaseColor::Yellow),
-				Color::Dark(BaseColor::Black),
-			),
-			Level::Error => {
-				ColorStyle::new(Color::Light(BaseColor::Red), Color::Dark(BaseColor::Black))
-			}
-			_ => ColorStyle::new(
-				Color::Light(BaseColor::White),
-				Color::Dark(BaseColor::Black),
-			),
-		}
-	}
-}
-
-impl View for LogBufferView {
-	fn draw(&self, printer: &Printer) {
-		let mut i = 0;
-		for entry in self.buffer.iter().take(printer.size.y) {
-			printer.with_color(LogBufferView::color(entry.level), |p| {
-				let log_message = StyledString::plain(entry.log.as_str());
-				let mut rows: Vec<Row> = LinesIterator::new(&log_message, printer.size.x).collect();
-				rows.reverse(); // So stack traces are in the right order.
-				for row in rows {
-					for span in row.resolve(&log_message) {
-						p.print((0, p.size.y.saturating_sub(i + 1)), span.content);
-						i += 1;
-					}
+/// Word-wraps `text` to `width` columns, hard-breaking words that don't fit
+/// on their own. Empty input produces a single empty line.
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
+	let width = width.max(1);
+	let mut out = Vec::new();
+	for raw_line in text.split('\n') {
+		let mut current = String::new();
+		let mut current_len = 0usize;
+		for word in raw_line.split(' ') {
+			let mut word_chars: Vec<char> = word.chars().collect();
+			while word_chars.len() > width {
+				if !current.is_empty() {
+					out.push(std::mem::take(&mut current));
+					current_len = 0;
 				}
-			});
+				let rest = word_chars.split_off(width);
+				out.push(word_chars.into_iter().collect());
+				word_chars = rest;
+			}
+			let word_len = word_chars.len();
+			let needed = word_len + if current.is_empty() { 0 } else { 1 };
+			if current_len + needed > width && !current.is_empty() {
+				out.push(std::mem::take(&mut current));
+				current_len = 0;
+			}
+			if !current.is_empty() {
+				current.push(' ');
+				current_len += 1;
+			}
+			current.push_str(&word_chars.into_iter().collect::<String>());
+			current_len += word_len;
+		}
+		out.push(current);
+	}
+	out
+}
+
+/// Draw the logs view, bottom-anchoring the newest log lines.
+pub fn draw(f: &mut Frame, area: Rect, app: &App) {
+	let width = area.width as usize;
+	let height = area.height as usize;
+
+	// Walk entries newest-first, wrapping each until we have enough rows to
+	// fill the pane, keeping each entry's own lines in the collected block.
+	let mut blocks: Vec<(Vec<String>, Level)> = Vec::new();
+	let mut rows_collected = 0usize;
+	for entry in app.logs.iter() {
+		if rows_collected >= height {
+			break;
+		}
+		let wrapped = wrap_text(entry.log.trim_end_matches('\n'), width);
+		rows_collected += wrapped.len();
+		blocks.push((wrapped, entry.level));
+	}
+
+	// Blocks are newest-first; reverse so oldest is at the top, newest at
+	// the bottom, matching the old bottom-anchored view.
+	blocks.reverse();
+
+	let mut lines: Vec<Line> = Vec::new();
+	for (wrapped, level) in &blocks {
+		for row in wrapped {
+			lines.push(Line::from(Span::styled(row.clone(), color(*level))));
 		}
 	}
+
+	// If the newest block overflowed the pane, keep only the tail.
+	if lines.len() > height {
+		lines.drain(0..lines.len() - height);
+	}
+
+	// Pad with blank lines at the top so short logs still anchor to the
+	// bottom of the pane.
+	let pad = height.saturating_sub(lines.len());
+	let mut padded = Vec::with_capacity(height);
+	padded.resize_with(pad, || Line::from(""));
+	padded.extend(lines);
+
+	f.render_widget(Paragraph::new(padded), area);
 }
