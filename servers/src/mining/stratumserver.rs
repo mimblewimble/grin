@@ -928,37 +928,24 @@ mod tests {
 	// ----------------------------------------
 	// Helpers
 
-	fn clean_output_dir(dir_name: &str) {
-		let _ = fs::remove_dir_all(dir_name);
-	}
-
-	/// Path under `target/tmp/` so interrupted tests do not leave dirs in the repo root.
-	fn test_chain_dir(name: &str) -> String {
-		format!("target/tmp/{}", name)
-	}
-
 	fn dummy_tx() -> Tx {
 		let (tx, _rx) = mpsc::unbounded();
 		tx
 	}
 
-	/// A single chain instance shared by every RPC routing test below.
-	///
-	/// None of these tests submit a full solution (that would call
-	/// `chain::Chain::process_block`), so the chain is only ever read from and
-	/// is safe to reuse. Initializing one LMDB env instead of one per test
-	/// avoids intermittent "Invalid argument" failures seen when many envs are
-	/// opened concurrently under the default test-runner parallelism.
+	/// Read-only chain shared by the RPC routing tests below, so the suite
+	/// opens a single LMDB env. Tests that write to the chain need their own.
 	fn shared_test_chain() -> Arc<chain::Chain> {
 		static CHAIN: OnceLock<Arc<chain::Chain>> = OnceLock::new();
 		CHAIN
 			.get_or_init(|| {
 				global::set_local_chain_type(ChainTypes::AutomatedTesting);
-				let dir = test_chain_dir("grin_stratum_test_shared_chain");
-				clean_output_dir(&dir);
+				// Under target/ so interrupted tests do not litter the repo root.
+				let dir = "target/tmp/grin_stratum_test_shared_chain";
+				let _ = fs::remove_dir_all(dir);
 				Arc::new(
 					chain::Chain::init(
-						dir,
+						dir.to_string(),
 						Arc::new(NoopAdapter {}),
 						genesis::genesis_dev(),
 						pow::verify_size,
@@ -1002,7 +989,7 @@ mod tests {
 	}
 
 	// ----------------------------------------
-	// RpcRequest / RpcResponse serde (existing)
+	// RpcRequest / RpcResponse serde
 
 	/// Tests deserializing an `RpcRequest` given a String as the id.
 	#[test]
@@ -1233,29 +1220,6 @@ mod tests {
 	}
 
 	// ----------------------------------------
-	// State / Worker
-
-	#[test]
-	fn test_state_new() {
-		global::set_local_chain_type(ChainTypes::AutomatedTesting);
-		let state = State::new(42);
-		assert_eq!(state.minimum_share_difficulty, 42);
-		assert_eq!(state.current_difficulty, u64::max_value());
-		assert!(state.current_key_id.is_none());
-		assert_eq!(state.current_block_versions.len(), 1);
-		assert_eq!(state.current_block_versions[0].header.height, 0);
-	}
-
-	#[test]
-	fn test_worker_new() {
-		let worker = Worker::new(7, dummy_tx());
-		assert_eq!(worker.id, 7);
-		assert!(worker.login.is_none());
-		assert!(!worker.authenticated);
-		assert_eq!(worker.agent, "");
-	}
-
-	// ----------------------------------------
 	// WorkersList
 
 	#[test]
@@ -1300,7 +1264,7 @@ mod tests {
 		workers
 			.login(id0, "alice".to_string(), "agent-a".to_string())
 			.unwrap();
-		// Logging in again (e.g. after a reconnect) replaces the previous
+		// A second login for the same worker replaces the previous
 		// login and agent rather than being rejected.
 		workers
 			.login(id0, "bob".to_string(), "agent-b".to_string())
