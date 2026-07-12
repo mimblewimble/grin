@@ -107,7 +107,7 @@ pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 /// `COMPACTION_CHECK` is height-based and assumes ~1 block/minute. During fast
 /// sync many blocks arrive per second, so the probabilistic check alone would
 /// compact far too often and slow sync down. Enforcing a wall-clock gap (1 hour)
-/// limits that without changing post-sync average behavior (#3594).
+/// limits that without changing post-sync average behavior.
 pub const MIN_COMPACTION_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Number of blocks to reuse a txhashset zip for (automated testing and user testing).

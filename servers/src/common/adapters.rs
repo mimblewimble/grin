@@ -61,31 +61,41 @@ const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
-/// Whether enough wall-clock time has passed since the last compaction trigger.
-/// `None` means never compacted yet (always allowed).
-fn compaction_wall_clock_ok(
-	last: Option<Instant>,
-	now: Instant,
+/// Wall-clock + probabilistic gate for chain compaction. If the dice hit and
+/// at least `min_interval` has passed since the last recorded trigger (`None`
+/// means never, always allowed), runs `start` and returns its result; the
+/// trigger time is only recorded if `start` reports success.
+///
+/// The lock is held across check+start+stamp so concurrent callers cannot
+/// double-trigger in the same window, and `now` is read under the lock so an
+/// older caller cannot move the timestamp backwards.
+fn try_trigger_compaction<F>(
+	gate: &Mutex<Option<Instant>>,
 	min_interval: std::time::Duration,
-) -> bool {
-	match last {
+	dice_hit: bool,
+	start: F,
+) -> bool
+where
+	F: FnOnce() -> bool,
+{
+	if !dice_hit {
+		return false;
+	}
+	let mut last = gate.lock();
+	let now = Instant::now();
+	let wall_clock_ok = match *last {
 		None => true,
 		Some(t) => now
 			.checked_duration_since(t)
 			.map(|d| d >= min_interval)
 			.unwrap_or(true),
+	};
+	if wall_clock_ok && start() {
+		*last = Some(now);
+		true
+	} else {
+		false
 	}
-}
-
-/// Combined wall-clock + probabilistic gate used by `check_compact`.
-/// Returns true if a compact thread should be started (caller updates `last`).
-fn should_trigger_compaction(
-	last: Option<Instant>,
-	now: Instant,
-	min_interval: std::time::Duration,
-	dice_hit: bool,
-) -> bool {
-	compaction_wall_clock_ok(last, now, min_interval) && dice_hit
 }
 
 /// Implementation of the NetAdapter for the . Gets notified when new
@@ -998,36 +1008,31 @@ where
 
 	fn check_compact(&self) {
 		// Wall-clock throttle + height-based dice. During fast sync blocks arrive much
-		// faster than mainnet's 1/min, so the dice alone is too aggressive (#3594).
+		// faster than mainnet's 1/min, so the dice alone is too aggressive.
 		let min_interval = std::time::Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
 		let dice_hit = {
 			let mut rng = thread_rng();
 			0 == rng.gen_range(0, global::COMPACTION_CHECK)
 		};
 
-		// Hold the lock across check+stamp+spawn so concurrent process_block calls
-		// cannot double-trigger in the same window, `now` is read under the lock so
-		// it can't be superseded by a newer trigger recorded between check and stamp,
-		// and `last` is only stamped once the compactor thread actually started.
-		let mut last = self.last_compact_trigger.lock();
-		let now = Instant::now();
-		if !should_trigger_compaction(*last, now, min_interval, dice_hit) {
-			return;
-		}
-
-		let chain = self.chain();
-		let syncing = self.sync_state.is_syncing();
-		match thread::Builder::new()
-			.name("compactor".to_string())
-			.spawn(move || {
-				info!("check_compact: starting compaction (syncing={})", syncing);
-				if let Err(e) = chain.compact() {
-					error!("Could not compact chain: {:?}", e);
+		try_trigger_compaction(&self.last_compact_trigger, min_interval, dice_hit, || {
+			let chain = self.chain();
+			let syncing = self.sync_state.is_syncing();
+			match thread::Builder::new()
+				.name("compactor".to_string())
+				.spawn(move || {
+					info!("check_compact: starting compaction (syncing={})", syncing);
+					if let Err(e) = chain.compact() {
+						error!("Could not compact chain: {:?}", e);
+					}
+				}) {
+				Ok(_) => true,
+				Err(e) => {
+					error!("Could not spawn compactor thread: {:?}", e);
+					false
 				}
-			}) {
-			Ok(_) => *last = Some(now),
-			Err(e) => error!("Could not spawn compactor thread: {:?}", e),
-		}
+			}
+		});
 	}
 
 	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {
@@ -1354,98 +1359,62 @@ impl pool::BlockChain for PoolToChainAdapter {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use std::cell::Cell;
 	use std::time::Duration;
 
+	/// Simulate fast sync through the real gate: many "blocks" with the dice
+	/// always hitting must trigger compaction exactly once per wall-clock window.
+	/// Also covers dice misses and a failed start not consuming the window.
 	#[test]
-	fn compaction_wall_clock_allows_first_run() {
-		let now = Instant::now();
-		assert!(compaction_wall_clock_ok(
-			None,
-			now,
-			Duration::from_secs(3600)
-		));
-	}
-
-	#[test]
-	fn compaction_wall_clock_blocks_inside_interval() {
-		let start = Instant::now();
-		// Simulate "last" slightly in the past by sleeping a tiny amount is flaky;
-		// use checked path: last == now means zero elapsed < 1h.
-		assert!(!compaction_wall_clock_ok(
-			Some(start),
-			start,
-			Duration::from_secs(3600)
-		));
-	}
-
-	#[test]
-	fn compaction_wall_clock_allows_after_interval() {
-		let start = Instant::now();
-		// Instant cannot be advanced artificially; use a zero min interval.
-		assert!(compaction_wall_clock_ok(
-			Some(start),
-			start + Duration::from_secs(1),
-			Duration::from_secs(0)
-		));
-		assert!(compaction_wall_clock_ok(
-			Some(start),
-			start + Duration::from_secs(3600),
-			Duration::from_secs(3600)
-		));
-	}
-
-	#[test]
-	fn min_compaction_interval_is_one_hour() {
-		assert_eq!(global::MIN_COMPACTION_INTERVAL_SECS, 60 * 60);
-	}
-
-	/// Simulate fast sync: many blocks, dice always hits, wall clock fixed.
-	/// Compaction must trigger at most once per min_interval window.
-	#[test]
-	fn rapid_sync_compacts_at_most_once_per_wall_clock_window() {
+	fn compaction_gate_triggers_at_most_once_per_wall_clock_window() {
 		let min = Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
-		let t0 = Instant::now();
-		let mut last: Option<Instant> = None;
-		let mut triggers = 0u32;
+		let gate: Mutex<Option<Instant>> = Mutex::new(None);
+		let triggers = Cell::new(0u32);
+		let start = || {
+			triggers.set(triggers.get() + 1);
+			true
+		};
 
-		// 50k "blocks" in the same wall-clock instant (worst-case sync).
+		// 50k "blocks" in one wall-clock window (worst-case sync).
 		for _ in 0..50_000 {
-			if should_trigger_compaction(last, t0, min, true) {
-				triggers += 1;
-				last = Some(t0);
-			}
+			try_trigger_compaction(&gate, min, true, start);
 		}
 		assert_eq!(
-			triggers, 1,
+			triggers.get(),
+			1,
 			"expected exactly one compact trigger in a single wall-clock window"
 		);
 
-		// Still inside the window → no more triggers.
-		let t_mid = t0 + Duration::from_secs(min.as_secs() / 2);
-		for _ in 0..10_000 {
-			if should_trigger_compaction(last, t_mid, min, true) {
-				triggers += 1;
-				last = Some(t_mid);
-			}
-		}
-		assert_eq!(triggers, 1, "half-interval must not allow another compact");
+		// Dice miss never triggers, even on a fresh gate.
+		assert!(!try_trigger_compaction(
+			&Mutex::new(None),
+			min,
+			false,
+			start
+		));
+		assert_eq!(triggers.get(), 1);
 
-		// After full interval → one more trigger allowed.
-		let t_next = t0 + min;
-		assert!(should_trigger_compaction(last, t_next, min, true));
-		last = Some(t_next);
-		triggers += 1;
-		assert_eq!(triggers, 2);
+		// A failed start must not consume the window: the next successful
+		// start is still allowed.
+		let gate = Mutex::new(None);
+		assert!(!try_trigger_compaction(&gate, min, true, || false));
+		assert!(try_trigger_compaction(&gate, min, true, start));
+		assert_eq!(triggers.get(), 2);
 
-		// Dice miss even after interval → no trigger.
-		assert!(!should_trigger_compaction(last, t_next + min, min, false));
+		// Once the interval has elapsed the gate opens again (zero interval
+		// stands in for elapsed time, since `Instant` cannot be advanced).
+		assert!(try_trigger_compaction(
+			&gate,
+			Duration::from_secs(0),
+			true,
+			start
+		));
+		assert_eq!(triggers.get(), 3);
 	}
 
-	/// Exercises the shared lock-then-check-then-stamp path from multiple threads,
-	/// mirroring `check_compact`'s locking so the gate itself (not just the pure
-	/// helper) is proven to serialize concurrent triggers.
+	/// Concurrent callers racing on the shared gate must trigger at most once.
 	#[test]
-	fn concurrent_check_compact_gate_triggers_at_most_once() {
+	fn concurrent_compaction_gate_triggers_at_most_once() {
 		use std::sync::atomic::{AtomicU32, Ordering};
 		use std::sync::Barrier;
 
@@ -1462,14 +1431,10 @@ mod tests {
 				let barrier = barrier.clone();
 				thread::spawn(move || {
 					barrier.wait();
-					// Same order as check_compact: acquire the lock, then read `now`
-					// under it, then stamp before releasing.
-					let mut last = gate.lock();
-					let now = Instant::now();
-					if should_trigger_compaction(*last, now, min, true) {
+					try_trigger_compaction(&gate, min, true, || {
 						triggers.fetch_add(1, Ordering::SeqCst);
-						*last = Some(now);
-					}
+						true
+					});
 				})
 			})
 			.collect();
