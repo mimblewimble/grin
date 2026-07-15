@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use grin_store as store;
+use std::fs;
 
 use crate::store::prune_list::PruneList;
 
@@ -59,6 +60,27 @@ fn test_is_pruned() {
 	assert_eq!(pl.is_pruned(2), true);
 	assert_eq!(pl.is_pruned(3), true);
 	assert_eq!(pl.is_pruned(4), false);
+}
+
+#[test]
+fn test_discard_restores_flushed_state() {
+	let test_dir = "target/test_prune_list_discard";
+	let _ = fs::remove_dir_all(test_dir);
+	fs::create_dir_all(test_dir).unwrap();
+	let path = format!("{}/pmmr_prun.bin", test_dir);
+
+	let mut pl = PruneList::new(Some(path.clone().into()), Default::default());
+	pl.append(0);
+	pl.flush().unwrap();
+
+	pl.append(2);
+	assert!(pl.is_pruned_root(2));
+
+	pl.discard().unwrap();
+	assert!(pl.is_pruned_root(0));
+	assert!(!pl.is_pruned_root(2));
+
+	let _ = fs::remove_dir_all(test_dir);
 }
 
 #[test]

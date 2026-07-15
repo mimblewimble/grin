@@ -14,17 +14,22 @@ FROM debian:trixie-slim
 COPY --from=builder /usr/src/grin/target/release/grin /usr/local/bin/grin
 
 RUN apt update && \
-    apt install -y libncursesw5-dev
+    apt install -y libncursesw5-dev && \
+    apt-get install -y ca-certificates && update-ca-certificates
 
 # Create mainnet config
 WORKDIR /root/.grin/main
 RUN grin server config
 RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
+RUN sed -i '/^api_http_addr /s/=.*$/= "0.0.0.0:3413"/' grin-server.toml
 
 # Create testnet config
 WORKDIR /root/.grin/test
 RUN grin --testnet server config
 RUN sed -i '/^run_tui /s/=.*$/= false/' grin-server.toml
+RUN sed -i '/^api_http_addr /s/=.*$/= "0.0.0.0:13413"/' grin-server.toml
+
+VOLUME ["/root/.grin"]
 
 # Mainnet ports
 EXPOSE 3413 3414
@@ -36,5 +41,5 @@ EXPOSE 13413 13414
 EXPOSE 3416
 
 WORKDIR /root/.grin
-ENTRYPOINT ["grin"]
+ENTRYPOINT ["grin", "--no-tui"]
 CMD ["server", "run"]

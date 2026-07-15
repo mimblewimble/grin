@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 # check we're in the grin root
 if [ ! -f "LICENSE" ] ; then
 	echo "Script must be run from Grin's root directory"
@@ -17,7 +19,7 @@ then
 fi
 
 echo
-crates=( util keychain core store chain pool p2p api wallet servers config )
+crates=( util keychain core store chain pool p2p api servers config )
 
 for crate in "${crates[@]}"
 do

@@ -131,9 +131,28 @@ impl<T: PMMRable> PMMRHandle<T> {
 impl PMMRHandle<BlockHeader> {
 	/// Used during chain init to ensure the header PMMR is consistent with header_head in the db.
 	pub fn init_head(&mut self, head: &Tip) -> Result<(), Error> {
-		let head_hash = self.head_hash()?;
-		let expected_hash = self.get_header_hash_by_height(head.height)?;
+		let original_size = self.size;
+		let size = pmmr::insertion_to_pmmr_index(head.height + 1);
+
+		if size > original_size {
+			error!(
+				"header PMMR inconsistent: size {} smaller than req. size {} at height {}",
+				original_size, size, head.height
+			);
+			return Err(Error::Other("header PMMR inconsistent".to_string()));
+		}
+
+		// Recover from a crash or restart during header sync where the header PMMR files
+		self.size = size;
+		let expected_hash = match self.get_header_hash_by_height(head.height) {
+			Ok(hash) => hash,
+			Err(e) => {
+				self.size = original_size;
+				return Err(e);
+			}
+		};
 		if head.hash() != expected_hash {
+			self.size = original_size;
 			error!(
 				"header PMMR inconsistent: {} vs {} at {}",
 				expected_hash,
@@ -143,13 +162,9 @@ impl PMMRHandle<BlockHeader> {
 			return Err(Error::Other("header PMMR inconsistent".to_string()));
 		}
 
-		// use next header pos to find our size.
-		let next_height = head.height + 1;
-		let size = pmmr::insertion_to_pmmr_index(next_height);
-
 		debug!(
-			"init_head: header PMMR: current head {} at pos {}",
-			head_hash, self.size
+			"init_head: header PMMR: validated head {} from original pos {}",
+			expected_hash, original_size
 		);
 		debug!(
 			"init_head: header PMMR: resetting to {} at pos {} (height {})",
@@ -389,7 +404,7 @@ impl TxHashSet {
 	pub fn kernel_pmmr_at(
 		&self,
 		header: &BlockHeader,
-	) -> ReadonlyPMMR<TxKernel, PMMRBackend<TxKernel>> {
+	) -> ReadonlyPMMR<'_, TxKernel, PMMRBackend<TxKernel>> {
 		ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, header.kernel_mmr_size)
 	}
 
@@ -397,7 +412,7 @@ impl TxHashSet {
 	pub fn output_pmmr_at(
 		&self,
 		header: &BlockHeader,
-	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+	) -> ReadonlyPMMR<'_, OutputIdentifier, PMMRBackend<OutputIdentifier>> {
 		ReadonlyPMMR::at(&self.output_pmmr_h.backend, header.output_mmr_size)
 	}
 
@@ -405,7 +420,7 @@ impl TxHashSet {
 	pub fn rangeproof_pmmr_at(
 		&self,
 		header: &BlockHeader,
-	) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+	) -> ReadonlyPMMR<'_, RangeProof, PMMRBackend<RangeProof>> {
 		ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, header.output_mmr_size)
 	}
 
@@ -538,7 +553,7 @@ impl TxHashSet {
 	pub fn init_recent_kernel_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		let head = batch.head()?;
 		let cutoff = head.height.saturating_sub(WEEK_HEIGHT * 2);
@@ -552,7 +567,7 @@ impl TxHashSet {
 		&self,
 		from_header: &BlockHeader,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 		status: Option<Arc<SyncState>>,
 		stop_state: Option<Arc<StopState>>,
 	) -> Result<(), Error> {
@@ -635,7 +650,7 @@ impl TxHashSet {
 	pub fn init_output_pos_index(
 		&self,
 		header_pmmr: &PMMRHandle<BlockHeader>,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		let now = Instant::now();
 
@@ -643,21 +658,27 @@ impl TxHashSet {
 
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
-		let mut removed_count = 0;
-		for (key, pos1) in batch.output_pos_iter()? {
-			let pos0 = pos1.pos - 1;
-			if let Some(out) = output_pmmr.get_data(pos0) {
-				if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
-					// If the pos matches and the index key matches the commitment
-					// then keep the entry, other we want to clean it up.
-					if pos0 == pos0_via_mmr
-						&& batch.is_match_output_pos_key(&key, &out.commitment())
-					{
-						continue;
+		let mut pos_to_delete = vec![];
+		for kp in batch.output_pos_iter()? {
+			if let Ok((key, pos1)) = kp {
+				let pos0 = pos1.pos - 1;
+				if let Some(out) = output_pmmr.get_data(pos0) {
+					if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
+						// If the pos matches and the index key matches the commitment
+						// then keep the entry, other we want to clean it up.
+						if pos0 == pos0_via_mmr
+							&& batch.is_match_output_pos_key(&key, &out.commitment())
+						{
+							continue;
+						}
 					}
 				}
+				pos_to_delete.push(key);
 			}
-			batch.delete(&key)?;
+		}
+		let mut removed_count = 0;
+		for p in pos_to_delete {
+			batch.delete(Some(store::OUTPUT_POS_PREFIX), &p)?;
 			removed_count += 1;
 		}
 		debug!(
@@ -733,10 +754,10 @@ pub fn extending_readonly<F, T>(
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut ExtensionPair<'_>, &Batch<'_>) -> Result<T, Error>,
+	F: FnOnce(&mut ExtensionPair<'_>, &mut Batch<'_>) -> Result<T, Error>,
 {
 	let commit_index = trees.commit_index.clone();
-	let batch = commit_index.batch()?;
+	let mut batch = commit_index.batch()?;
 
 	trace!("Starting new txhashset (readonly) extension.");
 
@@ -751,7 +772,7 @@ where
 			header_extension: &mut header_extension,
 			extension: &mut extension,
 		};
-		inner(&mut extension_pair, &batch)
+		inner(&mut extension_pair, &mut batch)
 	};
 
 	trace!("Rollbacking txhashset (readonly) extension.");
@@ -830,7 +851,7 @@ pub fn extending<'a, F, T>(
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut ExtensionPair<'_>, &Batch<'_>) -> Result<T, Error>,
+	F: FnOnce(&mut ExtensionPair<'_>, &mut Batch<'_>) -> Result<T, Error>,
 {
 	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
@@ -842,7 +863,7 @@ where
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
-	let child_batch = batch.child()?;
+	let mut child_batch = batch.child()?;
 	{
 		trace!("Starting new txhashset extension.");
 
@@ -853,7 +874,7 @@ where
 			header_extension: &mut header_extension,
 			extension: &mut extension,
 		};
-		res = inner(&mut extension_pair, &child_batch);
+		res = inner(&mut extension_pair, &mut child_batch);
 
 		rollback = extension_pair.extension.rollback;
 		sizes = extension_pair.extension.sizes();
@@ -901,15 +922,15 @@ where
 /// Start a new readonly header MMR extension.
 /// This MMR can be extended individually beyond the other (output, rangeproof and kernel) MMRs
 /// to allow headers to be validated before we receive the full block data.
-pub fn header_extending_readonly<'a, F, T>(
-	handle: &'a mut PMMRHandle<BlockHeader>,
+pub fn header_extending_readonly<F, T>(
+	handle: &mut PMMRHandle<BlockHeader>,
 	store: &ChainStore,
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut HeaderExtension<'_>, &Batch<'_>) -> Result<T, Error>,
+	F: FnOnce(&mut HeaderExtension<'_>, &mut Batch<'_>) -> Result<T, Error>,
 {
-	let batch = store.batch()?;
+	let mut batch = store.batch()?;
 
 	let head = match handle.head_hash() {
 		Ok(hash) => {
@@ -921,7 +942,7 @@ where
 
 	let pmmr = PMMR::at(&mut handle.backend, handle.size);
 	let mut extension = HeaderExtension::new(pmmr, head);
-	let res = inner(&mut extension, &batch);
+	let res = inner(&mut extension, &mut batch);
 
 	handle.backend.discard();
 
@@ -937,7 +958,7 @@ pub fn header_extending<'a, F, T>(
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut HeaderExtension<'_>, &Batch<'_>) -> Result<T, Error>,
+	F: FnOnce(&mut HeaderExtension<'_>, &mut Batch<'_>) -> Result<T, Error>,
 {
 	let size: u64;
 	let res: Result<T, Error>;
@@ -945,7 +966,7 @@ where
 
 	// create a child transaction so if the state is rolled back by itself, all
 	// index saving can be undone
-	let child_batch = batch.child()?;
+	let mut child_batch = batch.child()?;
 
 	let head = match handle.head_hash() {
 		Ok(hash) => {
@@ -958,7 +979,7 @@ where
 	{
 		let pmmr = PMMR::at(&mut handle.backend, handle.size);
 		let mut extension = HeaderExtension::new(pmmr, head);
-		res = inner(&mut extension, &child_batch);
+		res = inner(&mut extension, &mut child_batch);
 
 		rollback = extension.rollback;
 		size = extension.size();
@@ -1201,7 +1222,7 @@ impl<'a> Extension<'a> {
 	/// Readonly view of our output data.
 	pub fn output_readonly_pmmr(
 		&self,
-	) -> ReadonlyPMMR<OutputIdentifier, PMMRBackend<OutputIdentifier>> {
+	) -> ReadonlyPMMR<'_, OutputIdentifier, PMMRBackend<OutputIdentifier>> {
 		self.output_pmmr.readonly_pmmr()
 	}
 
@@ -1211,12 +1232,12 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Readonly view of our bitmap accumulator data.
-	pub fn bitmap_readonly_pmmr(&self) -> ReadonlyPMMR<BitmapChunk, VecBackend<BitmapChunk>> {
+	pub fn bitmap_readonly_pmmr(&self) -> ReadonlyPMMR<'_, BitmapChunk, VecBackend<BitmapChunk>> {
 		self.bitmap_accumulator.readonly_pmmr()
 	}
 
 	/// Readonly view of our rangeproof data.
-	pub fn rproof_readonly_pmmr(&self) -> ReadonlyPMMR<RangeProof, PMMRBackend<RangeProof>> {
+	pub fn rproof_readonly_pmmr(&self) -> ReadonlyPMMR<'_, RangeProof, PMMRBackend<RangeProof>> {
 		self.rproof_pmmr.readonly_pmmr()
 	}
 
@@ -1233,7 +1254,7 @@ impl<'a> Extension<'a> {
 		&mut self,
 		b: &Block,
 		header_ext: &HeaderExtension<'_>,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		let mut affected_pos = vec![];
 
@@ -1499,7 +1520,7 @@ impl<'a> Extension<'a> {
 		&mut self,
 		kernels: &[TxKernel],
 		height: u64,
-		batch: &Batch<'_>,
+		batch: &mut Batch<'_>,
 	) -> Result<(), Error> {
 		for kernel in kernels {
 			let pos = self.apply_kernel(kernel)?;
@@ -1579,7 +1600,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block. If `updated_bitmap` is supplied, the
 	/// bitmap accumulator will be replaced with its contents
-	pub fn rewind(&mut self, header: &BlockHeader, batch: &Batch<'_>) -> Result<(), Error> {
+	pub fn rewind(&mut self, header: &BlockHeader, batch: &mut Batch) -> Result<(), Error> {
 		debug!(
 			"Rewind extension to {} at {} from {} at {}",
 			header.hash(),
@@ -1622,7 +1643,11 @@ impl<'a> Extension<'a> {
 	// Rewind the MMRs and the output_pos index.
 	// Returns a vec of "affected_pos" so we can apply the necessary updates to the bitmap
 	// accumulator in a single pass for all rewound blocks.
-	fn rewind_single_block(&mut self, block: &Block, batch: &Batch<'_>) -> Result<Vec<u64>, Error> {
+	fn rewind_single_block(
+		&mut self,
+		block: &Block,
+		batch: &mut Batch<'_>,
+	) -> Result<Vec<u64>, Error> {
 		let header = &block.header;
 		let prev_header = batch.get_previous_header(&header)?;
 
@@ -2206,7 +2231,11 @@ fn input_pos_to_rewind(
 }
 
 /// If NRD enabled then enforce NRD relative height rules.
-fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> Result<(), Error> {
+fn apply_kernel_rules(
+	kernel: &TxKernel,
+	pos: CommitPos,
+	batch: &mut Batch<'_>,
+) -> Result<(), Error> {
 	if !global::is_nrd_enabled() {
 		return Ok(());
 	}
@@ -2236,4 +2265,46 @@ fn apply_kernel_rules(kernel: &TxKernel, pos: CommitPos, batch: &Batch<'_>) -> R
 		_ => {}
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::time::{SystemTime, UNIX_EPOCH};
+
+	fn test_dir(name: &str) -> PathBuf {
+		let nanos = SystemTime::now()
+			.duration_since(UNIX_EPOCH)
+			.expect("system time")
+			.as_nanos();
+		std::env::temp_dir().join(format!("grin_txhashset_{}_{}", name, nanos))
+	}
+
+	#[test]
+	fn init_head_recovers_from_advanced_header_pmmr_size() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+
+		let dir = test_dir("header_pmmr_init_head");
+		let genesis = global::get_genesis_block().header;
+		let mut handle =
+			PMMRHandle::<BlockHeader>::new(&dir, false, ProtocolVersion(1), None).unwrap();
+
+		{
+			let mut pmmr = PMMR::at(&mut handle.backend, handle.size);
+			pmmr.push(&genesis).unwrap();
+			handle.size = pmmr.unpruned_size();
+		}
+		handle.backend.sync().unwrap();
+
+		let committed_size = handle.size;
+		handle.size = committed_size + 2;
+
+		assert!(handle.head_hash().is_err());
+		handle.init_head(&Tip::from_header(&genesis)).unwrap();
+
+		assert_eq!(handle.size, committed_size);
+		assert_eq!(handle.head_hash().unwrap(), genesis.hash());
+
+		fs::remove_dir_all(dir).unwrap();
+	}
 }

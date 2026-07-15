@@ -61,7 +61,7 @@ fn check_known() {
 	{
 		let chain = init_chain(chain_dir, genesis.clone());
 		let store = chain.store();
-		let batch = store.batch().unwrap();
+		let mut batch = store.batch().unwrap();
 		let head_header = chain.head_header().unwrap();
 		let prev = batch.get_previous_header(&head_header).unwrap();
 		batch.save_body_head(&Tip::from_header(&prev)).unwrap();

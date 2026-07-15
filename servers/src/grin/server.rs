@@ -16,6 +16,7 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
+use fs2::FileExt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
@@ -25,8 +26,6 @@ use std::{
 	thread::{self, JoinHandle},
 	time::{self, Duration},
 };
-
-use fs2::FileExt;
 use walkdir::WalkDir;
 
 use crate::api;
@@ -39,7 +38,7 @@ use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{
 	ChainStats, DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats, TxStats,
 };
-use crate::common::types::{Error, ServerConfig, StratumServerConfig};
+use crate::common::types::{Error, ServerConfig, ServerInitStatus, StratumServerConfig};
 use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
@@ -51,10 +50,8 @@ use crate::p2p::types::{Capabilities, PeerAddr};
 use crate::pool;
 use crate::util::file::get_first_line;
 use crate::util::{RwLock, StopState};
-use futures::channel::oneshot;
-use grin_util::logger::LogEntry;
 
-/// Arcified  thread-safe TransactionPool with type parameters used by server components
+/// Thread-safe TransactionPool with type parameters used by server components
 pub type ServerTxPool = Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, PoolToNetAdapter>>>;
 
 /// Grin server holding internal structures.
@@ -75,29 +72,28 @@ pub struct Server {
 	pub stop_state: Arc<StopState>,
 	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
 	lock_file: Arc<File>,
+	start_time: time::Instant,
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
 }
 
 impl Server {
-	/// Instantiates and starts a new server. Optionally takes a callback
-	/// for the server to send an ARC copy of itself, to allow another process
-	/// to poll info about the server status
-	pub fn start<F>(
+	/// Instantiates and starts a new server, optionally sending initialization
+	/// status updates through the provided channel.
+	pub fn start(
 		config: ServerConfig,
-		logs_rx: Option<mpsc::Receiver<LogEntry>>,
-		mut info_callback: F,
 		stop_state: Option<Arc<StopState>>,
-		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-	) -> Result<(), Error>
-	where
-		F: FnMut(Server, Option<mpsc::Receiver<LogEntry>>),
-	{
+		server_tx: Option<mpsc::Sender<ServerInitStatus>>,
+		api_chan: (
+			tokio::sync::mpsc::Sender<()>,
+			tokio::sync::mpsc::Receiver<()>,
+		),
+	) -> Result<Server, Error> {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Server::new(config, stop_state, api_chan)?;
+		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -118,8 +114,7 @@ impl Server {
 			}
 		}
 
-		info_callback(serv, logs_rx);
-		Ok(())
+		Ok(serv)
 	}
 
 	// Exclusive (advisory) lock_file to ensure we do not run multiple
@@ -151,17 +146,19 @@ impl Server {
 	pub fn new(
 		config: ServerConfig,
 		stop_state: Option<Arc<StopState>>,
-		api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+		server_tx: Option<mpsc::Sender<ServerInitStatus>>,
+		api_chan: (
+			tokio::sync::mpsc::Sender<()>,
+			tokio::sync::mpsc::Receiver<()>,
+		),
 	) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
+		let start_time = time::Instant::now();
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
-		let archive_mode = match config.archive_mode {
-			None => false,
-			Some(b) => b,
-		};
+		let archive_mode = config.archive_mode.unwrap_or_else(|| false);
 
 		let stop_state = if stop_state.is_some() {
 			stop_state.unwrap()
@@ -181,7 +178,7 @@ impl Server {
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
 			tx_pool.clone(),
-			init_chain_hooks(&config),
+			init_chain_hooks(&config)?,
 		));
 
 		let genesis = match config.chain_type {
@@ -193,12 +190,33 @@ impl Server {
 
 		info!("Starting server, genesis block: {}", genesis.hash());
 
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::LoadDatabase);
+		}
+
+		let (db_migration_prog_tx, db_migration_prog_rx) = std::sync::mpsc::channel::<i8>();
+		if let Some(ref server_tx) = server_tx {
+			let server_tx = server_tx.clone();
+			thread::spawn(move || loop {
+				match db_migration_prog_rx.recv() {
+					Ok(p) => {
+						if p == 100 {
+							break;
+						}
+						let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
+					}
+					Err(_) => break,
+				}
+			});
+		}
+
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
 			archive_mode,
+			Some(db_migration_prog_tx),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());
@@ -208,17 +226,21 @@ impl Server {
 			shared_chain.clone(),
 			tx_pool.clone(),
 			config.clone(),
-			init_net_hooks(&config),
+			init_net_hooks(&config)?,
 		));
 
 		// Initialize our capabilities.
-		// Currently either "default" or with optional "archive_mode" (block history) support enabled.
+		// Currently, either "default" or with optional "archive_mode" (block history) support enabled.
 		let capabilities = if let Some(true) = config.archive_mode {
 			Capabilities::default() | Capabilities::BLOCK_HIST
 		} else {
 			Capabilities::default()
 		};
 		debug!("Capabilities: {:?}", capabilities);
+
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::StartSync);
+		}
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			&config.db_root,
@@ -237,26 +259,8 @@ impl Server {
 		let mut connect_thread = None;
 
 		if config.p2p_config.seeding_type != p2p::Seeding::Programmatic {
-			let seed_list = match config.p2p_config.seeding_type {
-				p2p::Seeding::None => {
-					warn!("No seed configured, will stay solo until connected to");
-					seed::predefined_seeds(vec![])
-				}
-				p2p::Seeding::List => match &config.p2p_config.seeds {
-					Some(seeds) => seed::predefined_seeds(seeds.peers.clone()),
-					None => {
-						return Err(Error::Configuration(
-							"Seeds must be configured for seeding type List".to_owned(),
-						));
-					}
-				},
-				p2p::Seeding::DNSSeed => seed::default_dns_seeds(),
-				_ => unreachable!(),
-			};
-
 			connect_thread = Some(seed::connect_and_monitor(
 				p2p_server.clone(),
-				seed_list,
 				config.p2p_config.clone(),
 				stop_state.clone(),
 			)?);
@@ -282,6 +286,10 @@ impl Server {
 					error!("P2P server failed with erorr: {:?}", e);
 				}
 			})?;
+
+		if let Some(ref server_tx) = server_tx {
+			let _ = server_tx.send(ServerInitStatus::StartAPI);
+		}
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
@@ -333,6 +341,7 @@ impl Server {
 			},
 			stop_state,
 			lock_file,
+			start_time,
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
@@ -392,10 +401,9 @@ impl Server {
 	) {
 		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
-		let config_wallet_url = match wallet_listener_url.clone() {
-			Some(u) => u,
-			None => String::from("http://127.0.0.1:13415"),
-		};
+		let config_wallet_url = wallet_listener_url
+			.clone()
+			.unwrap_or_else(|| String::from("http://127.0.0.1:13415"));
 
 		let config = StratumServerConfig {
 			attempt_time_per_block: 60,
@@ -537,15 +545,16 @@ impl Server {
 		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000_f64));
 
 		Ok(ServerStats {
+			uptime_seconds: self.start_time.elapsed().as_secs(),
 			peer_count: self.peer_count(),
 			chain_stats: head_stats,
-			header_stats: header_stats,
+			header_stats,
 			sync_status: self.sync_state.status(),
-			disk_usage_gb: disk_usage_gb,
-			stratum_stats: stratum_stats,
-			peer_stats: peer_stats,
-			diff_stats: diff_stats,
-			tx_stats: tx_stats,
+			disk_usage_gb,
+			stratum_stats,
+			peer_stats,
+			diff_stats,
+			tx_stats,
 		})
 	}
 

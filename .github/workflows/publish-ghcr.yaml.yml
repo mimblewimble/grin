@@ -2,17 +2,34 @@ name: Build and Push to GHCR
 
 on:
   push:
-    branches: [master]
+    branches: [master, staging]
+
+env:
+  GHCR_IMAGE: ghcr.io/${{ secrets.GHCR_USERNAME }}/${{ github.event.repository.name }}
 
 jobs:
-  build-andpush:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    name: Build Docker image for ${{ matrix.platform }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Prepare
+        run: |
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_IMAGE }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -21,18 +38,105 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          build-args: |
+            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
+          provenance: false # Disable provenance to avoid unknown/unknown
+          sbom: false       # Disable sbom to avoid unknown/unknown
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          tags: ${{ env.GHCR_IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v6
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge Docker manifests
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v7
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Generate image tag
         id: vars
-        run: echo "tag=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)" >> $GITHUB_OUTPUT
+        run: |
+          version=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)
+          if ${{ github.ref_name == 'master' }}; then
+            echo "version=$version" >> $GITHUB_OUTPUT
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "version=${version}-staging" >> $GITHUB_OUTPUT
+            echo "tag=staging" >> $GITHUB_OUTPUT
+          fi
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: .
-          file: ./Dockerfile
-          push: true
+          images: ${{ env.GHCR_IMAGE }}
           tags: |
-            ghcr.io/${{ secrets.GHCR_USERNAME }}/grin:latest
-            ghcr.io/${{ secrets.GHCR_USERNAME }}/grin:${{ steps.vars.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            type=raw,value=${{ steps.vars.outputs.version }},enable=true
+            type=raw,value=${{ steps.vars.outputs.tag }},enable=true
+
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+          $(printf '${{ env.GHCR_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.version }}
+
+  telegram-notify:
+    name: Telegram Notification
+    needs: [build, merge]
+    if: always()
+    uses: ./.github/workflows/telegram.yaml
+    secrets: inherit
+    with:
+      title: Grin Docker
+      status: ${{ contains(join(needs.*.result, ','), 'failure') && 'failed' || contains(join(needs.*.result, ','), 'cancelled') && 'cancelled' || 'success' }}
+      details: |
+        <b>Images:</b> ${{ needs.build.result }}
+        <b>Manifest:</b> ${{ needs.merge.result }}
+      image_tag: ${{ github.ref_name == 'master' && 'latest' || 'staging' }}
+      commit_message: ${{ github.event.head_commit.message }}

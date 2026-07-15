@@ -11,6 +11,10 @@ args:
       help: Run grin as a local-only network. Doesn't block peer connections but will not connect to any peer or seed
       long: usernet
       takes_value: false
+  - no-tui:
+      help: Disable the interactive TUI ignoring configuration file value (force log-only mode)
+      long: no-tui
+      takes_value: false
 subcommands:
   - clean:
       about: Clean Grin chain data
@@ -102,4 +106,8 @@ subcommands:
           - output:
               help: Output file to write the results to
               long: output
+              takes_value: true
+          - seed:
+              help: DNS seed hostname to check instead of the default seed list
+              long: seed
               takes_value: true

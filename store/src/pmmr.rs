@@ -399,6 +399,9 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.hash_file.discard();
 		self.data_file.discard();
 		self.leaf_set.discard();
+		if let Err(e) = self.prune_list.discard() {
+			error!("Discarding prune list changes: {}", e);
+		}
 	}
 
 	/// Takes the leaf_set at a given cutoff_pos and generates an updated

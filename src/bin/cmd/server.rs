@@ -13,62 +13,73 @@
 // limitations under the License.
 
 /// Grin server commands processing
+use clap::ArgMatches;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
-
-use clap::ArgMatches;
 
 use crate::config::GlobalConfig;
 use crate::p2p::Seeding;
 use crate::servers;
 use crate::tui::ui;
-use futures::channel::oneshot;
 use grin_p2p::msg::PeerAddrs;
 use grin_p2p::PeerAddr;
+use grin_servers::common::types::ServerInitStatus;
+use grin_servers::Server;
 use grin_util::logger::LogEntry;
-use std::sync::mpsc;
+use grin_util::StopState;
 
-/// wrap below to allow UI to clean up on stop
+/// Start node server at TUI or non-TUI mode.
 pub fn start_server(
 	config: servers::ServerConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
-	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+	api_chan: (
+		tokio::sync::mpsc::Sender<()>,
+		tokio::sync::mpsc::Receiver<()>,
+	),
 ) {
-	start_server_tui(config, logs_rx, api_chan);
-	exit(0);
-}
-
-fn start_server_tui(
-	config: servers::ServerConfig,
-	logs_rx: Option<mpsc::Receiver<LogEntry>>,
-	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
-) {
-	// Run the UI controller.. here for now for simplicity to access
-	// everything it might need
-	if config.run_tui.unwrap_or(false) {
+	let exit_code = if config.run_tui.unwrap_or(false) {
 		warn!("Starting GRIN in UI mode...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, logs_rx: Option<mpsc::Receiver<LogEntry>>| {
-				let mut controller = ui::Controller::new(logs_rx.unwrap()).unwrap_or_else(|e| {
-					panic!("Error loading UI controller: {}", e);
-				});
-				controller.run(serv);
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
+		// Run the UI controller.
+		let (serv_tx, serv_rx) = mpsc::channel::<ServerInitStatus>();
+		let mut controller = ui::Controller::new(logs_rx, serv_rx).unwrap_or_else(|e| {
+			panic!("Error loading UI controller: {}", e);
+		});
+		let serv_tx_clone = serv_tx.clone();
+		let stop_state = Arc::new(StopState::new());
+		let stop_state_clone = stop_state.clone();
+		let server_thread = thread::spawn(move || {
+			match Server::start(
+				config,
+				Some(stop_state_clone.clone()),
+				Some(serv_tx_clone.clone()),
+				api_chan,
+			) {
+				Ok(s) => {
+					if stop_state_clone.is_stopped() {
+						s.stop();
+						return;
+					}
+					let _ = serv_tx_clone.send(ServerInitStatus::FinishedLoading(s));
+				}
+				Err(e) => {
+					let _ = serv_tx_clone.send(ServerInitStatus::ErrorLoading(e));
+				}
+			}
+		});
+		let exit_code = controller.run();
+		stop_state.stop();
+		if let Err(e) = server_thread.join() {
+			error!("Failed to join server startup thread: {:?}", e);
+		}
+		controller.stop_server();
+		exit_code
 	} else {
 		warn!("Starting GRIN w/o UI...");
-		servers::Server::start(
-			config,
-			logs_rx,
-			|serv: servers::Server, _: Option<mpsc::Receiver<LogEntry>>| {
+		match Server::start(config, None, None, api_chan) {
+			Ok(s) => {
 				let running = Arc::new(AtomicBool::new(true));
 				let r = running.clone();
 				ctrlc::set_handler(move || {
@@ -79,13 +90,16 @@ fn start_server_tui(
 					thread::sleep(Duration::from_secs(1));
 				}
 				warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
-				serv.stop();
-			},
-			None,
-			api_chan,
-		)
-		.unwrap();
-	}
+				s.stop();
+				0
+			}
+			Err(e) => {
+				error!("Error starting GRIN: {:?}", e);
+				1
+			}
+		}
+	};
+	exit(exit_code);
 }
 
 /// Handles the server part of the command line, mostly running, starting and
@@ -96,7 +110,10 @@ pub fn server_command(
 	server_args: Option<&ArgMatches<'_>>,
 	global_config: GlobalConfig,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
-	api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>),
+	api_chan: (
+		tokio::sync::mpsc::Sender<()>,
+		tokio::sync::mpsc::Receiver<()>,
+	),
 ) -> i32 {
 	// just get defaults from the global config
 	let mut server_config = global_config.members.as_ref().unwrap().server.clone();

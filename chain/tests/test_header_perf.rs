@@ -50,6 +50,7 @@ fn test_header_perf_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir:
 				genesis.clone(),
 				pow::verify_size,
 				false,
+				None,
 			)
 			.unwrap(),
 		);
@@ -62,6 +63,7 @@ fn test_header_perf_impl(is_test_chain: bool, src_root_dir: &str, dest_root_dir:
 				genesis.clone(),
 				pow::verify_size,
 				false,
+				None,
 			)
 			.unwrap(),
 		);

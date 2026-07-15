@@ -16,9 +16,14 @@ mod common;
 
 use self::core::core::pmmr;
 use self::core::core::{Segment, SegmentIdentifier};
+use self::core::ser::{self, DeserializationMode, ProtocolVersion};
 use common::TestElem;
 use grin_core as core;
 use grin_core::core::pmmr::ReadablePMMR;
+
+fn push_u64(bytes: &mut Vec<u8>, n: u64) {
+	bytes.extend_from_slice(&n.to_be_bytes());
+}
 
 fn test_unprunable_size(height: u8, n_leaves: u32) {
 	let size = 1u64 << height;
@@ -58,4 +63,31 @@ fn unprunable_mmr() {
 	for i in 1..=64 {
 		test_unprunable_size(3, i);
 	}
+}
+
+#[test]
+fn segment_read_rejects_large_hash_count() {
+	let mut bytes = vec![1];
+	push_u64(&mut bytes, 0);
+	push_u64(&mut bytes, 1_000_001);
+
+	let res: Result<Segment<TestElem>, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
+	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
+}
+
+#[test]
+fn segment_proof_read_rejects_large_hash_count() {
+	let mut bytes = vec![];
+	push_u64(&mut bytes, 1_000_001);
+
+	let res: Result<self::core::core::SegmentProof, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
+	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
 }

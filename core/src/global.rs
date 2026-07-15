@@ -189,7 +189,7 @@ pub fn set_global_chain_type(new_type: ChainTypes) {
 
 /// Set the chain type on a per-thread basis via thread_local storage.
 pub fn set_local_chain_type(new_type: ChainTypes) {
-	CHAIN_TYPE.with(|chain_type| chain_type.set(Some(new_type)))
+	CHAIN_TYPE.set(Some(new_type))
 }
 
 /// Get the chain type via thread_local, fallback to global chain_type.

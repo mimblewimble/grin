@@ -16,9 +16,11 @@ use crate::conn::Tracker;
 use crate::core::core::hash::Hash;
 use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
-use crate::msg::{read_message, write_message, Hand, Msg, Shake, Type, USER_AGENT};
+use crate::msg::{read_message, user_agent, write_message, Hand, Msg, Shake, Type};
 use crate::peer::Peer;
-use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
+use crate::types::{
+	Capabilities, Direction, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo,
+};
 use crate::util::RwLock;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
@@ -120,7 +122,7 @@ impl Handshake {
 			total_difficulty,
 			sender_addr: self_addr,
 			receiver_addr: peer_addr,
-			user_agent: USER_AGENT.to_string(),
+			user_agent: user_agent().to_string(),
 		};
 
 		// write and read the handshake response
@@ -169,6 +171,7 @@ impl Handshake {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
+		adapter: &Arc<dyn NetAdapter>,
 	) -> Result<PeerInfo, Error> {
 		// Set explicit timeouts on the tcp stream for hand/shake messages.
 		// Once the peer is up and running we will set new values for these.
@@ -211,6 +214,11 @@ impl Handshake {
 			direction: Direction::Inbound,
 		};
 
+		// Close connection with banned peer.
+		if adapter.is_banned(peer_info.addr) {
+			return Err(Error::Banned);
+		}
+
 		// At this point we know the published ip and port of the peer
 		// so check if we are configured to explicitly allow or deny it.
 		// If denied then we want to close the connection
@@ -225,7 +233,7 @@ impl Handshake {
 			capabilities: capab,
 			genesis: self.genesis,
 			total_difficulty: total_difficulty,
-			user_agent: USER_AGENT.to_string(),
+			user_agent: user_agent().to_string(),
 		};
 
 		let msg = Msg::new(Type::Shake, shake, negotiated_version)?;

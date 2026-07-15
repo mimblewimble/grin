@@ -3,7 +3,7 @@ name = "grin_core-fuzz"
 version = "0.0.3"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 publish = false
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 libfuzzer-sys = "0.4.0"
@@ -41,3 +41,6 @@ path = "fuzz_targets/compact_block_read_v1.rs"
 [[bin]]
 name = "compact_block_read_v2"
 path = "fuzz_targets/compact_block_read_v2.rs"
+
+[package.metadata]
+cargo-fuzz = true

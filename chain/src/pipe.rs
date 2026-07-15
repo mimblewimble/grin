@@ -161,11 +161,11 @@ pub fn process_block(
 	// Note we do this in the outer batch, not the child batch from the extension
 	// as we only commit the child batch if the extension increases total work.
 	// We want to save the block to the db regardless.
-	add_block(b, &ctx.batch)?;
+	add_block(b, &mut ctx.batch)?;
 
 	// If we have no "tail" then set it now.
 	if ctx.batch.tail().is_err() {
-		update_body_tail(&b.header, &ctx.batch)?;
+		update_body_tail(&b.header, &mut ctx.batch)?;
 	}
 
 	if has_more_work(&b.header, &head) {
@@ -198,13 +198,13 @@ pub fn process_block_headers(
 	// Note: This batch may later be committed even if the MMR itself is rollbacked.
 	for header in headers {
 		validate_header(header, ctx)?;
-		add_block_header(header, &ctx.batch)?;
+		add_block_header(header, &mut ctx.batch)?;
 	}
 
 	let ctx_specific_validation = &ctx.header_allowed;
 
 	// Now apply this entire chunk of headers to the header MMR.
-	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, batch| {
+	txhashset::header_extending(&mut ctx.header_pmmr, &mut ctx.batch, |ext, mut batch| {
 		rewind_and_apply_header_fork(&last_header, ext, batch, ctx_specific_validation)?;
 
 		// If previous sync_head is not on the "current" chain then
@@ -216,7 +216,7 @@ pub fn process_block_headers(
 		// Note the outer batch may still be committed to db assuming no errors occur in the extension.
 		if has_more_work(last_header, &head) {
 			let header_head = last_header.into();
-			update_header_head(&header_head, &batch)?;
+			update_header_head(&header_head, &mut batch)?;
 		} else {
 			ext.force_rollback();
 		};
@@ -275,7 +275,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) ->
 	})?;
 
 	// Add this new block header to the db.
-	add_block_header(header, &ctx.batch)?;
+	add_block_header(header, &mut ctx.batch)?;
 
 	if has_more_work(header, &header_head) {
 		update_header_head(&Tip::from_header(header), &mut ctx.batch)?;
@@ -478,7 +478,7 @@ fn verify_coinbase_maturity(
 /// Verify kernel sums across the full utxo and kernel sets based on block_sums
 /// of previous block accounting for the inputs|outputs|kernels of the new block.
 /// Saves the new block_sums to the db via the current batch if successful.
-fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn verify_block_sums(b: &Block, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	// Retrieve the block_sums for the previous block.
 	let block_sums = batch.get_block_sums(&b.header.prev_hash)?;
 
@@ -509,7 +509,7 @@ fn verify_block_sums(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
 fn apply_block_to_txhashset(
 	block: &Block,
 	ext: &mut txhashset::ExtensionPair<'_>,
-	batch: &store::Batch<'_>,
+	batch: &mut store::Batch<'_>,
 ) -> Result<(), Error> {
 	ext.extension
 		.apply_block(block, ext.header_extension, batch)?;
@@ -520,13 +520,13 @@ fn apply_block_to_txhashset(
 
 /// Officially adds the block to our chain (possibly on a losing fork).
 /// Header must be added separately (assume this has been done previously).
-fn add_block(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn add_block(b: &Block, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	batch.save_block(b)?;
 	Ok(())
 }
 
 /// Update the block chain tail so we can know the exact tail of full blocks in this node
-fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn update_body_tail(bh: &BlockHeader, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	let tip = Tip::from_header(bh);
 	batch
 		.save_body_tail(&tip)
@@ -536,27 +536,28 @@ fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Er
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_block_header(bh)
 		.map_err(|e| Error::StoreErr(e, "pipe save header".to_owned()))?;
 	Ok(())
 }
 
-fn update_header_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn update_header_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_header_head(&head)
 		.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 
-	debug!(
+	trace!(
 		"header head updated to {} at {}",
-		head.last_block_h, head.height
+		head.last_block_h,
+		head.height
 	);
 
 	Ok(())
 }
 
-fn update_head(head: &Tip, batch: &store::Batch<'_>) -> Result<(), Error> {
+fn update_head(head: &Tip, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_body_head(&head)
 		.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
@@ -575,7 +576,7 @@ fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
 pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension<'_>,
-	batch: &store::Batch<'_>,
+	batch: &mut store::Batch<'_>,
 	ctx_specific_validation: &dyn Fn(&BlockHeader) -> Result<(), Error>,
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
@@ -616,7 +617,7 @@ pub fn rewind_and_apply_header_fork(
 pub fn rewind_and_apply_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::ExtensionPair<'_>,
-	batch: &store::Batch<'_>,
+	batch: &mut store::Batch<'_>,
 	ctx_specific_validation: &dyn Fn(&BlockHeader) -> Result<(), Error>,
 ) -> Result<BlockHeader, Error> {
 	let extension = &mut ext.extension;

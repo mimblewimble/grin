@@ -1,7 +1,7 @@
 use self::chain::txhashset::{BitmapAccumulator, BitmapSegment};
 use self::core::core::pmmr::segment::{Segment, SegmentIdentifier};
 use self::core::ser::{
-	BinReader, BinWriter, DeserializationMode, ProtocolVersion, Readable, Writeable,
+	self, BinReader, BinWriter, DeserializationMode, ProtocolVersion, Readable, Writeable,
 };
 use croaring::Bitmap;
 use grin_chain as chain;
@@ -9,6 +9,29 @@ use grin_core as core;
 use grin_util::secp::rand::Rng;
 use rand::thread_rng;
 use std::io::Cursor;
+
+fn push_u16(bytes: &mut Vec<u8>, n: u16) {
+	bytes.extend_from_slice(&n.to_be_bytes());
+}
+
+fn push_u64(bytes: &mut Vec<u8>, n: u64) {
+	bytes.extend_from_slice(&n.to_be_bytes());
+}
+
+fn bitmap_segment_header(height: u8, idx: u64, n_blocks: u16) -> Vec<u8> {
+	let mut bytes = vec![height];
+	push_u64(&mut bytes, idx);
+	push_u16(&mut bytes, n_blocks);
+	bytes
+}
+
+fn read_bitmap_segment(bytes: &[u8]) -> Result<BitmapSegment, ser::Error> {
+	ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	)
+}
 
 fn test_roundtrip(entries: usize) {
 	let mut rng = thread_rng();
@@ -63,7 +86,7 @@ fn test_roundtrip(entries: usize) {
 	assert_eq!(bms, bms2);
 
 	// Convert back to `Segment`
-	let segment2 = Segment::from(bms2);
+	let segment2 = bms2.into_segment().unwrap();
 	assert_eq!(segment, segment2);
 }
 
@@ -82,4 +105,40 @@ fn sparse_segment_ser_roundtrip() {
 fn abundant_segment_ser_roundtrip() {
 	let max = 1 << 16;
 	test_roundtrip(thread_rng().gen_range(max - 4096, max - 1024));
+}
+
+#[test]
+fn bitmap_segment_read_rejects_empty_blocks() {
+	let bytes = bitmap_segment_header(9, 0, 0);
+	assert_eq!(
+		read_bitmap_segment(&bytes).err(),
+		Some(ser::Error::CorruptedData)
+	);
+}
+
+#[test]
+fn bitmap_segment_read_rejects_too_many_blocks() {
+	let bytes = bitmap_segment_header(9, 0, 9);
+	assert_eq!(
+		read_bitmap_segment(&bytes).err(),
+		Some(ser::Error::TooLargeReadErr)
+	);
+}
+
+#[test]
+fn bitmap_segment_read_rejects_too_large_height() {
+	let bytes = bitmap_segment_header(14, 0, 1);
+	assert_eq!(
+		read_bitmap_segment(&bytes).err(),
+		Some(ser::Error::TooLargeReadErr)
+	);
+}
+
+#[test]
+fn bitmap_segment_read_rejects_offset_overflow() {
+	let bytes = bitmap_segment_header(13, u64::MAX, 1);
+	assert_eq!(
+		read_bitmap_segment(&bytes).err(),
+		Some(ser::Error::TooLargeReadErr)
+	);
 }

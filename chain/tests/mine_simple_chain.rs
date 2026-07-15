@@ -67,6 +67,7 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 		genesis,
 		pow::verify_size,
 		false,
+		None,
 	)
 	.unwrap();
 
@@ -1057,6 +1058,7 @@ fn actual_diff_iter_output() {
 		genesis_block,
 		pow::verify_size,
 		false,
+		None,
 	)
 	.unwrap();
 	let iter = chain.difficulty_iter().unwrap();

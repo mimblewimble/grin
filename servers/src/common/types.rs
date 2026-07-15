@@ -17,9 +17,9 @@ use std::convert::From;
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
+use grin_chain::types::QueuedPIBDSegment;
 use rand::prelude::*;
 
-use crate::api;
 use crate::chain;
 use crate::core::global::{ChainTypes, DEFAULT_FUTURE_TIME_LIMIT};
 use crate::core::{core, libtx, pow};
@@ -28,6 +28,7 @@ use crate::p2p;
 use crate::pool;
 use crate::pool::types::DandelionConfig;
 use crate::store;
+use crate::{api, Server};
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -404,4 +405,26 @@ impl DandelionEpoch {
 
 		self.relay_peer.clone()
 	}
+}
+
+/// Server initialization status.
+pub enum ServerInitStatus {
+	/// Database loading.
+	LoadDatabase,
+	/// Database migration progress.
+	DBMigrationProgress(i8),
+	/// P2P server initialization.
+	StartSync,
+	/// API server initialization.
+	StartAPI,
+	/// Server instance after successful initialization.
+	FinishedLoading(Server),
+	/// Error on initialization.
+	ErrorLoading(Error),
+}
+
+/// Network adapter worker message.
+pub enum NetAdapterWorkerMessage {
+	/// Received PIBD segment.
+	PIBDSegment(QueuedPIBDSegment),
 }

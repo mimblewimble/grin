@@ -47,6 +47,7 @@ fn test_coinbase_maturity() {
 			genesis_block,
 			pow::verify_size,
 			false,
+			None,
 		)
 		.unwrap();
 

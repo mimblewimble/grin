@@ -16,12 +16,20 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use grin_core::core::{OutputIdentifier, Segment, SegmentType, TxKernel};
+use grin_util::secp::pedersen::RangeProof;
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Weak;
 
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
-use crate::core::core::{pmmr, Block, BlockHeader, HeaderVersion, SegmentTypeIdentifier};
+use crate::core::core::{
+	pmmr, Block, BlockHeader, HeaderVersion, SegmentIdentifier, SegmentTypeIdentifier,
+};
 use crate::core::pow::Difficulty;
 use crate::core::ser::{self, PMMRIndexHashable, Readable, Reader, Writeable, Writer};
 use crate::error::Error;
+use crate::txhashset::BitmapChunk;
 use crate::util::{RwLock, RwLockWriteGuard};
 
 bitflags! {
@@ -38,6 +46,15 @@ bitflags! {
 	}
 }
 
+/// Header sync implementation currently being used.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub enum HeaderSyncMode {
+	/// Legacy locator-based header sync.
+	Legacy,
+	/// Parallel Initial Header Download.
+	Pihd,
+}
+
 /// Various status sync can be in, whether it's fast sync or archival.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 pub enum SyncStatus {
@@ -52,6 +69,8 @@ pub enum SyncStatus {
 	HeaderSync {
 		/// current sync head
 		sync_head: Tip,
+		/// active header sync implementation
+		sync_mode: HeaderSyncMode,
 		/// height of the most advanced peer
 		highest_height: u64,
 		/// diff of the most advanced peer
@@ -148,6 +167,54 @@ impl Default for TxHashsetDownloadStats {
 	}
 }
 
+/// PIBD segment type to process.
+#[derive(Clone)]
+pub enum PIBDSegment {
+	/// Bitmap (block hash, output root, segment).
+	Bitmap(Hash, Hash, Segment<BitmapChunk>),
+	/// Output (block hash, bitmap root, segment).
+	Output(Hash, Hash, Segment<OutputIdentifier>),
+	/// RangeProof (block hash, segment).
+	RangeProof(Hash, Segment<RangeProof>),
+	/// Kernel (block hash, segment).
+	Kernel(Hash, Segment<TxKernel>),
+}
+
+impl PIBDSegment {
+	/// Get PIBD segment identifier.
+	pub fn segment_id(&self) -> SegmentTypeIdentifier {
+		match self {
+			PIBDSegment::Bitmap(_, _, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Bitmap,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::Output(_, _, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Output,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::RangeProof(_, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::RangeProof,
+				identifier: segment.identifier().clone(),
+			},
+			PIBDSegment::Kernel(_, segment) => SegmentTypeIdentifier {
+				segment_type: SegmentType::Kernel,
+				identifier: segment.identifier().clone(),
+			},
+		}
+	}
+}
+
+/// Received PIBD segment to process from the peer.
+#[derive(Clone)]
+pub struct QueuedPIBDSegment {
+	/// Peer from where segment was received.
+	pub peer_addr: SocketAddr,
+	/// Archive hash.
+	pub archive_hash: Hash,
+	/// Segment.
+	pub segment: PIBDSegment,
+}
+
 /// Container for entry in requested PIBD segments
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PIBDSegmentContainer {
@@ -155,14 +222,79 @@ pub struct PIBDSegmentContainer {
 	pub identifier: SegmentTypeIdentifier,
 	/// Time at which this request was made
 	pub request_time: DateTime<Utc>,
+	/// Peer that most recently received this request
+	pub last_peer: Option<SocketAddr>,
+	/// Archive header for this request
+	pub archive_hash: Hash,
 }
 
 impl PIBDSegmentContainer {
 	/// Return container with timestamp
-	pub fn new(identifier: SegmentTypeIdentifier) -> Self {
+	pub fn new(
+		identifier: SegmentTypeIdentifier,
+		peer_addr: Option<SocketAddr>,
+		archive_hash: Hash,
+	) -> Self {
 		Self {
 			identifier,
 			request_time: Utc::now(),
+			last_peer: peer_addr,
+			archive_hash,
+		}
+	}
+}
+
+/// Recently rejected PIBD segment from a specific peer.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RejectedPIBDSegment {
+	/// Segment+Type Identifier
+	pub identifier: SegmentTypeIdentifier,
+	/// Peer that provided invalid data for this segment
+	pub peer_addr: SocketAddr,
+	/// Time at which this segment was rejected
+	pub reject_time: DateTime<Utc>,
+}
+
+/// Recent PIBD rejections for a peer.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RejectedPIBDPeer {
+	/// Peer address
+	pub peer_addr: SocketAddr,
+	/// Last rejection time
+	pub reject_time: DateTime<Utc>,
+	/// Recent rejection count
+	pub reject_count: u32,
+}
+
+const MAX_REJECTED_PIBD_SEGMENTS: usize = 1024;
+const MAX_REJECTED_PIBD_PEERS: usize = 1024;
+const MAX_REJECTED_PIHD_PEERS: usize = 1024;
+const REJECTED_PIBD_PEER_THRESHOLD: u32 = 3;
+
+/// Container for pending PIHD header segment requests.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PIHDHeaderSegmentContainer {
+	/// Header segment identifier
+	pub identifier: SegmentIdentifier,
+	/// Time at which this request was made
+	pub request_time: DateTime<Utc>,
+	/// Whether a response for this request has been received and cached.
+	pub responded: bool,
+	/// Peer that received this request
+	pub peer_addr: SocketAddr,
+	/// Highest header height advertised by the peer when requested
+	pub target_height: u64,
+}
+
+impl PIHDHeaderSegmentContainer {
+	/// Return container with timestamp
+	pub fn new(identifier: SegmentIdentifier, peer_addr: SocketAddr, target_height: u64) -> Self {
+		Self {
+			identifier,
+			request_time: Utc::now(),
+			responded: false,
+			peer_addr,
+			target_height,
 		}
 	}
 }
@@ -178,6 +310,11 @@ pub struct SyncState {
 	/// available where it will be needed (both in the adapter
 	/// and the sync loop)
 	requested_pibd_segments: RwLock<Vec<PIBDSegmentContainer>>,
+	rejected_pibd_segments: RwLock<Vec<RejectedPIBDSegment>>,
+	rejected_pibd_peers: RwLock<Vec<RejectedPIBDPeer>>,
+	requested_pihd_header_segments: RwLock<Vec<PIHDHeaderSegmentContainer>>,
+	rejected_pihd_peers: RwLock<Vec<SocketAddr>>,
+	pihd_header_cache_generation: AtomicU64,
 }
 
 impl SyncState {
@@ -187,6 +324,11 @@ impl SyncState {
 			current: RwLock::new(SyncStatus::Initial),
 			sync_error: RwLock::new(None),
 			requested_pibd_segments: RwLock::new(vec![]),
+			rejected_pibd_segments: RwLock::new(vec![]),
+			rejected_pibd_peers: RwLock::new(vec![]),
+			requested_pihd_header_segments: RwLock::new(vec![]),
+			rejected_pihd_peers: RwLock::new(vec![]),
+			pihd_header_cache_generation: AtomicU64::new(0),
 		}
 	}
 
@@ -277,29 +419,203 @@ impl SyncState {
 		};
 	}
 
+	/// Update lightweight PIBD leaf progress for TUI/API display.
+	pub fn update_pibd_leaf_progress(&self, completed_leaves: u64, archive_header: &BlockHeader) {
+		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
+			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
+		let status: &mut SyncStatus = &mut self.current.write();
+		match status {
+			SyncStatus::TxHashsetPibd {
+				completed_leaves: current_completed_leaves,
+				leaves_required: current_leaves_required,
+				required_height,
+				..
+			} => {
+				*current_completed_leaves = completed_leaves;
+				*current_leaves_required = leaves_required;
+				*required_height = archive_header.height;
+			}
+			_ => {
+				*status = SyncStatus::TxHashsetPibd {
+					aborted: false,
+					errored: false,
+					completed_leaves,
+					leaves_required,
+					completed_to_height: 0,
+					required_height: archive_header.height,
+				};
+			}
+		}
+	}
+
+	/// Process PIBD segment.
+	pub fn process_queued_pibd_segment(
+		&self,
+		chain: &Weak<crate::Chain>,
+		queued_segment: QueuedPIBDSegment,
+	) -> Result<(), Error> {
+		let peer_addr = queued_segment.peer_addr;
+		let archive_hash = queued_segment.archive_hash;
+		let chain = chain
+			.upgrade()
+			.ok_or_else(|| Error::Other("chain not available".to_owned()))?;
+		let archive_header = chain.txhashset_archive_header_header_only()?;
+		let segment_id = queued_segment.segment.segment_id();
+		if archive_hash != archive_header.hash() {
+			debug!(
+				"dropping stale PIBD segment {:?} from {} for archive header {} (current {})",
+				segment_id,
+				peer_addr,
+				archive_hash,
+				archive_header.hash(),
+			);
+			self.remove_pibd_segment_for_archive(&segment_id, peer_addr, archive_hash);
+			return Ok(());
+		}
+		let desegmenter = chain.desegmenter(&archive_header)?;
+		let mut desegmenter = desegmenter.write();
+		let res = if let Some(d) = desegmenter.as_mut() {
+			match queued_segment.segment {
+				PIBDSegment::Bitmap(block_hash, output_root, segment) => {
+					debug!(
+						"Received bitmap segment {} for block_hash: {}, output_root: {}",
+						segment.identifier().idx,
+						block_hash,
+						output_root
+					);
+					d.add_bitmap_segment(segment, output_root)
+				}
+				PIBDSegment::Output(block_hash, bitmap_root, segment) => {
+					debug!(
+						"Received output segment {} for block_hash: {}, bitmap_root: {:?}",
+						segment.identifier().idx,
+						block_hash,
+						bitmap_root,
+					);
+					d.add_output_segment(segment)
+				}
+				PIBDSegment::RangeProof(block_hash, segment) => {
+					debug!(
+						"Received proof segment {} for block_hash: {}",
+						segment.identifier().idx,
+						block_hash,
+					);
+					d.add_rangeproof_segment(segment)
+				}
+				PIBDSegment::Kernel(block_hash, segment) => {
+					debug!(
+						"Received kernel segment {} for block_hash: {}",
+						segment.identifier().idx,
+						block_hash,
+					);
+					d.add_kernel_segment(segment)
+				}
+			}
+		} else {
+			Ok(())
+		};
+		if res.is_err() {
+			warn!(
+				"PIBD segment {:?} from peer {} failed validation",
+				segment_id, peer_addr
+			);
+			self.reject_pibd_segment_from(&segment_id, peer_addr);
+		} else {
+			self.remove_pibd_segment_for_archive(&segment_id, peer_addr, archive_hash);
+		}
+		res
+	}
+
 	/// Update PIBD segment list
-	pub fn add_pibd_segment(&self, id: &SegmentTypeIdentifier) {
-		self.requested_pibd_segments
-			.write()
-			.push(PIBDSegmentContainer::new(id.clone()));
+	pub fn add_pibd_segment(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+		archive_hash: Hash,
+	) {
+		debug!("sync_state: tracking PIBD request for {:?}", id);
+		let mut requested_segments = self.requested_pibd_segments.write();
+		if let Some(existing) = requested_segments.iter_mut().find(|i| &i.identifier == id) {
+			existing.request_time = Utc::now();
+			existing.last_peer = Some(peer_addr);
+			existing.archive_hash = archive_hash;
+		} else {
+			requested_segments.push(PIBDSegmentContainer::new(
+				id.clone(),
+				Some(peer_addr),
+				archive_hash,
+			));
+		}
 	}
 
 	/// Remove segment from list
 	pub fn remove_pibd_segment(&self, id: &SegmentTypeIdentifier) {
+		debug!("sync_state: removing PIBD request tracking for {:?}", id);
 		self.requested_pibd_segments
 			.write()
 			.retain(|i| &i.identifier != id);
 	}
 
+	/// Remove segment from list only if it is still pending for the given peer.
+	pub fn remove_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+		trace!(
+			"sync_state: removing PIBD request tracking for {:?} from {}",
+			id,
+			peer_addr,
+		);
+		self.requested_pibd_segments
+			.write()
+			.retain(|i| &i.identifier != id || i.last_peer != Some(peer_addr));
+	}
+
+	/// Remove segment from list only if it is still pending for the given peer and archive.
+	pub fn remove_pibd_segment_for_archive(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+		archive_hash: Hash,
+	) {
+		trace!(
+			"sync_state: removing PIBD request tracking for {:?} from {} and archive {}",
+			id,
+			peer_addr,
+			archive_hash
+		);
+		self.requested_pibd_segments.write().retain(|i| {
+			&i.identifier != id || i.last_peer != Some(peer_addr) || i.archive_hash != archive_hash
+		});
+	}
+
+	/// Return the archive hash for a pending request from the given peer.
+	pub fn get_pibd_segment_archive_hash(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<Hash> {
+		self.requested_pibd_segments
+			.read()
+			.iter()
+			.find(|i| &i.identifier == id && i.last_peer == Some(peer_addr))
+			.map(|i| i.archive_hash)
+	}
+
 	/// Remove segments with request timestamps less than cutoff time
-	pub fn remove_stale_pibd_requests(&self, timeout_seconds: i64) {
+	pub fn remove_stale_pibd_requests(
+		&self,
+		timeout_seconds: i64,
+	) -> Vec<(SegmentTypeIdentifier, Option<SocketAddr>)> {
 		let cutoff_time = Utc::now() - Duration::seconds(timeout_seconds);
+		let mut removed_segments = vec![];
 		self.requested_pibd_segments.write().retain(|i| {
 			if i.request_time <= cutoff_time {
-				debug!("Removing + retrying PIBD request after timeout: {:?}", i)
-			};
-			i.request_time > cutoff_time
+				debug!("Removing + retrying PIBD request after timeout: {:?}", i);
+				removed_segments.push((i.identifier.clone(), i.last_peer));
+				false
+			} else {
+				true
+			}
 		});
+		removed_segments
 	}
 
 	/// Check whether segment is in request list
@@ -308,6 +624,193 @@ impl SyncState {
 			.read()
 			.iter()
 			.any(|i| &i.identifier == id)
+	}
+
+	/// Mark a requested PIBD segment as rejected for this peer.
+	pub fn reject_pibd_segment_from(&self, id: &SegmentTypeIdentifier, peer_addr: SocketAddr) {
+		self.remove_pibd_segment_from(id, peer_addr);
+		let mut rejected = self.rejected_pibd_segments.write();
+		rejected.retain(|i| &i.identifier != id || i.peer_addr != peer_addr);
+		rejected.push(RejectedPIBDSegment {
+			identifier: id.clone(),
+			peer_addr,
+			reject_time: Utc::now(),
+		});
+		if rejected.len() > MAX_REJECTED_PIBD_SEGMENTS {
+			rejected.remove(0);
+		}
+		drop(rejected);
+
+		let mut rejected_peers = self.rejected_pibd_peers.write();
+		if let Some(existing) = rejected_peers.iter_mut().find(|i| i.peer_addr == peer_addr) {
+			existing.reject_time = Utc::now();
+			existing.reject_count = existing.reject_count.saturating_add(1);
+		} else {
+			rejected_peers.push(RejectedPIBDPeer {
+				peer_addr,
+				reject_time: Utc::now(),
+				reject_count: 1,
+			});
+		}
+		if rejected_peers.len() > MAX_REJECTED_PIBD_PEERS {
+			rejected_peers.remove(0);
+		}
+	}
+
+	/// Check whether this peer recently provided invalid PIBD data.
+	pub fn rejected_pibd_segment_from_peer(
+		&self,
+		id: &SegmentTypeIdentifier,
+		peer_addr: SocketAddr,
+	) -> bool {
+		let cutoff_time =
+			Utc::now() - Duration::seconds(crate::pibd_params::REJECTED_SEGMENT_RETRY_SECS);
+		let rejected = self.rejected_pibd_segments.read();
+		if rejected
+			.iter()
+			.any(|i| &i.identifier == id && i.peer_addr == peer_addr && i.reject_time > cutoff_time)
+		{
+			return true;
+		}
+
+		self.rejected_pibd_peers.read().iter().any(|i| {
+			i.peer_addr == peer_addr
+				&& i.reject_time > cutoff_time
+				&& i.reject_count >= REJECTED_PIBD_PEER_THRESHOLD
+		})
+	}
+
+	/// Prune expired PIBD rejection entries.
+	pub fn prune_rejected_pibd_segments(&self, reject_seconds: i64) {
+		let cutoff_time = Utc::now() - Duration::seconds(reject_seconds);
+		self.rejected_pibd_segments
+			.write()
+			.retain(|i| i.reject_time > cutoff_time);
+		self.rejected_pibd_peers
+			.write()
+			.retain(|i| i.reject_time > cutoff_time);
+	}
+
+	/// Amount of currently pending PIBD segment requests
+	pub fn pending_pibd_segment_count(&self) -> usize {
+		self.requested_pibd_segments.read().len()
+	}
+
+	/// Amount of pending PIHD segment requests
+	pub fn pending_pihd_segments_count(&self) -> usize {
+		self.requested_pihd_header_segments.read().len()
+	}
+
+	/// Track a pending PIHD header segment request.
+	pub fn add_pihd_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+		target_height: u64,
+	) {
+		let mut requested_segments = self.requested_pihd_header_segments.write();
+		if let Some(existing) = requested_segments
+			.iter_mut()
+			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+		{
+			existing.request_time = Utc::now();
+			existing.responded = false;
+			existing.target_height = target_height;
+		} else {
+			requested_segments.push(PIHDHeaderSegmentContainer::new(
+				id,
+				peer_addr,
+				target_height,
+			));
+		}
+	}
+
+	/// Mark a pending PIHD header segment request as having received a response.
+	pub fn mark_pihd_header_segment_responded(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+		if let Some(existing) = self
+			.requested_pihd_header_segments
+			.write()
+			.iter_mut()
+			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+		{
+			existing.responded = true;
+		}
+	}
+
+	/// Remove a pending PIHD header segment request.
+	pub fn remove_pihd_header_segment(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+		self.requested_pihd_header_segments
+			.write()
+			.retain(|i| i.identifier != id || i.peer_addr != peer_addr);
+	}
+
+	/// Mark a PIHD header segment request as failed for this peer.
+	pub fn reject_pihd_header_segment_from(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+		self.remove_pihd_header_segment(id, peer_addr);
+		let mut rejected = self.rejected_pihd_peers.write();
+		rejected.push(peer_addr);
+		if rejected.len() > MAX_REJECTED_PIHD_PEERS {
+			rejected.remove(0);
+		}
+	}
+
+	/// Drain recent PIHD peer failures for the sync loop.
+	pub fn take_rejected_pihd_peers(&self) -> Vec<SocketAddr> {
+		let mut rejected = self.rejected_pihd_peers.write();
+		std::mem::take(&mut *rejected)
+	}
+
+	/// Check whether a PIHD header segment was requested.
+	pub fn contains_pihd_header_segment(&self, id: SegmentIdentifier) -> bool {
+		self.requested_pihd_header_segments
+			.read()
+			.iter()
+			.any(|i| i.identifier == id)
+	}
+
+	/// Amount of requested PIHD header segments from the given peer.
+	pub fn pending_pihd_segments_count_from(&self, peer_addr: SocketAddr) -> usize {
+		self.requested_pihd_header_segments
+			.read()
+			.iter()
+			.filter(|req| req.peer_addr == peer_addr)
+			.count()
+	}
+
+	/// Highest header height expected for a pending PIHD header segment request.
+	pub fn pihd_header_segment_target_height(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<u64> {
+		self.requested_pihd_header_segments
+			.read()
+			.iter()
+			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+			.map(|i| i.target_height)
+	}
+
+	/// Remove completed or stale PIHD header segment requests.
+	pub fn retain_pihd_header_segments<F>(&self, mut keep: F)
+	where
+		F: FnMut(&PIHDHeaderSegmentContainer) -> bool,
+	{
+		self.requested_pihd_header_segments
+			.write()
+			.retain(|i| keep(i));
+	}
+
+	/// Clear PIHD header requests and invalidate cached received segments
+	pub fn clear_pihd_header_segments(&self) {
+		self.requested_pihd_header_segments.write().clear();
+		// Relaxed is enough here; this only nudges receive caches to drop stale entries.
+		self.pihd_header_cache_generation
+			.fetch_add(1, Ordering::Relaxed);
+	}
+
+	/// Current PIHD cache reset generation
+	pub fn pihd_header_cache_generation(&self) -> u64 {
+		self.pihd_header_cache_generation.load(Ordering::Relaxed)
 	}
 
 	/// Communicate sync error
@@ -645,5 +1148,250 @@ impl BlockStatus {
 			BlockStatus::Reorg { .. } => true,
 			_ => false,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::core::core::{SegmentIdentifier, SegmentType};
+	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+	#[test]
+	fn rejected_pibd_segment_tracking_is_bounded() {
+		let sync_state = SyncState::new();
+
+		for idx in 0..(MAX_REJECTED_PIBD_SEGMENTS + 10) {
+			let id = SegmentTypeIdentifier::new(
+				SegmentType::Kernel,
+				SegmentIdentifier {
+					height: 9,
+					idx: idx as u64,
+				},
+			);
+			let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000 + idx as u16);
+			sync_state.reject_pibd_segment_from(&id, peer_addr);
+		}
+
+		assert_eq!(
+			sync_state.rejected_pibd_segments.read().len(),
+			MAX_REJECTED_PIBD_SEGMENTS
+		);
+	}
+
+	#[test]
+	fn remove_pibd_segment_from_peer() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+
+		sync_state.remove_pibd_segment_from(&id, peer_addr);
+		assert!(!sync_state.contains_pibd_segment(&id));
+
+		sync_state.remove_pibd_segment_from(&id, peer_addr);
+		assert!(!sync_state.contains_pibd_segment(&id));
+	}
+
+	#[test]
+	fn pihd_header_segment_requests_are_peer_specific() {
+		let sync_state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let other_peer = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_001);
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(id, peer_addr),
+			Some(1_024)
+		);
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(id, other_peer),
+			None
+		);
+	}
+
+	#[test]
+	fn pihd_header_segment_request_updates_target_height() {
+		let sync_state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.add_pihd_header_segment(id, peer_addr, 2_048);
+
+		assert_eq!(sync_state.requested_pihd_header_segments.read().len(), 1);
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(id, peer_addr),
+			Some(2_048)
+		);
+	}
+
+	#[test]
+	fn pihd_header_segment_retry_resets_response() {
+		let sync_state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.mark_pihd_header_segment_responded(id, peer_addr);
+		assert!(sync_state
+			.requested_pihd_header_segments
+			.read()
+			.iter()
+			.any(|req| req.identifier == id && req.peer_addr == peer_addr && req.responded));
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 2_048);
+		let requested_segments = sync_state.requested_pihd_header_segments.read();
+		let req = requested_segments
+			.iter()
+			.find(|req| req.identifier == id && req.peer_addr == peer_addr)
+			.unwrap();
+		assert!(!req.responded);
+		assert_eq!(req.target_height, 2_048);
+	}
+
+	#[test]
+	fn retain_pihd_header_segments_drops_stale_requests() {
+		let sync_state = SyncState::new();
+		let first = SegmentIdentifier { height: 9, idx: 1 };
+		let second = SegmentIdentifier { height: 9, idx: 2 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		sync_state.add_pihd_header_segment(first, peer_addr, 1_024);
+		sync_state.add_pihd_header_segment(second, peer_addr, 1_536);
+		sync_state.retain_pihd_header_segments(|req| req.identifier.idx >= 2);
+
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(first, peer_addr),
+			None
+		);
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(second, peer_addr),
+			Some(1_536)
+		);
+	}
+
+	#[test]
+	fn clear_pihd_header_segments() {
+		let sync_state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let generation = sync_state.pihd_header_cache_generation();
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.clear_pihd_header_segments();
+
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(id, peer_addr),
+			None
+		);
+		assert!(sync_state.pihd_header_cache_generation() > generation);
+	}
+
+	#[test]
+	fn rejected_pihd_peers_are_drained() {
+		let sync_state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.reject_pihd_header_segment_from(id, peer_addr);
+
+		assert_eq!(
+			sync_state.pihd_header_segment_target_height(id, peer_addr),
+			None
+		);
+		assert_eq!(sync_state.take_rejected_pihd_peers(), vec![peer_addr]);
+		assert!(sync_state.take_rejected_pihd_peers().is_empty());
+	}
+
+	#[test]
+	fn get_pibd_segment_archive_hash() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+
+		assert_eq!(
+			sync_state.get_pibd_segment_archive_hash(&id, peer_addr),
+			Some(archive_hash)
+		);
+		assert!(sync_state.contains_pibd_segment(&id));
+	}
+
+	#[test]
+	fn remove_pibd_segment_for_archive() {
+		let sync_state = SyncState::new();
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 1 },
+		);
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+		let archive_hash = Hash::from_vec(&[1; 32]);
+		let other_archive_hash = Hash::from_vec(&[2; 32]);
+
+		sync_state.add_pibd_segment(&id, peer_addr, archive_hash);
+		sync_state.remove_pibd_segment_for_archive(&id, peer_addr, other_archive_hash);
+
+		assert!(sync_state.contains_pibd_segment(&id));
+
+		sync_state.remove_pibd_segment_for_archive(&id, peer_addr, archive_hash);
+
+		assert!(!sync_state.contains_pibd_segment(&id));
+	}
+
+	#[test]
+	fn rejected_pibd_peer_threshold() {
+		let sync_state = SyncState::new();
+		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
+
+		for idx in 0..(REJECTED_PIBD_PEER_THRESHOLD - 1) {
+			let id = SegmentTypeIdentifier::new(
+				SegmentType::Kernel,
+				SegmentIdentifier {
+					height: 9,
+					idx: idx as u64,
+				},
+			);
+			sync_state.reject_pibd_segment_from(&id, peer_addr);
+		}
+
+		let rejected_id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier { height: 9, idx: 0 },
+		);
+		assert!(sync_state.rejected_pibd_segment_from_peer(&rejected_id, peer_addr));
+
+		let other_id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier {
+				height: 9,
+				idx: (REJECTED_PIBD_PEER_THRESHOLD + 1) as u64,
+			},
+		);
+		assert!(!sync_state.rejected_pibd_segment_from_peer(&other_id, peer_addr));
+
+		let id = SegmentTypeIdentifier::new(
+			SegmentType::Kernel,
+			SegmentIdentifier {
+				height: 9,
+				idx: REJECTED_PIBD_PEER_THRESHOLD as u64,
+			},
+		);
+		sync_state.reject_pibd_segment_from(&id, peer_addr);
+
+		assert!(sync_state.rejected_pibd_segment_from_peer(&other_id, peer_addr));
 	}
 }

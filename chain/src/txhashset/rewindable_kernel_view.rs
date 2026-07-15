@@ -69,7 +69,7 @@ impl<'a> RewindableKernelView<'a> {
 	}
 
 	/// Readonly view of our internal data.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<TxKernel, PMMRBackend<TxKernel>> {
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, TxKernel, PMMRBackend<TxKernel>> {
 		self.pmmr.as_readonly()
 	}
 }

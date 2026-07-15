@@ -20,43 +20,52 @@ extern crate hyper_rustls;
 extern crate tokio;
 
 use crate::chain::BlockStatus;
-use crate::common::types::{ServerConfig, WebHooksConfig};
+use crate::common::types::{Error, ServerConfig, WebHooksConfig};
 use crate::core::core;
 use crate::core::core::hash::Hashed;
 use crate::p2p::types::PeerAddr;
 use futures::TryFutureExt;
+use grin_api::ApiBody;
 use grin_util::ToHex;
-use hyper::client::HttpConnector;
+use http_body_util::{BodyExt, Full};
 use hyper::header::HeaderValue;
-use hyper::Client;
-use hyper::{Body, Method, Request};
+use hyper::{Method, Request};
 use hyper_rustls::HttpsConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use serde::Serialize;
 use serde_json::{json, to_string};
 use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 /// Returns the list of event hooks that will be initialized for network events
-pub fn init_net_hooks(config: &ServerConfig) -> Vec<Box<dyn NetEvents + Send + Sync>> {
+pub fn init_net_hooks(
+	config: &ServerConfig,
+) -> Result<Vec<Box<dyn NetEvents + Send + Sync>>, Error> {
 	let mut list: Vec<Box<dyn NetEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_received_url.is_some()
 		|| config.webhook_config.tx_received_url.is_some()
 		|| config.webhook_config.header_received_url.is_some()
 	{
-		list.push(Box::new(WebHook::from_config(&config.webhook_config)));
+		let wh = WebHook::from_config(&config.webhook_config)?;
+		list.push(Box::new(wh));
 	}
-	list
+	Ok(list)
 }
 
 /// Returns the list of event hooks that will be initialized for chain events
-pub fn init_chain_hooks(config: &ServerConfig) -> Vec<Box<dyn ChainEvents + Send + Sync>> {
+pub fn init_chain_hooks(
+	config: &ServerConfig,
+) -> Result<Vec<Box<dyn ChainEvents + Send + Sync>>, Error> {
 	let mut list: Vec<Box<dyn ChainEvents + Send + Sync>> = Vec::new();
 	list.push(Box::new(EventLogger));
 	if config.webhook_config.block_accepted_url.is_some() {
-		list.push(Box::new(WebHook::from_config(&config.webhook_config)));
+		let wh = WebHook::from_config(&config.webhook_config)?;
+		list.push(Box::new(wh));
 	}
-	list
+	Ok(list)
 }
 
 #[allow(unused_variables)]
@@ -198,7 +207,7 @@ struct WebHook {
 	/// url to POST block data when a new block is accepted by our node (might be a reorg or a fork)
 	block_accepted_url: Option<hyper::Uri>,
 	/// The hyper client to be used for all requests
-	client: Client<HttpsConnector<HttpConnector>>,
+	client: Client<HttpsConnector<HttpConnector>, ApiBody>,
 	/// The tokio event loop
 	runtime: Runtime,
 }
@@ -212,7 +221,7 @@ impl WebHook {
 		block_accepted_url: Option<hyper::Uri>,
 		nthreads: u16,
 		timeout: u16,
-	) -> WebHook {
+	) -> Result<WebHook, Error> {
 		let keep_alive = Duration::from_secs(timeout as u64);
 
 		info!(
@@ -221,16 +230,16 @@ impl WebHook {
 		);
 
 		let https = hyper_rustls::HttpsConnectorBuilder::new()
-			.with_native_roots()
+			.with_native_roots()?
 			.https_only()
 			.enable_http1()
 			.build();
 
-		let client = Client::builder()
+		let client = Client::builder(TokioExecutor::new())
 			.pool_idle_timeout(keep_alive)
-			.build::<_, hyper::Body>(https);
+			.build::<_, ApiBody>(https);
 
-		WebHook {
+		Ok(WebHook {
 			tx_received_url,
 			block_received_url,
 			header_received_url,
@@ -239,13 +248,12 @@ impl WebHook {
 			runtime: Builder::new_multi_thread()
 				.enable_all()
 				.worker_threads(nthreads as usize)
-				.build()
-				.unwrap(),
-		}
+				.build()?,
+		})
 	}
 
 	/// Instantiates a Webhook struct from a configuration file
-	fn from_config(config: &WebHooksConfig) -> WebHook {
+	fn from_config(config: &WebHooksConfig) -> Result<WebHook, Error> {
 		WebHook::new(
 			parse_url(&config.tx_received_url),
 			parse_url(&config.header_received_url),
@@ -257,7 +265,7 @@ impl WebHook {
 	}
 
 	fn post(&self, url: hyper::Uri, data: String) {
-		let mut req = Request::new(Body::from(data));
+		let mut req = Request::new(Full::from(data).boxed());
 		*req.method_mut() = Method::POST;
 		*req.uri_mut() = url.clone();
 		req.headers_mut().insert(

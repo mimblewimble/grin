@@ -38,15 +38,15 @@ fn test_store_kernel_idx() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
-	let batch = store.batch().unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
+	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
@@ -63,7 +63,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 		Ok(()),
 	);
 
@@ -79,17 +79,17 @@ fn test_store_kernel_idx() {
 
 	// Pos must always increase.
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Err(Error::OtherErr("pos must be increasing".into())),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 		Err(Error::OtherErr("pos must be increasing".into())),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
@@ -104,7 +104,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit),
+		index.pop_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
@@ -119,7 +119,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
@@ -134,7 +134,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit),
+		index.pop_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
@@ -149,7 +149,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit),
+		index.pop_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 2, height: 2 })),
 	);
 
@@ -166,7 +166,7 @@ fn test_store_kernel_idx() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit),
+		index.pop_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 1, height: 1 })),
 	);
 
@@ -185,15 +185,15 @@ fn test_store_kernel_idx_pop_back() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
-	let batch = store.batch().unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
+	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
@@ -210,7 +210,7 @@ fn test_store_kernel_idx_pop_back() {
 	);
 
 	assert_eq!(
-		index.pop_pos_back(&batch, commit),
+		index.pop_pos_back(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 1, height: 1 })),
 	);
 
@@ -218,32 +218,32 @@ fn test_store_kernel_idx_pop_back() {
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.peek_pos(&batch, commit),
+		index.peek_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
 	assert_eq!(
-		index.get_list(&batch, commit),
+		index.get_list(&mut batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 3, tail: 1 })),
 	);
 
 	assert_eq!(
-		index.pop_pos_back(&batch, commit),
+		index.pop_pos_back(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 1, height: 1 })),
 	);
 
@@ -258,7 +258,7 @@ fn test_store_kernel_idx_pop_back() {
 	);
 
 	assert_eq!(
-		index.pop_pos_back(&batch, commit),
+		index.pop_pos_back(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 2, height: 2 })),
 	);
 
@@ -275,7 +275,7 @@ fn test_store_kernel_idx_pop_back() {
 	);
 
 	assert_eq!(
-		index.pop_pos_back(&batch, commit),
+		index.pop_pos_back(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
@@ -293,22 +293,22 @@ fn test_store_kernel_idx_rewind() {
 
 	let commit = Commitment::from_vec(vec![]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
-	let batch = store.batch().unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
+	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
@@ -317,7 +317,7 @@ fn test_store_kernel_idx_rewind() {
 		Ok(Some(ListWrapper::Multi { head: 3, tail: 1 })),
 	);
 
-	assert_eq!(index.rewind(&batch, commit, 1), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 1), Ok(()),);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
@@ -327,7 +327,7 @@ fn test_store_kernel_idx_rewind() {
 	);
 
 	// Check we can safely noop rewind.
-	assert_eq!(index.rewind(&batch, commit, 2), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 2), Ok(()),);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
@@ -336,7 +336,7 @@ fn test_store_kernel_idx_rewind() {
 		})),
 	);
 
-	assert_eq!(index.rewind(&batch, commit, 1), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 1), Ok(()),);
 
 	assert_eq!(
 		index.get_list(&batch, commit),
@@ -346,42 +346,42 @@ fn test_store_kernel_idx_rewind() {
 	);
 
 	// Check we can rewind back to 0.
-	assert_eq!(index.rewind(&batch, commit, 0), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 0), Ok(()),);
 
 	assert_eq!(index.get_list(&batch, commit), Ok(None),);
 
-	assert_eq!(index.rewind(&batch, commit, 0), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 0), Ok(()),);
 
 	// Now check we can rewind past the end of a list safely.
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
 	assert_eq!(
-		index.pop_pos_back(&batch, commit),
+		index.pop_pos_back(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 1, height: 1 })),
 	);
 
 	assert_eq!(
-		index.get_list(&batch, commit),
+		index.get_list(&mut batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 3, tail: 2 })),
 	);
 
-	assert_eq!(index.rewind(&batch, commit, 1), Ok(()),);
+	assert_eq!(index.rewind(&mut batch, commit, 1), Ok(()),);
 
-	assert_eq!(index.get_list(&batch, commit), Ok(None),);
+	assert_eq!(index.get_list(&mut batch, commit), Ok(None),);
 
 	clean_output_dir(chain_dir);
 }
@@ -395,15 +395,15 @@ fn test_store_kernel_idx_multiple_commits() {
 	let commit = Commitment::from_vec(vec![]);
 	let commit2 = Commitment::from_vec(vec![1]);
 
-	let store = ChainStore::new(chain_dir).unwrap();
-	let batch = store.batch().unwrap();
+	let store = ChainStore::new(chain_dir, None).unwrap();
+	let mut batch = store.batch().unwrap();
 	let index = store::nrd_recent_kernel_index();
 
 	assert_eq!(index.get_list(&batch, commit), Ok(None));
 	assert_eq!(index.get_list(&batch, commit2), Ok(None));
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 		Ok(()),
 	);
 
@@ -417,7 +417,7 @@ fn test_store_kernel_idx_multiple_commits() {
 	assert_eq!(index.get_list(&batch, commit2), Ok(None));
 
 	assert_eq!(
-		index.push_pos(&batch, commit2, CommitPos { pos: 2, height: 2 }),
+		index.push_pos(&mut batch, commit2, CommitPos { pos: 2, height: 2 }),
 		Ok(()),
 	);
 
@@ -436,7 +436,7 @@ fn test_store_kernel_idx_multiple_commits() {
 	);
 
 	assert_eq!(
-		index.push_pos(&batch, commit, CommitPos { pos: 3, height: 3 }),
+		index.push_pos(&mut batch, commit, CommitPos { pos: 3, height: 3 }),
 		Ok(()),
 	);
 
@@ -453,7 +453,7 @@ fn test_store_kernel_idx_multiple_commits() {
 	);
 
 	assert_eq!(
-		index.pop_pos(&batch, commit),
+		index.pop_pos(&mut batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
@@ -483,23 +483,23 @@ fn test_store_kernel_idx_clear() -> Result<(), Error> {
 	let commit = Commitment::from_vec(vec![]);
 	let commit2 = Commitment::from_vec(vec![1]);
 
-	let store = ChainStore::new(chain_dir)?;
+	let store = ChainStore::new(chain_dir, None)?;
 	let index = store::nrd_recent_kernel_index();
 
 	// Add a couple of single entries to the index and commit the batch.
 	{
-		let batch = store.batch()?;
+		let mut batch = store.batch()?;
 		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 		assert_eq!(index.get_list(&batch, commit), Ok(None));
 
 		assert_eq!(
-			index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+			index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 			Ok(()),
 		);
 
 		assert_eq!(
 			index.push_pos(
-				&batch,
+				&mut batch,
 				commit2,
 				CommitPos {
 					pos: 10,
@@ -544,8 +544,8 @@ fn test_store_kernel_idx_clear() -> Result<(), Error> {
 
 	// Clear the index and confirm everything was deleted as expected.
 	{
-		let batch = store.batch()?;
-		assert_eq!(index.clear(&batch), Ok(()));
+		let mut batch = store.batch()?;
+		assert_eq!(index.clear(&mut batch), Ok(()));
 		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 		assert_eq!(index.get_list(&batch, commit), Ok(None));
 		assert_eq!(index.peek_pos(&batch, commit2), Ok(None));
@@ -555,13 +555,13 @@ fn test_store_kernel_idx_clear() -> Result<(), Error> {
 
 	// Add multiple entries to the index, commit the batch.
 	{
-		let batch = store.batch()?;
+		let mut batch = store.batch()?;
 		assert_eq!(
-			index.push_pos(&batch, commit, CommitPos { pos: 1, height: 1 }),
+			index.push_pos(&mut batch, commit, CommitPos { pos: 1, height: 1 }),
 			Ok(()),
 		);
 		assert_eq!(
-			index.push_pos(&batch, commit, CommitPos { pos: 2, height: 2 }),
+			index.push_pos(&mut batch, commit, CommitPos { pos: 2, height: 2 }),
 			Ok(()),
 		);
 		assert_eq!(
@@ -577,8 +577,8 @@ fn test_store_kernel_idx_clear() -> Result<(), Error> {
 
 	// Clear the index and confirm everything was deleted as expected.
 	{
-		let batch = store.batch()?;
-		assert_eq!(index.clear(&batch), Ok(()));
+		let mut batch = store.batch()?;
+		assert_eq!(index.clear(&mut batch), Ok(()));
 		assert_eq!(index.peek_pos(&batch, commit), Ok(None));
 		assert_eq!(index.get_list(&batch, commit), Ok(None));
 		batch.commit()?;

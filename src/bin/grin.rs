@@ -24,7 +24,6 @@ use crate::core::global;
 use crate::tools::check_seeds;
 use crate::util::init_logger;
 use clap::App;
-use futures::channel::oneshot;
 use grin_api as api;
 use grin_chain as chain;
 use grin_config as config;
@@ -55,7 +54,7 @@ pub fn info_strings() -> (String, String) {
 		format!(
 			"This is Grin version {}{}, built for {} by {}.",
 			built_info::PKG_VERSION,
-			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
+			built_info::GIT_COMMIT_HASH.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
 		),
@@ -87,31 +86,51 @@ fn real_main() -> i32 {
 	let args = App::from_yaml(yml)
 		.version(built_info::PKG_VERSION)
 		.get_matches();
-	let node_config;
+	let mut node_config;
 
-	let chain_type = if args.is_present("testnet") {
-		global::ChainTypes::Testnet
+	let explicit_chain_type = if args.is_present("testnet") {
+		Some(global::ChainTypes::Testnet)
 	} else if args.is_present("usernet") {
-		global::ChainTypes::UserTesting
+		Some(global::ChainTypes::UserTesting)
 	} else {
-		global::ChainTypes::Mainnet
+		None
 	};
+	let cli_chain_type = explicit_chain_type.unwrap_or(global::ChainTypes::Mainnet);
 
 	// Deal with configuration file creation
 	if let ("server", Some(server_args)) = args.subcommand() {
 		// If it's just a server config command, do it and exit
 		if let ("config", Some(_)) = server_args.subcommand() {
-			cmd::config_command_server(&chain_type, SERVER_CONFIG_FILE_NAME);
+			global::init_global_chain_type(cli_chain_type);
+			cmd::config_command_server(&cli_chain_type, SERVER_CONFIG_FILE_NAME);
 			return 0;
 		}
 	}
 
+	let config_file_path = match args.subcommand() {
+		("server", Some(server_args)) => server_args.value_of("config_file"),
+		_ => None,
+	};
+	let chain_type = config::initial_chain_type(cli_chain_type, config_file_path)
+		.unwrap_or_else(|e| panic!("Error loading server configuration: {}", e));
+	if let Some(cli_chain_type) = explicit_chain_type {
+		if cli_chain_type != chain_type {
+			panic!(
+				"Chain type mismatch: CLI selected {:?}, but configuration selected {:?}",
+				cli_chain_type, chain_type
+			);
+		}
+	}
+
+	// Initialize our global chain_type.
+	global::init_global_chain_type(chain_type);
+
 	// Load relevant config
 	match args.subcommand() {
-		// When the subscommand is 'server' take into account the 'config_file' flag
-		("server", Some(server_args)) => {
-			if let Some(_path) = server_args.value_of("config_file") {
-				node_config = Some(config::GlobalConfig::new(_path).unwrap_or_else(|e| {
+		// When the subcommand is 'server' take into account the 'config_file' flag
+		("server", Some(_)) => {
+			if let Some(path) = config_file_path {
+				node_config = Some(config::load_server_config(path).unwrap_or_else(|e| {
 					panic!("Error loading server configuration: {}", e);
 				}));
 			} else {
@@ -133,11 +152,36 @@ fn real_main() -> i32 {
 	}
 
 	let config = node_config.clone().unwrap();
+	let config_chain_type = config.members.as_ref().unwrap().server.chain_type;
+	if config_chain_type != chain_type {
+		panic!(
+			"Chain type mismatch: initial configuration selected {:?}, but full config contains {:?}",
+			chain_type, config_chain_type
+		);
+	}
 	let mut logging_config = config.members.as_ref().unwrap().logging.clone().unwrap();
 	logging_config.tui_running = config.members.as_ref().unwrap().server.run_tui;
 
-	let api_chan: &'static mut (oneshot::Sender<()>, oneshot::Receiver<()>) =
-		Box::leak(Box::new(oneshot::channel::<()>()));
+	// Handle global --no-tui flag and GRIN_NO_TUI environment variable
+	let no_tui = args.is_present("no-tui")
+		|| std::env::var("GRIN_NO_TUI")
+			.map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+			.unwrap_or(false);
+
+	if no_tui {
+		// Deactivate logger TUI
+		logging_config.tui_running = Some(false);
+
+		// Deactivate Server TUI in node config, so
+		// cmd::server_command(...) will not use it
+		if let Some(gc) = node_config.as_mut() {
+			if let Some(members) = gc.members.as_mut() {
+				members.server.run_tui = Some(false);
+			}
+		}
+	}
+
+	let api_chan = tokio::sync::mpsc::channel::<()>(1);
 
 	let (logs_tx, logs_rx) = if logging_config.tui_running.unwrap() {
 		let (logs_tx, logs_rx) = mpsc::sync_channel::<LogEntry>(200);
@@ -158,9 +202,8 @@ fn real_main() -> i32 {
 
 	log_build_info();
 
-	// Initialize our global chain_type, feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
+	// Initialize feature flags (NRD kernel support currently), accept_fee_base, and future_time_limit.
 	// These are read via global and not read from config beyond this point.
-	global::init_global_chain_type(config.members.as_ref().unwrap().server.chain_type);
 	info!("Chain: {:?}", global::get_chain_type());
 	match global::get_chain_type() {
 		global::ChainTypes::Mainnet => {
@@ -207,8 +250,8 @@ fn real_main() -> i32 {
 
 		// seedcheck command
 		("seedcheck", Some(seedcheck_args)) => {
-			let is_testnet = seedcheck_args.is_present("testnet");
-			let results = check_seeds(is_testnet);
+			let is_testnet = args.is_present("testnet") || seedcheck_args.is_present("testnet");
+			let results = check_seeds(is_testnet, seedcheck_args.value_of("seed"));
 			let output =
 				serde_json::to_string_pretty(&results).expect("Unable to serialize results");
 

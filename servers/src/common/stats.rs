@@ -15,19 +15,18 @@
 //! Server stat collection types, to be used by tests, logging or GUI/TUI
 //! to collect information about server status
 
-use crate::util::RwLock;
+use chrono::prelude::*;
+use grin_core::pow::Difficulty;
+use millisecond::MillisecondFormatter;
 use std::sync::Arc;
 use std::time::SystemTime;
 
+use crate::chain::SyncStatus;
 use crate::core::core::hash::Hash;
 use crate::core::ser::ProtocolVersion;
-
-use chrono::prelude::*;
-
-use crate::chain::SyncStatus;
 use crate::p2p;
 use crate::p2p::Capabilities;
-use grin_core::pow::Difficulty;
+use crate::util::RwLock;
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -48,6 +47,8 @@ impl Default for ServerStateInfo {
 /// consumers might be interested in, such as test results or UI
 #[derive(Debug, Clone)]
 pub struct ServerStats {
+	/// Server uptime in seconds
+	pub uptime_seconds: u64,
 	/// Number of peers
 	pub peer_count: u32,
 	/// Chain head
@@ -66,6 +67,14 @@ pub struct ServerStats {
 	pub tx_stats: Option<TxStats>,
 	/// Disk usage in GB
 	pub disk_usage_gb: String,
+}
+
+impl ServerStats {
+	/// Formatted uptime (i.e.: 1y 17d 5h 10m 48s).
+	pub fn uptime_format(&self) -> String {
+		let time = millisecond::Millisecond::from_secs(self.uptime_seconds);
+		time.pretty()
+	}
 }
 
 /// Chain Statistics

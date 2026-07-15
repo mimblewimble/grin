@@ -22,6 +22,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 
+use p2p::types::{TESTNET_PEER_PORT, USERNET_PEER_PORT};
+
 use crate::comments::insert_comments;
 use crate::core::global;
 use crate::p2p;
@@ -42,10 +44,7 @@ pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
-	let mut grin_path = match dirs::home_dir() {
-		Some(p) => p,
-		None => PathBuf::new(),
-	};
+	let mut grin_path = dirs::home_dir().unwrap_or_else(|| PathBuf::new());
 	grin_path.push(GRIN_HOME);
 	grin_path.push(chain_type.shortname());
 	// Create if the default path doesn't exist
@@ -68,6 +67,41 @@ fn check_config_current_dir(path: &str) -> Option<PathBuf> {
 		return Some(c);
 	}
 	None
+}
+
+#[derive(Deserialize)]
+struct ChainTypeConfig {
+	server: Option<ChainTypeServerConfig>,
+}
+
+#[derive(Deserialize)]
+struct ChainTypeServerConfig {
+	chain_type: Option<global::ChainTypes>,
+}
+
+fn read_config_chain_type(file_path: &PathBuf) -> Result<global::ChainTypes, ConfigError> {
+	let contents = fs::read_to_string(file_path)?;
+	let decoded: ChainTypeConfig = toml::from_str(&contents).map_err(|e| {
+		ConfigError::ParseError(file_path.to_str().unwrap().to_string(), format!("{}", e))
+	})?;
+	Ok(decoded
+		.server
+		.and_then(|server| server.chain_type)
+		.unwrap_or_default())
+}
+
+/// Determine the chain type before peer addresses are parsed
+pub fn initial_chain_type(
+	cli_chain_type: global::ChainTypes,
+	config_file_path: Option<&str>,
+) -> Result<global::ChainTypes, ConfigError> {
+	if let Some(path) = config_file_path {
+		return read_config_chain_type(&PathBuf::from(path));
+	}
+	if let Some(path) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
+		return read_config_chain_type(&path);
+	}
+	Ok(cli_chain_type)
 }
 
 /// Create file with api secret
@@ -94,28 +128,70 @@ pub fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	Ok(())
 }
 
-/// Check that the api secret files exist and are valid
-fn check_api_secret_files(
-	chain_type: &global::ChainTypes,
-	secret_file_name: &str,
-) -> Result<(), ConfigError> {
-	let grin_path = get_grin_path(chain_type)?;
-	let mut api_secret_path = grin_path;
-	api_secret_path.push(secret_file_name);
+/// Check that the api secret file exists and is valid
+fn check_api_secret_file(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	if !api_secret_path.exists() {
-		init_api_secret(&api_secret_path)
+		init_api_secret(api_secret_path)
 	} else {
-		check_api_secret(&api_secret_path)
+		check_api_secret(api_secret_path)
 	}
+}
+
+fn resolve_api_secret_path(path: &str, grin_path: &PathBuf) -> PathBuf {
+	let path = PathBuf::from(path);
+	if path.is_absolute() {
+		path
+	} else {
+		let mut resolved = grin_path.clone();
+		resolved.push(path);
+		resolved
+	}
+}
+
+fn resolve_api_secret_path_for_chain(
+	path: &str,
+	chain_type: &global::ChainTypes,
+) -> Result<PathBuf, ConfigError> {
+	let path_buf = PathBuf::from(path);
+	if path_buf.is_absolute() {
+		Ok(path_buf)
+	} else {
+		Ok(resolve_api_secret_path(path, &get_grin_path(chain_type)?))
+	}
+}
+
+/// Check that the configured api secret files exist and are valid
+fn check_api_secret_files(config: &mut GlobalConfig) -> Result<(), ConfigError> {
+	let server_config = &mut config.members.as_mut().unwrap().server;
+
+	if let Some(api_secret_path) = server_config.api_secret_path.clone() {
+		let resolved =
+			resolve_api_secret_path_for_chain(&api_secret_path, &server_config.chain_type)?;
+		check_api_secret_file(&resolved)?;
+		server_config.api_secret_path = Some(resolved.to_str().unwrap().to_owned());
+	}
+	if let Some(foreign_api_secret_path) = server_config.foreign_api_secret_path.clone() {
+		let resolved =
+			resolve_api_secret_path_for_chain(&foreign_api_secret_path, &server_config.chain_type)?;
+		check_api_secret_file(&resolved)?;
+		server_config.foreign_api_secret_path = Some(resolved.to_str().unwrap().to_owned());
+	}
+
+	Ok(())
+}
+
+/// Load server config and ensure the configured api secret files exist
+pub fn load_server_config(file_path: &str) -> Result<GlobalConfig, ConfigError> {
+	let mut config = GlobalConfig::new(file_path)?;
+	check_api_secret_files(&mut config)?;
+	Ok(config)
 }
 
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalConfig, ConfigError> {
-	check_api_secret_files(chain_type, API_SECRET_FILE_NAME)?;
-	check_api_secret_files(chain_type, FOREIGN_API_SECRET_FILE_NAME)?;
-	// Use config file if current directory if it exists, .grin home otherwise
+	// Use config file in current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
-		GlobalConfig::new(p.to_str().unwrap())
+		load_server_config(p.to_str().unwrap())
 	} else {
 		// Check if grin dir exists
 		let grin_path = get_grin_path(chain_type)?;
@@ -132,7 +208,7 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 			default_config.write_to_file(config_path.to_str().unwrap())?;
 		}
 
-		GlobalConfig::new(config_path.to_str().unwrap())
+		load_server_config(config_path.to_str().unwrap())
 	}
 }
 
@@ -168,7 +244,7 @@ impl GlobalConfig {
 			global::ChainTypes::Mainnet => {}
 			global::ChainTypes::Testnet => {
 				defaults.api_http_addr = "127.0.0.1:13413".to_owned();
-				defaults.p2p_config.port = 13414;
+				defaults.p2p_config.port = TESTNET_PEER_PORT;
 				defaults
 					.stratum_mining_config
 					.as_mut()
@@ -182,7 +258,7 @@ impl GlobalConfig {
 			}
 			global::ChainTypes::UserTesting => {
 				defaults.api_http_addr = "127.0.0.1:23413".to_owned();
-				defaults.p2p_config.port = 23414;
+				defaults.p2p_config.port = USERNET_PEER_PORT;
 				defaults.p2p_config.seeding_type = p2p::Seeding::None;
 				defaults
 					.stratum_mining_config
@@ -224,7 +300,10 @@ impl GlobalConfig {
 	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
 		let config_file_path = self.config_file_path.as_ref().unwrap();
 		let contents = fs::read_to_string(config_file_path)?;
-		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone());
+		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone())
+			.map_err(|e| {
+				ConfigError::ParseError(config_file_path.to_str().unwrap().to_string(), e)
+			})?;
 		if contents != migrated {
 			fs::write(config_file_path, &migrated)?;
 		}
@@ -234,14 +313,12 @@ impl GlobalConfig {
 		match decoded {
 			Ok(gc) => {
 				self.members = Some(gc);
-				return Ok(self);
+				Ok(self)
 			}
-			Err(e) => {
-				return Err(ConfigError::ParseError(
-					self.config_file_path.unwrap().to_str().unwrap().to_string(),
-					format!("{}", e),
-				));
-			}
+			Err(e) => Err(ConfigError::ParseError(
+				self.config_file_path.unwrap().to_str().unwrap().to_string(),
+				format!("{}", e),
+			)),
 		}
 	}
 
@@ -275,8 +352,7 @@ impl GlobalConfig {
 
 	/// Enable mining
 	pub fn stratum_enabled(&mut self) -> bool {
-		return self
-			.members
+		self.members
 			.as_mut()
 			.unwrap()
 			.server
@@ -284,7 +360,7 @@ impl GlobalConfig {
 			.as_mut()
 			.unwrap()
 			.enable_stratum_server
-			.unwrap();
+			.unwrap()
 	}
 
 	/// Serialize config
@@ -292,10 +368,8 @@ impl GlobalConfig {
 		let encoded: Result<String, toml::ser::Error> =
 			toml::to_string(self.members.as_mut().unwrap());
 		match encoded {
-			Ok(enc) => return Ok(enc),
-			Err(e) => {
-				return Err(ConfigError::SerializationError(format!("{}", e)));
-			}
+			Ok(enc) => Ok(enc),
+			Err(e) => Err(ConfigError::SerializationError(format!("{}", e))),
 		}
 	}
 
@@ -313,13 +387,14 @@ impl GlobalConfig {
 	/// - Adds "config_file_version = 2"
 	/// - If server.pool_config.accept_fee_base is 1000000, change it to 500000
 	/// - Remove "#a setting to 1000000 will be overridden to 500000 to respect the fixfees RFC"
-	fn migrate_config_file_version_none_to_2(config_str: String) -> String {
+	fn migrate_config_file_version_none_to_2(config_str: String) -> Result<String, String> {
 		// Parse existing config and return unchanged if not eligible for migration
 
 		let mut config: ConfigMembers =
-			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap();
+			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()))
+				.map_err(|e| e.to_string())?;
 		if config.config_file_version != None {
-			return config_str;
+			return Ok(config_str);
 		}
 
 		// Apply changes both textually and structurally
@@ -342,12 +417,14 @@ impl GlobalConfig {
 
 		// Verify equivalence
 
-		assert_eq!(
-			config,
-			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone())).unwrap()
-		);
+		let migrated_config: ConfigMembers =
+			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()))
+				.map_err(|e| e.to_string())?;
+		if config != migrated_config {
+			return Err("config migration verification failed".to_string());
+		}
 
-		config_str
+		Ok(config_str)
 	}
 
 	// For forwards compatibility old config needs `Warning` log level changed to standard log::Level `WARN`
@@ -377,4 +454,139 @@ fn test_fix_warning_level() {
 	let config = "Warning".to_string();
 	let fixed_config = GlobalConfig::fix_warning_level(config);
 	assert_eq!(fixed_config, "WARN");
+}
+
+#[test]
+fn test_bad_config() {
+	let mut path = std::env::temp_dir();
+	path.push(format!("grin_bad_config_{}.toml", std::process::id()));
+
+	fs::write(&path, "invalid = [").unwrap();
+	let res = GlobalConfig::new(path.to_str().unwrap());
+	let _ = fs::remove_file(&path);
+
+	match res {
+		Err(ConfigError::ParseError(file_name, _)) => {
+			assert_eq!(file_name, path.to_str().unwrap());
+		}
+		_ => panic!("expected config parse error, got {:?}", res),
+	}
+}
+
+#[cfg(test)]
+fn temp_config_dir(name: &str) -> PathBuf {
+	let mut test_dir = env::temp_dir();
+	test_dir.push(format!(
+		"{}_{}_{}",
+		name,
+		std::process::id(),
+		std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.unwrap()
+			.as_nanos()
+	));
+	fs::create_dir_all(&test_dir).unwrap();
+	test_dir
+}
+
+#[cfg(test)]
+fn write_test_config(test_dir: &PathBuf) -> (PathBuf, PathBuf, PathBuf) {
+	let mut config = GlobalConfig::for_chain(&global::ChainTypes::Mainnet);
+	config.update_paths(test_dir);
+
+	let mut config_path = test_dir.clone();
+	config_path.push(SERVER_CONFIG_FILE_NAME);
+	config.write_to_file(config_path.to_str().unwrap()).unwrap();
+
+	let mut api_secret_path = test_dir.clone();
+	api_secret_path.push(API_SECRET_FILE_NAME);
+	let mut foreign_api_secret_path = test_dir.clone();
+	foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
+
+	(config_path, api_secret_path, foreign_api_secret_path)
+}
+
+#[cfg(test)]
+fn check_test_secrets(
+	server_config: ServerConfig,
+	api_secret_path: &PathBuf,
+	foreign_api_secret_path: &PathBuf,
+	api_secret_exists: bool,
+	foreign_api_secret_exists: bool,
+) {
+	assert_eq!(
+		server_config.api_secret_path,
+		Some(api_secret_path.to_str().unwrap().to_owned())
+	);
+	assert_eq!(
+		server_config.foreign_api_secret_path,
+		Some(foreign_api_secret_path.to_str().unwrap().to_owned())
+	);
+	assert!(api_secret_exists);
+	assert!(foreign_api_secret_exists);
+}
+
+#[test]
+fn test_relative_api_secret_paths() {
+	let grin_path = temp_config_dir("grin_config_relative_home");
+	let mut expected_api_secret_path = grin_path.clone();
+	expected_api_secret_path.push(API_SECRET_FILE_NAME);
+	let mut absolute_api_secret_path = temp_config_dir("grin_config_absolute");
+	absolute_api_secret_path.push(API_SECRET_FILE_NAME);
+
+	let resolved_api_secret_path = resolve_api_secret_path(API_SECRET_FILE_NAME, &grin_path);
+	let resolved_absolute_api_secret_path =
+		resolve_api_secret_path(absolute_api_secret_path.to_str().unwrap(), &grin_path);
+
+	assert_eq!(resolved_api_secret_path, expected_api_secret_path);
+	assert_eq!(resolved_absolute_api_secret_path, absolute_api_secret_path);
+
+	fs::remove_dir_all(&grin_path).unwrap();
+	fs::remove_dir_all(absolute_api_secret_path.parent().unwrap()).unwrap();
+}
+
+#[test]
+fn test_api_secret_paths() {
+	let current_dir = env::current_dir().unwrap();
+	let test_dir = temp_config_dir("grin_config");
+	let (_config_path, api_secret_path, foreign_api_secret_path) = write_test_config(&test_dir);
+
+	env::set_current_dir(&test_dir).unwrap();
+	let res = initial_setup_server(&global::ChainTypes::Mainnet);
+	env::set_current_dir(current_dir).unwrap();
+
+	let server_config = res.map(|config| config.members.unwrap().server);
+	let api_secret_exists = api_secret_path.exists();
+	let foreign_api_secret_exists = foreign_api_secret_path.exists();
+
+	fs::remove_dir_all(&test_dir).unwrap();
+
+	check_test_secrets(
+		server_config.unwrap(),
+		&api_secret_path,
+		&foreign_api_secret_path,
+		api_secret_exists,
+		foreign_api_secret_exists,
+	);
+}
+
+#[test]
+fn test_api_secret_paths_config_file() {
+	let test_dir = temp_config_dir("grin_config_file");
+	let (config_path, api_secret_path, foreign_api_secret_path) = write_test_config(&test_dir);
+
+	let res = load_server_config(config_path.to_str().unwrap());
+	let server_config = res.map(|config| config.members.unwrap().server);
+	let api_secret_exists = api_secret_path.exists();
+	let foreign_api_secret_exists = foreign_api_secret_path.exists();
+
+	fs::remove_dir_all(&test_dir).unwrap();
+
+	check_test_secrets(
+		server_config.unwrap(),
+		&api_secret_path,
+		&foreign_api_secret_path,
+		api_secret_exists,
+		foreign_api_secret_exists,
+	);
 }

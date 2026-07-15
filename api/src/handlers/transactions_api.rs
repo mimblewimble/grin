@@ -20,56 +20,56 @@ use crate::types::*;
 use crate::util;
 use crate::util::secp::pedersen::Commitment;
 use crate::web::*;
-use hyper::{Body, Request, StatusCode};
+use hyper::body::Incoming;
+use hyper::{Request, StatusCode};
 use std::sync::Weak;
 
-// Sum tree handler. Retrieve the roots:
-// GET /v1/txhashset/roots
-//
-// Last inserted nodes::
-// GET /v1/txhashset/lastoutputs (gets last 10)
-// GET /v1/txhashset/lastoutputs?n=5
-// GET /v1/txhashset/lastrangeproofs
-// GET /v1/txhashset/lastkernels
+/// Sum tree handler. Retrieve the roots:
+/// GET /v1/txhashset/roots
+///
+/// Last inserted nodes:
+/// GET /v1/txhashset/lastoutputs (gets last 10)
+/// GET /v1/txhashset/lastoutputs?n=5
+/// GET /v1/txhashset/lastrangeproofs
+/// GET /v1/txhashset/lastkernels
 
-// UTXO traversal::
-// GET /v1/txhashset/outputs?start_index=1&max=100
-// GET /v1/txhashset/heightstopmmr?start_height=1&end_height=1000
-//
-// Build a merkle proof for a given pos
-// GET /v1/txhashset/merkleproof?n=1
-
+/// UTXO traversal:
+/// GET /v1/txhashset/outputs?start_index=1&max=100
+/// GET /v1/txhashset/heightstopmmr?start_height=1&end_height=1000
+///
+/// Build a merkle proof for a given pos
+/// GET /v1/txhashset/merkleproof?n=1
 pub struct TxHashSetHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
 impl TxHashSetHandler {
-	// gets roots
+	/// Get roots.
 	fn get_roots(&self) -> Result<TxHashSet, Error> {
 		let chain = w(&self.chain)?;
 		TxHashSet::from_head(&chain)
 			.map_err(|e| Error::Internal(format!("failed to read roots from txhashset: {}", e)))
 	}
 
-	// gets last n outputs inserted in to the tree
+	/// Get last n outputs inserted in to the tree.
 	fn get_last_n_output(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
 		let chain = w(&self.chain)?;
 		Ok(TxHashSetNode::get_last_n_output(&chain, distance))
 	}
 
-	// gets last n rangeproofs inserted in to the tree
+	/// Get last n rangeproofs inserted in to the tree.
 	fn get_last_n_rangeproof(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
 		let chain = w(&self.chain)?;
 		Ok(TxHashSetNode::get_last_n_rangeproof(&chain, distance))
 	}
 
-	// gets last n kernels inserted in to the tree
+	/// Get last n kernels inserted in to the tree.
 	fn get_last_n_kernel(&self, distance: u64) -> Result<Vec<TxHashSetNode>, Error> {
 		let chain = w(&self.chain)?;
 		Ok(TxHashSetNode::get_last_n_kernel(&chain, distance))
 	}
 
-	// allows traversal of utxo set
+	/// Allows traversal of UTXO set.
 	fn outputs(
 		&self,
 		start_index: u64,
@@ -97,7 +97,7 @@ impl TxHashSetHandler {
 		Ok(out)
 	}
 
-	// allows traversal of utxo set bounded within a block range
+	/// Allows traversal of UTXO set bounded within a block range.
 	pub fn block_height_range_to_pmmr_indices(
 		&self,
 		start_block_height: u64,
@@ -115,8 +115,8 @@ impl TxHashSetHandler {
 		Ok(out)
 	}
 
-	// return a dummy output with merkle proof for position filled out
-	// (to avoid having to create a new type to pass around)
+	/// Return a dummy output with merkle proof for position filled out
+	/// (to avoid having to create a new type to pass around).
 	fn get_merkle_proof_for_output(&self, id: &str) -> Result<OutputPrintable, Error> {
 		let c = util::from_hex(id)
 			.map_err(|_| Error::Argument(format!("Not a valid commitment: {}", id)))?;
@@ -139,7 +139,7 @@ impl TxHashSetHandler {
 }
 
 impl Handler for TxHashSetHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
+	fn get(&self, req: Request<Incoming>) -> ResponseFuture {
 		// TODO: probably need to set a reasonable max limit here
 		let params = QueryParams::from(req.uri().query());
 		let last_n = parse_param_no_err!(params, "n", 10);
@@ -166,7 +166,7 @@ impl Handler for TxHashSetHandler {
 				self.block_height_range_to_pmmr_indices(start_height, end_height),
 			),
 			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
-			_ => response(StatusCode::BAD_REQUEST, ""),
+			_ => response(StatusCode::BAD_REQUEST, "".into()),
 		}
 	}
 }
