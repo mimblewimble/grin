@@ -30,7 +30,7 @@ Or from the CLI:
 grin client miningstatus
 ```
 
-The response includes whether stratum is enabled/running, connected worker count, current block height and network difficulty, blocks found, network hashrate estimate, and per-worker share stats.
+The response includes whether stratum is enabled/running, connected worker count, current block height and network difficulty, blocks found, network hashrate estimate, and per-worker share stats for currently connected workers.
 
 ## Node API v1
 

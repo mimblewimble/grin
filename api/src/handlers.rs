@@ -62,6 +62,39 @@ pub fn node_apis<B, P>(
 	tls_config: Option<TLSConfig>,
 	api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
 	stop_state: Arc<StopState>,
+) -> Result<(), Error>
+where
+	B: BlockChain + 'static,
+	P: PoolAdapter + 'static,
+{
+	node_apis_with_mining_stats(
+		addr,
+		chain,
+		tx_pool,
+		peers,
+		sync_state,
+		api_secret,
+		foreign_api_secret,
+		tls_config,
+		api_chan,
+		stop_state,
+		None,
+	)
+}
+
+/// Same as [`node_apis`] but additionally wires a provider of live stratum
+/// mining stats into the Owner API `get_mining_status` method.
+pub fn node_apis_with_mining_stats<B, P>(
+	addr: &str,
+	chain: Arc<Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<B, P>>>,
+	peers: Arc<p2p::Peers>,
+	sync_state: Arc<SyncState>,
+	api_secret: Option<String>,
+	foreign_api_secret: Option<String>,
+	tls_config: Option<TLSConfig>,
+	api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
+	stop_state: Arc<StopState>,
 	mining_stats: Option<MiningStatsProvider>,
 ) -> Result<(), Error>
 where

@@ -99,22 +99,20 @@ impl Owner {
 		status_handler.get_status()
 	}
 
-	/// Returns current stratum mining statistics (enabled/running, workers, difficulty, etc.).
-	/// Useful when running headless without the TUI mining tab.
-	///
-	/// When stratum is disabled or no stats provider is wired up, returns a default
-	/// (disabled) [`MiningStatus`](types/struct.MiningStatus.html).
+	/// Returns current stratum mining statistics, mirroring the TUI mining tab.
 	///
 	/// # Returns
 	/// * Result Containing:
 	/// * A [`MiningStatus`](types/struct.MiningStatus.html)
-	/// * or [`Error`](struct.Error.html) if an error is encountered.
+	/// * or [`Error`](struct.Error.html) if no mining stats provider is configured.
 	///
 
 	pub fn get_mining_status(&self) -> Result<MiningStatus, Error> {
 		match &self.mining_stats {
 			Some(provider) => Ok(provider()),
-			None => Ok(MiningStatus::default()),
+			None => Err(Error::Internal(
+				"no mining stats provider configured".to_string(),
+			)),
 		}
 	}
 
@@ -249,10 +247,9 @@ mod test {
 	use std::sync::Arc;
 
 	#[test]
-	fn get_mining_status_without_provider_returns_default() {
+	fn get_mining_status_without_provider_returns_error() {
 		let owner = Owner::new(Weak::new(), Weak::new(), Weak::new());
-		let status = owner.get_mining_status().unwrap();
-		assert_eq!(status, MiningStatus::default());
+		assert!(owner.get_mining_status().is_err());
 	}
 
 	#[test]
@@ -269,7 +266,6 @@ mod test {
 			minimum_share_difficulty: 1,
 			worker_stats: vec![WorkerInfo {
 				id: "w0".into(),
-				is_connected: true,
 				last_seen: 100,
 				initial_block_height: 40,
 				pow_difficulty: 1,

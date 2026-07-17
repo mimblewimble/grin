@@ -316,7 +316,7 @@ impl Server {
 			api::types::MiningStatus::from(&*stats)
 		});
 
-		api::node_apis(
+		api::node_apis_with_mining_stats(
 			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),

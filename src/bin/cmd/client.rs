@@ -178,9 +178,6 @@ impl HTTPNodeClient {
 				if !status.worker_stats.is_empty() {
 					writeln!(e, "Workers:").unwrap();
 					for worker in status.worker_stats {
-						if !worker.is_connected {
-							continue;
-						}
 						writeln!(
 							e,
 							"  id={} accepted={} rejected={} stale={} blocks={} difficulty={}",

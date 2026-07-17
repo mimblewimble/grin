@@ -110,7 +110,6 @@ pub trait OwnerRpc: Sync + Send {
 				"worker_stats": [
 					{
 						"id": "0",
-						"is_connected": true,
 						"last_seen": 1609459200,
 						"initial_block_height": 990,
 						"pow_difficulty": 1,

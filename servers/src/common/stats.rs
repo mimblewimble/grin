@@ -303,7 +303,6 @@ impl From<&WorkerStats> for WorkerInfo {
 			.unwrap_or(0);
 		WorkerInfo {
 			id: stats.id.clone(),
-			is_connected: stats.is_connected,
 			last_seen,
 			initial_block_height: stats.initial_block_height,
 			pow_difficulty: stats.pow_difficulty,
@@ -327,7 +326,14 @@ impl From<&StratumStats> for MiningStatus {
 			blocks_found: stats.blocks_found,
 			network_hashrate: stats.network_hashrate,
 			minimum_share_difficulty: stats.minimum_share_difficulty,
-			worker_stats: stats.worker_stats.iter().map(WorkerInfo::from).collect(),
+			// worker_stats retains every worker that ever connected; only expose
+			// currently connected ones so the response does not grow unbounded.
+			worker_stats: stats
+				.worker_stats
+				.iter()
+				.filter(|w| w.is_connected)
+				.map(WorkerInfo::from)
+				.collect(),
 		}
 	}
 }
@@ -350,6 +356,10 @@ mod test {
 		worker.num_stale = 2;
 		worker.num_blocks_found = 1;
 
+		let mut disconnected = WorkerStats::default();
+		disconnected.id = "gone".into();
+		disconnected.is_connected = false;
+
 		let stats = StratumStats {
 			is_enabled: true,
 			is_running: true,
@@ -360,7 +370,7 @@ mod test {
 			blocks_found: 4,
 			network_hashrate: 12.5,
 			minimum_share_difficulty: 3,
-			worker_stats: vec![worker],
+			worker_stats: vec![worker, disconnected],
 		};
 
 		let mining = MiningStatus::from(&stats);
@@ -375,7 +385,6 @@ mod test {
 		assert_eq!(mining.minimum_share_difficulty, 3);
 		assert_eq!(mining.worker_stats.len(), 1);
 		assert_eq!(mining.worker_stats[0].id, "42");
-		assert!(mining.worker_stats[0].is_connected);
 		assert_eq!(mining.worker_stats[0].last_seen, 1_600_000_000);
 		assert_eq!(mining.worker_stats[0].num_accepted, 5);
 		assert_eq!(mining.worker_stats[0].num_blocks_found, 1);

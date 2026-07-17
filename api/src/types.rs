@@ -109,8 +109,6 @@ impl Status {
 pub struct WorkerInfo {
 	/// Unique ID for this worker
 	pub id: String,
-	/// Whether the stratum worker is currently connected
-	pub is_connected: bool,
 	/// Unix timestamp (seconds) of most recent communication with this worker
 	pub last_seen: u64,
 	/// Block height the worker started mining at
@@ -133,7 +131,8 @@ pub struct WorkerInfo {
 pub struct MiningStatus {
 	/// Whether the stratum server is enabled in config
 	pub is_enabled: bool,
-	/// Whether the stratum server is currently running
+	/// Whether the stratum server has been started. Set once at startup and
+	/// not cleared on listener failure or shutdown.
 	pub is_running: bool,
 	/// Number of currently connected workers
 	pub num_workers: usize,
@@ -149,7 +148,7 @@ pub struct MiningStatus {
 	pub network_hashrate: f64,
 	/// Minimum share difficulty requested from miners
 	pub minimum_share_difficulty: u64,
-	/// Per-worker status
+	/// Per-worker status for currently connected workers
 	pub worker_stats: Vec<WorkerInfo>,
 }
 
@@ -871,7 +870,6 @@ mod test {
 			minimum_share_difficulty: 1,
 			worker_stats: vec![WorkerInfo {
 				id: "0".into(),
-				is_connected: true,
 				last_seen: 1609459200,
 				initial_block_height: 990,
 				pow_difficulty: 1,
