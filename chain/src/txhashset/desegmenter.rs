@@ -486,9 +486,13 @@ impl Desegmenter {
 				self.bitmap_mmr_size,
 				self.default_bitmap_segment_height,
 			);
-			// Advance iterator to next expected segment
+			// Advance iterator to next expected segment. `local_pmmr_size` is
+			// a count (positions 0..size-1 are present locally), so a segment
+			// whose last position equals it still contains new data and must
+			// be requested: with a strict `>` a single-leaf bitmap MMR (last
+			// position 0, local size 0) is never requested and sync stalls.
 			while let Some(id) = identifier_iter.next() {
-				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
+				if id.segment_pos_range(self.bitmap_mmr_size).1 >= local_pmmr_size {
 					if !self.has_bitmap_segment_with_id(id) {
 						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
 						if return_vec.len() >= max_elements {
@@ -672,18 +676,23 @@ impl Desegmenter {
 			"pibd_desegmenter - expected number of leaves in bitmap MMR: {}",
 			self.bitmap_mmr_leaf_count
 		);
-		// Total size of Bitmap PMMR
+		// Total size of Bitmap PMMR. `unwrap_or` evaluates its argument
+		// eagerly, so the fallback used to run - and panic on an empty peak
+		// set - whenever the bitmap MMR had a single leaf (output MMR with
+		// <= 1024 leaves). Evaluate it lazily and degrade to 0 instead of
+		// panicking when even the reduced peak set is empty.
 		self.bitmap_mmr_size =
 			1 + pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
 				.last()
-				.unwrap_or(
-					&(pmmr::peaks(pmmr::insertion_to_pmmr_index(
-						self.bitmap_mmr_leaf_count - 1,
+				.copied()
+				.unwrap_or_else(|| {
+					pmmr::peaks(pmmr::insertion_to_pmmr_index(
+						self.bitmap_mmr_leaf_count.saturating_sub(1),
 					))
 					.last()
-					.unwrap()),
-				)
-				.clone();
+					.copied()
+					.unwrap_or(0)
+				});
 
 		trace!(
 			"pibd_desegmenter - expected size of bitmap MMR: {}",
