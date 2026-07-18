@@ -341,6 +341,18 @@ where
 {
 	/// Generate a segment from a PMMR
 	/// If bitmap is provided, only hashes at pruning boundaries are included.
+	///
+	/// Hash boundaries are computed via the same bottom-up postorder walk the
+	/// receiver-side reconstruction (`root`) performs, tracking which
+	/// positions are already derivable ("known") from the selected leaves,
+	/// instead of an independent bitmap-only heuristic. A position becomes
+	/// known if both children are known; if exactly one child is known, the
+	/// *other* child's hash is required and emitted (mirroring the
+	/// `(None, Some)` / `(Some, None)` lookups in `root`), after which the
+	/// parent is known too. This guarantees the produced segment is exactly
+	/// what `root` and `TxHashSet::apply_*_segment` expect: no position is
+	/// ever described twice (as both leaf data and part of a collapsed
+	/// ancestor hash), and no hash needed for reconstruction is missing.
 	pub fn from_pmmr<U, B>(
 		segment_id: SegmentIdentifier,
 		pmmr: &ReadonlyPMMR<'_, U, B>,
@@ -357,49 +369,102 @@ where
 			return Err(SegmentError::NonExistent);
 		}
 
-		// Fill leaf data and hashes
 		let (segment_first_pos, segment_last_pos) = segment.segment_pos_range(mmr_size);
+
+		// Pass 1: select leaf data - present on disk, and (for prunable MMRs)
+		// required by the bitmap or its sibling, or the final uneven leaf:
+		// the exact set the receiver-side `root` consumes.
 		for pos0 in segment_first_pos..=segment_last_pos {
-			if pmmr::is_leaf(pos0) {
+			if !pmmr::is_leaf(pos0) {
+				continue;
+			}
+			let include = match bitmap {
+				None => true,
+				Some(bm) => {
+					let idx_1 = pmmr::n_leaves(pos0 + 1) - 1;
+					let idx_2 = if pmmr::is_left_sibling(pos0) {
+						idx_1 + 1
+					} else {
+						idx_1 - 1
+					};
+					bm.contains(idx_1 as u32) || bm.contains(idx_2 as u32) || pos0 == mmr_size - 1
+				}
+			};
+			if include {
 				if let Some(data) = pmmr.get_data_from_file(pos0) {
 					segment.leaf_data.push(data);
 					segment.leaf_pos.push(pos0);
-					continue;
 				} else if bitmap.is_none() {
 					return Err(SegmentError::MissingLeaf(pos0));
 				}
 			}
-			if let Some(bm) = bitmap {
-				// Only include hash if this subtree is fully pruned
-				// AND the sibling subtree is NOT fully pruned (pruning boundary)
-				if subtree_fully_pruned(pos0, bm, mmr_size) {
-					// Find sibling position
-					let height = pmmr::bintree_postorder_height(pos0);
-					let subtree_size = (1u64 << (height + 1)) - 1;
-					let sibling_pos0 = if pmmr::is_left_sibling(pos0) {
-						// Right sibling is at pos0 + size of this subtree
-						Some(pos0 + subtree_size)
-					} else {
-						// Left sibling: go back by sibling's subtree size
-						pos0.checked_sub(subtree_size)
-					};
-					// Need hash if sibling exists in segment and is not fully pruned
-					let need_hash = match sibling_pos0 {
-						Some(sib) if sib >= segment_first_pos && sib <= segment_last_pos => {
-							!subtree_fully_pruned(sib, bm, mmr_size)
-						}
-						_ => {
-							// Sibling outside segment or underflow - may need hash for proof
-							true
-						}
-					};
-					if need_hash {
-						if let Some(hash) = pmmr.get_from_file(pos0) {
-							segment.hashes.push(hash);
-							segment.hash_pos.push(pos0);
+		}
+
+		// Pass 2: bottom-up walk mirroring `root`, deciding exactly which
+		// interior hashes are needed to reconstruct the root from the leaf
+		// set chosen above.
+		if bitmap.is_some() {
+			let leaf_set: std::collections::HashSet<u64> =
+				segment.leaf_pos.iter().copied().collect();
+			let mut needed = Vec::<(u64, Hash)>::new();
+			// (pos0, known) - `known` means the receiver can derive this
+			// position's hash from what the segment ships below it.
+			let mut stack =
+				Vec::<(u64, bool)>::with_capacity(2 * (segment.identifier.height as usize) + 1);
+			for pos0 in segment_first_pos..=segment_last_pos {
+				let height = pmmr::bintree_postorder_height(pos0);
+				let is_known = if height == 0 {
+					leaf_set.contains(&pos0)
+				} else {
+					let (_, right_known) = stack.pop().unwrap();
+					let (_, left_known) = stack.pop().unwrap();
+					match (left_known, right_known) {
+						(true, true) => true,
+						(false, false) => false,
+						(known_l, _known_r) => {
+							let left_child_pos = 1 + pos0 - (1 << height);
+							let right_child_pos = pos0;
+							let need_pos = if known_l {
+								right_child_pos - 1
+							} else {
+								left_child_pos - 1
+							};
+							if let Some(hash) = pmmr.get_from_file(need_pos) {
+								needed.push((need_pos, hash));
+								true
+							} else {
+								// The needed child hash is unavailable (its
+								// subtree is compacted beyond this level):
+								// leave the parent unknown so the requirement
+								// propagates upward, or ultimately resolves
+								// via the whole-segment fallback below.
+								false
+							}
 						}
 					}
+				};
+				stack.push((pos0, is_known));
+			}
+			// Any subtree root still unknown has no parent inside the
+			// segment to demand it: the segment root of a fully pruned full
+			// segment, or a fully pruned peak in the final (partial)
+			// segment. The receiver looks these up directly (`root` bags
+			// pruned in-segment peaks; `first_unpruned_parent` probes the
+			// segment root before climbing), so ship them if we have them.
+			for (pos0, known) in stack {
+				if !known {
+					if let Some(hash) = pmmr.get_from_file(pos0) {
+						needed.push((pos0, hash));
+					}
 				}
+			}
+			// Serialization requires strictly increasing hash positions and
+			// the walk can demand a left child after a deeper right-subtree
+			// sibling, so sort before finalizing.
+			needed.sort_unstable_by_key(|&(pos0, _)| pos0);
+			for (pos0, hash) in needed {
+				segment.hash_pos.push(pos0);
+				segment.hashes.push(hash);
 			}
 		}
 
@@ -870,15 +935,4 @@ impl Writeable for SegmentProof {
 		}
 		Ok(())
 	}
-}
-
-/// Check if a subtree rooted at pos0 is fully pruned (no unspent leaves in bitmap)
-fn subtree_fully_pruned(pos0: u64, bitmap: &Bitmap, mmr_size: u64) -> bool {
-	let leftmost = pmmr::bintree_leftmost(pos0);
-	let rightmost = pmmr::bintree_rightmost(pos0);
-	let n_leaves = pmmr::n_leaves(mmr_size);
-	let start_leaf = pmmr::n_leaves(leftmost + 1).saturating_sub(1);
-	let end_leaf = min(pmmr::n_leaves(rightmost + 1), n_leaves);
-	// If any leaf in range is in bitmap (unspent), subtree is not fully pruned
-	bitmap.range_cardinality(start_leaf as u32..end_leaf as u32) == 0
 }

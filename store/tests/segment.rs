@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::core::core::hash::DefaultHashable;
+use crate::core::core::hash::{DefaultHashable, Hash};
 use crate::core::core::pmmr;
 use crate::core::core::pmmr::segment::{Segment, SegmentIdentifier};
 use crate::core::core::pmmr::{Backend, ReadablePMMR, ReadonlyPMMR, PMMR};
@@ -387,6 +387,185 @@ where
 		mmr.prune(pmmr::insertion_to_pmmr_index(leaf_idx)).unwrap();
 		bitmap.remove(leaf_idx as u32);
 	}
+}
+
+// Replicates chain::txhashset::TxHashSet::apply_output_segment /
+// sort_pmmr_hashes_and_leaves: insert hashes and leaves in position order,
+// pushing hashes as pruned subtrees when pos0 >= size and leaves when
+// pos0 == size.
+fn apply_segment_like_desegmenter(
+	segment: Segment<TestElem>,
+	ba: &mut PMMRBackend<TestElem>,
+	unspent_bitmap: &Bitmap,
+) -> Result<Hash, String> {
+	let (_id, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
+	// (pos0, is_hash, data_index)
+	let mut inserts: Vec<(u64, bool, usize)> = Vec::new();
+	for (idx, &pos0) in leaf_pos.iter().enumerate() {
+		inserts.push((pos0, false, idx));
+	}
+	for (idx, &pos0) in hash_pos.iter().enumerate() {
+		inserts.push((pos0, true, idx));
+	}
+	inserts.sort();
+
+	let mut mmr = PMMR::new(ba);
+	for (pos0, is_hash, idx) in inserts {
+		if is_hash {
+			if pos0 >= mmr.size {
+				mmr.push_pruned_subtree(hashes[idx], pos0)?;
+			}
+		} else {
+			if pos0 == mmr.size {
+				mmr.push(&leaf_data[idx])?;
+			}
+			if let Some(i) = pmmr::pmmr_leaf_to_insertion_index(pos0) {
+				if !unspent_bitmap.contains(i as u32) {
+					mmr.remove_from_leaf_set(pos0);
+				}
+			}
+		}
+	}
+	mmr.root()
+}
+
+// Build a source PMMR in the mixed state every synced node is in between
+// compaction passes: leaves 2,3 spent AND compacted away (prune list root at
+// pos 5), leaves 0,1 spent but NOT yet compacted (still physically present in
+// the files).
+fn build_mixed_compaction_source(ba: &mut PMMRBackend<TestElem>) -> (u64, Hash, Bitmap) {
+	let n_leaves: u64 = 16;
+	let mut mmr = PMMR::new(ba);
+	for i in 0..n_leaves as u32 {
+		mmr.push(&TestElem([i / 7, i / 5, i / 3, i])).unwrap();
+	}
+	let last_pos = mmr.unpruned_size();
+	let root = mmr.root().unwrap();
+
+	let mut bitmap = Bitmap::new();
+	bitmap.add_range(0..n_leaves as u32);
+
+	let mut mmr = PMMR::at(ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[2, 3]);
+	ba.sync().unwrap();
+	ba.check_compact(last_pos, &Bitmap::new()).unwrap();
+	ba.sync().unwrap();
+
+	let mut mmr = PMMR::at(ba, last_pos);
+	prune(&mut mmr, &mut bitmap, &[0, 1]);
+	ba.sync().unwrap();
+
+	(last_pos, root, bitmap)
+}
+
+// A segment produced from a partially-compacted region must apply cleanly on
+// a fresh node and reproduce the source root. With the previous bitmap-only
+// boundary heuristic this exact fixture produced a segment that passed
+// validation but silently corrupted the receiving PMMR (the "Invalid Root"
+// PIBD restart loop reported against the sparse segment optimization).
+#[test]
+fn sparse_segment_mixed_compaction_round_trip() {
+	let t = Utc::now();
+	let data_dir = format!(
+		"./target/tmp/{}.{}-sparse_round_trip",
+		t.timestamp(),
+		t.timestamp_subsec_nanos()
+	);
+	let src_dir = format!("{}/src", data_dir);
+	let dst_dir = format!("{}/dst", data_dir);
+	for d in [&src_dir, &dst_dir] {
+		fs::create_dir_all(d).unwrap();
+	}
+
+	let mut ba = PMMRBackend::new(&src_dir, true, ProtocolVersion(1), None).unwrap();
+	let (last_pos, root, bitmap) = build_mixed_compaction_source(&mut ba);
+
+	// Whole MMR in one segment
+	let id = SegmentIdentifier { height: 4, idx: 0 };
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, Some(&bitmap)).unwrap();
+
+	// The fully-spent-but-partially-compacted subtree over leaves 0..4 must
+	// be represented by its single boundary hash at pos 6, with no leaf data
+	// beneath it: describing the same positions twice (spent leaves as data
+	// AND collapsed into an ancestor hash) is what broke apply.
+	let leaf_positions: Vec<u64> = segment.leaf_iter().map(|(p, _)| p).collect();
+	let hash_positions: Vec<u64> = segment.hash_iter().map(|(p, _)| p).collect();
+	assert_eq!(hash_positions, vec![6]);
+	assert!(leaf_positions.iter().all(|&p| p > 6));
+
+	segment.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	let mut ba_dst = PMMRBackend::new(&dst_dir, true, ProtocolVersion(1), None).unwrap();
+	let applied_root = apply_segment_like_desegmenter(segment, &mut ba_dst, &bitmap).unwrap();
+	assert_eq!(applied_root, root, "sparse segment must round-trip");
+
+	std::mem::drop(ba);
+	std::mem::drop(ba_dst);
+	fs::remove_dir_all(&data_dir).unwrap();
+}
+
+// Documents why boundary hashes cannot be chosen from the bitmap alone: the
+// old heuristic shipped the spent-but-uncompacted leaves 0,1 as data AND
+// collapsed leaves 0..4 into the pos 6 boundary hash. Such a segment passes
+// validation (root reconstruction ignores the redundant leaves, the hash is
+// genuinely bound to the root), but the desegmenter apply logic pushes
+// leaves 0,1 at the frontier and then registers the pos 6 subtree as pruned
+// over them, desyncing the prune list from the hash file. The resulting
+// corruption only surfaced later as an unattributable "Invalid Root" during
+// full state validation.
+#[test]
+fn redundant_leaf_and_boundary_hash_segment_corrupts_apply() {
+	let t = Utc::now();
+	let data_dir = format!(
+		"./target/tmp/{}.{}-redundant_corrupts",
+		t.timestamp(),
+		t.timestamp_subsec_nanos()
+	);
+	let src_dir = format!("{}/src", data_dir);
+	let dst_dir = format!("{}/dst", data_dir);
+	for d in [&src_dir, &dst_dir] {
+		fs::create_dir_all(d).unwrap();
+	}
+
+	let mut ba = PMMRBackend::new(&src_dir, true, ProtocolVersion(1), None).unwrap();
+	let (last_pos, root, bitmap) = build_mixed_compaction_source(&mut ba);
+
+	let id = SegmentIdentifier { height: 4, idx: 0 };
+	let mmr = ReadonlyPMMR::at(&mut ba, last_pos);
+	let segment = Segment::from_pmmr(id, &mmr, Some(&bitmap)).unwrap();
+
+	// Reconstruct what the bitmap-only heuristic used to produce: the same
+	// segment plus data for the spent-but-still-present leaves 0,1 (pos 0,1)
+	// under the pos 6 boundary hash.
+	let (sid, hash_pos, hashes, mut leaf_pos, mut leaf_data, proof) = segment.parts();
+	leaf_pos.splice(0..0, [0, 1]);
+	leaf_data.splice(
+		0..0,
+		[
+			mmr.get_data_from_file(0).unwrap(),
+			mmr.get_data_from_file(1).unwrap(),
+		],
+	);
+	let redundant = Segment::from_parts(sid, hash_pos, hashes, leaf_pos, leaf_data, proof);
+
+	// Validation accepts it: the extra leaves are ignored by root
+	// reconstruction and the boundary hash is bound to the root.
+	redundant.validate(last_pos, Some(&bitmap), root).unwrap();
+
+	// ... but applying it does not reproduce the root the segment was just
+	// validated against.
+	let mut ba_dst = PMMRBackend::new(&dst_dir, true, ProtocolVersion(1), None).unwrap();
+	let applied_root = apply_segment_like_desegmenter(redundant, &mut ba_dst, &bitmap);
+	assert_ne!(
+		applied_root.as_ref().ok(),
+		Some(&root),
+		"redundant segment must not silently reproduce the source root"
+	);
+
+	std::mem::drop(ba);
+	std::mem::drop(ba_dst);
+	fs::remove_dir_all(&data_dir).unwrap();
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
