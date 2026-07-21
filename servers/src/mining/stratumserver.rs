@@ -918,7 +918,7 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::chain::types::{NoopAdapter, SyncStatus};
+	use crate::chain::types::{HeaderSyncMode, NoopAdapter, SyncStatus};
 	use crate::core::genesis;
 	use crate::core::global::{self, ChainTypes};
 	use crate::core::pow::Difficulty;
@@ -1405,6 +1405,7 @@ mod tests {
 		// Force syncing state
 		handler.sync_state.update(SyncStatus::HeaderSync {
 			sync_head: handler.chain.head().unwrap(),
+			sync_mode: HeaderSyncMode::Legacy,
 			highest_height: 100,
 			highest_diff: Difficulty::from_num(1000),
 		});
