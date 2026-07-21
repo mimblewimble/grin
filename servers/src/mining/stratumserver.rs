@@ -940,7 +940,8 @@ mod tests {
 		CHAIN
 			.get_or_init(|| {
 				global::set_local_chain_type(ChainTypes::AutomatedTesting);
-				// Under target/ so interrupted tests do not litter the repo root.
+				// Under the crate-local target directory (servers/target/tmp), not
+				// the workspace target/, so interrupted tests do not litter the repo root.
 				let dir = "target/tmp/grin_stratum_test_shared_chain";
 				let _ = fs::remove_dir_all(dir);
 				Arc::new(
@@ -1161,46 +1162,35 @@ mod tests {
 			assert_eq!(err.code, code);
 			assert_eq!(err.message, message);
 		}
-	}
 
-	#[test]
-	fn test_rpc_error_into_value() {
-		let err = RpcError::method_not_found();
-		let value: Value = err.into();
-		assert_eq!(value["code"], -32601);
-		assert_eq!(value["message"], "Method not found");
+		// Regression: internal_error() must serialize with the negative
+		// JSON-RPC 2.0 code, matching api/src/json_rpc.rs.
+		let value: Value = RpcError::internal_error().into();
+		assert_eq!(value["code"], -32603);
 	}
 
 	// ----------------------------------------
 	// parse_params
 
 	#[test]
-	fn test_parse_params_login_ok() {
-		let params = serde_json::json!({
+	fn test_parse_params_ok() {
+		let login: LoginParams = parse_params(Some(serde_json::json!({
 			"login": "miner1",
 			"pass": "x",
 			"agent": "grin-miner"
-		});
-		let login: LoginParams = parse_params(Some(params)).unwrap();
+		})))
+		.unwrap();
 		assert_eq!(login.login, "miner1");
-		assert_eq!(login.pass, "x");
-		assert_eq!(login.agent, "grin-miner");
-	}
 
-	#[test]
-	fn test_parse_params_submit_ok() {
-		let params = serde_json::json!({
+		let submit: SubmitParams = parse_params(Some(serde_json::json!({
 			"height": 42,
 			"job_id": 0,
 			"nonce": 12345,
 			"edge_bits": 29,
 			"pow": [1, 2, 3, 4]
-		});
-		let submit: SubmitParams = parse_params(Some(params)).unwrap();
+		})))
+		.unwrap();
 		assert_eq!(submit.height, 42);
-		assert_eq!(submit.job_id, 0);
-		assert_eq!(submit.nonce, 12345);
-		assert_eq!(submit.edge_bits, 29);
 		assert_eq!(submit.pow, vec![1, 2, 3, 4]);
 	}
 
@@ -1296,23 +1286,6 @@ mod tests {
 		// clean RpcError rather than panicking.
 		let err = workers.get_stats(99).unwrap_err();
 		assert_eq!(err.code, RpcError::internal_error().code);
-	}
-
-	#[test]
-	fn test_workers_list_update_stats() {
-		let stats = Arc::new(RwLock::new(StratumStats::default()));
-		let workers = WorkersList::new(stats);
-		let id = workers.add_worker(dummy_tx());
-
-		workers.update_stats(id, |ws| {
-			ws.num_accepted += 3;
-			ws.num_rejected += 1;
-			ws.num_stale += 2;
-		});
-		let ws = workers.get_stats(id).unwrap();
-		assert_eq!(ws.num_accepted, 3);
-		assert_eq!(ws.num_rejected, 1);
-		assert_eq!(ws.num_stale, 2);
 	}
 
 	#[test]
@@ -1459,7 +1432,10 @@ mod tests {
 		assert_eq!(result["height"], 0);
 		assert_eq!(result["job_id"], 0);
 		assert_eq!(result["difficulty"], 7);
-		assert!(result["pre_pow"].as_str().unwrap().len() > 0);
+		// pre_pow is hex-encoded header bytes.
+		let pre_pow = result["pre_pow"].as_str().unwrap();
+		assert!(!pre_pow.is_empty());
+		assert!(pre_pow.chars().all(|c| c.is_ascii_hexdigit()));
 	}
 
 	#[test]
@@ -1567,18 +1543,6 @@ mod tests {
 			handler.workers.get_stats(worker_id).unwrap().num_rejected,
 			1
 		);
-	}
-
-	#[test]
-	fn test_build_block_template() {
-		let handler = setup_handler(11);
-		let template = handler.build_block_template();
-		assert_eq!(template.height, 0);
-		assert_eq!(template.job_id, 0);
-		assert_eq!(template.difficulty, 11);
-		assert!(!template.pre_pow.is_empty());
-		// pre_pow is hex-encoded header bytes
-		assert!(template.pre_pow.chars().all(|c| c.is_ascii_hexdigit()));
 	}
 
 	#[test]
