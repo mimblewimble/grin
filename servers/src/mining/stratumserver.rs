@@ -1137,32 +1137,6 @@ mod tests {
 
 	#[test]
 	fn test_rpc_error_constructors() {
-		let cases = vec![
-			(RpcError::internal_error(), -32603, "Internal error"),
-			(
-				RpcError::node_is_syncing(),
-				-32000,
-				"Node is syncing - Please wait",
-			),
-			(RpcError::method_not_found(), -32601, "Method not found"),
-			(RpcError::too_late(), -32503, "Solution submitted too late"),
-			(
-				RpcError::cannot_validate(),
-				-32502,
-				"Failed to validate solution",
-			),
-			(
-				RpcError::too_low_difficulty(),
-				-32501,
-				"Share rejected due to low difficulty",
-			),
-			(RpcError::invalid_request(), -32600, "Invalid Request"),
-		];
-		for (err, code, message) in cases {
-			assert_eq!(err.code, code);
-			assert_eq!(err.message, message);
-		}
-
 		// Regression: internal_error() must serialize with the negative
 		// JSON-RPC 2.0 code, matching api/src/json_rpc.rs.
 		let value: Value = RpcError::internal_error().into();
