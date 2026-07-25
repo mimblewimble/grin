@@ -928,6 +928,8 @@ mod tests {
 	// ----------------------------------------
 	// Helpers
 
+	const TEST_MINIMUM_SHARE_DIFFICULTY: u64 = 1;
+
 	fn dummy_tx() -> Tx {
 		let (tx, _rx) = mpsc::unbounded();
 		tx
@@ -960,7 +962,7 @@ mod tests {
 	}
 
 	/// Build a Handler backed by the shared test chain for RPC routing tests.
-	fn setup_handler(minimum_share_difficulty: u64) -> Handler {
+	fn setup_handler() -> Handler {
 		global::set_local_chain_type(ChainTypes::AutomatedTesting);
 		let chain = shared_test_chain();
 		let stratum_stats = Arc::new(RwLock::new(StratumStats::default()));
@@ -971,7 +973,7 @@ mod tests {
 			String::from("test"),
 			stratum_stats,
 			sync_state,
-			minimum_share_difficulty,
+			TEST_MINIMUM_SHARE_DIFFICULTY,
 			chain,
 		)
 	}
@@ -1314,7 +1316,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_keepalive() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1327,7 +1329,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_method_not_found() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1341,7 +1343,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_login_ok() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let params = serde_json::json!({
@@ -1363,7 +1365,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_login_invalid_params() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp =
@@ -1375,7 +1377,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_getjobtemplate_while_syncing() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		// Force syncing state
 		handler.sync_state.update(SyncStatus::HeaderSync {
 			sync_head: handler.chain.head().unwrap(),
@@ -1396,7 +1398,10 @@ mod tests {
 
 	#[test]
 	fn test_handle_getjobtemplate_ok() {
-		let handler = setup_handler(7);
+		let handler = setup_handler();
+		// Non-default difficulty so the template path is not only asserting the const.
+		let job_difficulty = 7;
+		handler.current_state.write().minimum_share_difficulty = job_difficulty;
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1406,7 +1411,7 @@ mod tests {
 		let result = resp.result.unwrap();
 		assert_eq!(result["height"], 0);
 		assert_eq!(result["job_id"], 0);
-		assert_eq!(result["difficulty"], 7);
+		assert_eq!(result["difficulty"], job_difficulty);
 		// pre_pow is hex-encoded header bytes.
 		let pre_pow = result["pre_pow"].as_str().unwrap();
 		assert!(!pre_pow.is_empty());
@@ -1415,7 +1420,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_status() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 		handler.workers.update_stats(worker_id, |ws| {
 			ws.num_accepted = 10;
@@ -1439,7 +1444,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_submit_too_late() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		// Wrong height vs current block version (height 0) => stale share
@@ -1463,7 +1468,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_submit_invalid_job_id() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		// job_id out of range of current_block_versions
@@ -1484,7 +1489,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_submit_missing_params() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		let resp = parse_rpc_response(
@@ -1496,7 +1501,7 @@ mod tests {
 
 	#[test]
 	fn test_handle_submit_invalid_edge_bits() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 
 		// edge_bits below the AutomatedTesting minimum (10) and not the
@@ -1522,7 +1527,7 @@ mod tests {
 
 	#[test]
 	fn test_last_seen_updates() {
-		let handler = setup_handler(1);
+		let handler = setup_handler();
 		let worker_id = handler.workers.add_worker(dummy_tx());
 		// Force a known baseline instead of racing a real clock read against
 		// the update below.
