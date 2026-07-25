@@ -243,17 +243,43 @@ impl Owner {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::owner_rpc::OwnerRpc;
 	use crate::types::{MiningStatus, WorkerInfo};
+	use easy_jsonrpc_mw::{Handler, MaybeReply};
+	use serde_json::json;
 	use std::sync::Arc;
+
+	fn mining_status_request() -> serde_json::Value {
+		json!({
+			"jsonrpc": "2.0",
+			"method": "get_mining_status",
+			"params": [],
+			"id": 1
+		})
+	}
 
 	#[test]
 	fn get_mining_status_without_provider_returns_error() {
 		let owner = Owner::new(Weak::new(), Weak::new(), Weak::new());
 		assert!(owner.get_mining_status().is_err());
+
+		// Also cover the generated JSON-RPC wire path for the error case.
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+		assert_eq!(reply["id"], 1);
+		assert_eq!(reply["jsonrpc"], "2.0");
+		assert!(
+			reply["result"]["Err"].is_object(),
+			"expected Err result, got {}",
+			reply
+		);
 	}
 
 	#[test]
-	fn get_mining_status_with_provider() {
+	fn get_mining_status_jsonrpc_wire_response() {
 		let expected = MiningStatus {
 			is_enabled: true,
 			is_running: true,
@@ -278,6 +304,33 @@ mod test {
 		let expected_clone = expected.clone();
 		let provider: MiningStatsProvider = Arc::new(move || expected_clone.clone());
 		let owner = Owner::with_mining_stats(Weak::new(), Weak::new(), Weak::new(), Some(provider));
-		assert_eq!(owner.get_mining_status().unwrap(), expected);
+
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+
+		assert_eq!(reply["id"], 1);
+		assert_eq!(reply["jsonrpc"], "2.0");
+		let ok = &reply["result"]["Ok"];
+		assert_eq!(ok["is_enabled"], true);
+		assert_eq!(ok["is_running"], true);
+		assert_eq!(ok["num_workers"], 2);
+		assert_eq!(ok["block_height"], 50);
+		assert_eq!(ok["network_difficulty"], 10);
+		assert_eq!(ok["edge_bits"], 29);
+		assert_eq!(ok["blocks_found"], 1);
+		assert_eq!(ok["network_hashrate"], 0.5);
+		assert_eq!(ok["minimum_share_difficulty"], 1);
+		assert_eq!(ok["worker_stats"][0]["id"], "w0");
+		assert_eq!(ok["worker_stats"][0]["last_seen"], 100);
+		assert_eq!(ok["worker_stats"][0]["num_accepted"], 3);
+		// Field dropped from the public WorkerInfo shape.
+		assert!(ok["worker_stats"][0].get("is_connected").is_none());
+
+		// Round-trip the Ok payload into MiningStatus to lock the wire schema.
+		let status: MiningStatus = serde_json::from_value(ok.clone()).unwrap();
+		assert_eq!(status, expected);
 	}
 }

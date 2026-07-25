@@ -152,23 +152,6 @@ pub struct MiningStatus {
 	pub worker_stats: Vec<WorkerInfo>,
 }
 
-impl Default for MiningStatus {
-	fn default() -> MiningStatus {
-		MiningStatus {
-			is_enabled: false,
-			is_running: false,
-			num_workers: 0,
-			block_height: 0,
-			network_difficulty: 0,
-			edge_bits: 32,
-			blocks_found: 0,
-			network_hashrate: 0.0,
-			minimum_share_difficulty: 1,
-			worker_stats: Vec::new(),
-		}
-	}
-}
-
 /// TxHashSet
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxHashSet {
@@ -845,15 +828,6 @@ mod test {
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
-	}
-
-	#[test]
-	fn mining_status_default_is_disabled() {
-		let status = MiningStatus::default();
-		assert!(!status.is_enabled);
-		assert!(!status.is_running);
-		assert_eq!(status.num_workers, 0);
-		assert!(status.worker_stats.is_empty());
 	}
 
 	#[test]
