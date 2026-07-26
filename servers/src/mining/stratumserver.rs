@@ -555,22 +555,33 @@ impl Handler {
 			{
 				{
 					debug!("resend updated block");
-					let mut state = self.current_state.write();
 					let wallet_listener_url = if !config.burn_reward {
 						Some(config.wallet_listener_url.clone())
 					} else {
 						None
 					};
-					// If this is a new block we will clear the current_block version history
-					let clear_blocks = current_hash != latest_hash;
+					let key_id = self.current_state.read().current_key_id.clone();
 
 					// Build the new block (version)
-					let (new_block, block_fees) = mine_block::get_block(
+					let Some((new_block, block_fees)) = mine_block::get_block_with_stop(
 						&self.chain,
 						tx_pool,
-						state.current_key_id.clone(),
+						key_id,
 						wallet_listener_url,
-					);
+						&stop_state,
+					) else {
+						return;
+					};
+
+					let mut state = self.current_state.write();
+					head = self.chain.head().unwrap();
+					let latest_hash = head.last_block_h;
+					if new_block.header.prev_hash != latest_hash {
+						continue;
+					}
+
+					// If this is a new block we will clear the current_block version history
+					let clear_blocks = current_hash != latest_hash;
 
 					// scaled difficulty
 					state.current_difficulty =
@@ -753,7 +764,7 @@ async fn accept_connections_loop(
 						let permit = match worker_limit.clone().try_acquire_owned() {
 							Ok(permit) => permit,
 							Err(_) => {
-								warn!(
+								debug!(
 									"Stratum: rejecting connection from {} (max workers: {})",
 									peer_addr, max_workers
 								);
@@ -1047,10 +1058,6 @@ impl StratumServer {
 		let h = handler.clone();
 		let max_workers = self.config.max_workers;
 		let idle_timeout = Duration::from_secs(self.config.worker_idle_timeout_secs);
-		assert!(
-			!idle_timeout.is_zero(),
-			"Stratum: worker_idle_timeout_secs must be greater than zero"
-		);
 
 		let listener_stop_state = stop_state.clone();
 		let listener_th = thread::spawn(move || {
@@ -1461,6 +1468,50 @@ mod tests {
 			task.await.unwrap();
 			assert_eq!(handler.workers.count(), 0);
 		});
+	}
+
+	#[test]
+	fn test_block_retry_stays_responsive() {
+		use crate::common::adapters::{PoolToChainAdapter, PoolToNetAdapter};
+
+		let test_dir = TestDir::new(".grin_stratum_shutdown_retry_test");
+		let handler = setup_handler(test_dir.path());
+		let pool_adapter = Arc::new(PoolToChainAdapter::new());
+		pool_adapter.set_chain(handler.chain.clone());
+		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(
+			crate::pool::DandelionConfig::default(),
+		));
+		let tx_pool = Arc::new(RwLock::new(crate::pool::TransactionPool::new(
+			crate::pool::PoolConfig::default(),
+			pool_adapter,
+			pool_net_adapter,
+		)));
+		let (tx, _rx, shutdown_tx) = dummy_tx();
+		handler.workers.add_worker(tx, shutdown_tx);
+
+		let mut config = StratumServerConfig::default();
+		config.burn_reward = false;
+		config.wallet_listener_url = "http://127.0.0.1:1".to_string();
+		let stop_state = Arc::new(StopState::new());
+		let run_stop_state = stop_state.clone();
+		let request_handler = handler.clone();
+		let (done_tx, done_rx) = std::sync::mpsc::channel();
+		thread::spawn(move || {
+			global::set_local_chain_type(ChainTypes::AutomatedTesting);
+			handler.run(&config, &tx_pool, run_stop_state);
+			let _ = done_tx.send(());
+		});
+
+		thread::sleep(Duration::from_millis(250));
+		let (request_tx, request_rx) = std::sync::mpsc::channel();
+		thread::spawn(move || {
+			request_handler.build_block_template();
+			let _ = request_tx.send(());
+		});
+		assert_eq!(request_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
+
+		stop_state.stop();
+		assert_eq!(done_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
 	}
 
 	fn setup_handler(dir: &Path) -> Arc<Handler> {

@@ -76,7 +76,7 @@ pub struct Server {
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
-	stratum_thread: Option<JoinHandle<()>>,
+	stratum_thread: RwLock<Option<JoinHandle<()>>>,
 }
 
 impl Server {
@@ -94,7 +94,13 @@ impl Server {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let mut serv = Server::new(config, stop_state, server_tx, api_chan)?;
+		if let Some(c) = mining_config
+			.as_ref()
+			.filter(|c| c.enable_stratum_server == Some(true))
+		{
+			validate_stratum_config(c)?;
+		}
+		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -346,7 +352,7 @@ impl Server {
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
-			stratum_thread: None,
+			stratum_thread: RwLock::new(None),
 		})
 	}
 
@@ -376,7 +382,11 @@ impl Server {
 	}
 
 	/// Start a minimal "stratum" mining service on a separate thread
-	pub fn start_stratum_server(&mut self, config: StratumServerConfig) {
+	pub fn start_stratum_server(&self, config: StratumServerConfig) {
+		if let Err(e) = validate_stratum_config(&config) {
+			error!("Invalid stratum server configuration: {:?}", e);
+			return;
+		}
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 		let stop_state = self.stop_state.clone();
@@ -387,7 +397,7 @@ impl Server {
 			self.tx_pool.clone(),
 			self.state_info.stratum_stats.clone(),
 		);
-		self.stratum_thread = thread::Builder::new()
+		*self.stratum_thread.write() = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
 				stratum_server.run_loop(proof_size, sync_state, stop_state);
@@ -579,7 +589,7 @@ impl Server {
 				info!("No active connect_and_monitor thread")
 			}
 
-			if let Some(stratum_thread) = self.stratum_thread {
+			if let Some(stratum_thread) = self.stratum_thread.into_inner() {
 				match stratum_thread.join() {
 					Err(e) => error!("failed to join stratum server thread: {:?}", e),
 					Ok(_) => info!("stratum server thread stopped"),
@@ -620,5 +630,61 @@ impl Server {
 	pub fn stop_test_miner(&self, stop: Arc<StopState>) {
 		stop.stop();
 		info!("stop_test_miner - stop",);
+	}
+}
+
+fn validate_stratum_config(config: &StratumServerConfig) -> Result<(), Error> {
+	if config.max_workers == 0 {
+		return Err(Error::Configuration(
+			"stratum max_workers must be greater than zero".to_string(),
+		));
+	}
+	if config.worker_idle_timeout_secs == 0 {
+		return Err(Error::Configuration(
+			"stratum worker_idle_timeout_secs must be greater than zero".to_string(),
+		));
+	}
+	if time::Instant::now()
+		.checked_add(Duration::from_secs(config.worker_idle_timeout_secs))
+		.is_none()
+	{
+		return Err(Error::Configuration(
+			"stratum worker_idle_timeout_secs is too large".to_string(),
+		));
+	}
+	let address = config.stratum_server_addr.as_deref().ok_or_else(|| {
+		Error::Configuration("stratum_server_addr must be configured".to_string())
+	})?;
+	address.parse::<std::net::SocketAddr>().map_err(|e| {
+		Error::Configuration(format!("invalid stratum_server_addr '{}': {}", address, e))
+	})?;
+	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_stratum_config_validation() {
+		assert!(validate_stratum_config(&StratumServerConfig::default()).is_ok());
+
+		let mut config = StratumServerConfig::default();
+		config.max_workers = 0;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.max_workers = 1;
+		config.worker_idle_timeout_secs = 0;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.worker_idle_timeout_secs = u64::MAX;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.worker_idle_timeout_secs = 1;
+		config.stratum_server_addr = Some("invalid".to_string());
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.stratum_server_addr = None;
+		assert!(validate_stratum_config(&config).is_err());
 	}
 }

@@ -20,7 +20,7 @@ use rand::{thread_rng, Rng};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::api;
 use crate::chain;
@@ -30,7 +30,10 @@ use crate::core::libtx::secp_ser;
 use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
+use crate::util::StopState;
 use crate::ServerTxPool;
+
+const STOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Fees in block to use for coinbase amount calculation
 /// (Duplicated from Grin wallet project)
@@ -73,10 +76,36 @@ pub fn get_block(
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
+	get_block_internal(chain, tx_pool, key_id, wallet_listener_url, || false).unwrap()
+}
+
+/// Build a block unless shutdown is requested while retrying.
+pub(crate) fn get_block_with_stop(
+	chain: &Arc<chain::Chain>,
+	tx_pool: &ServerTxPool,
+	key_id: Option<Identifier>,
+	wallet_listener_url: Option<String>,
+	stop_state: &StopState,
+) -> Option<(core::Block, BlockFees)> {
+	get_block_internal(chain, tx_pool, key_id, wallet_listener_url, || {
+		stop_state.is_stopped()
+	})
+}
+
+fn get_block_internal(
+	chain: &Arc<chain::Chain>,
+	tx_pool: &ServerTxPool,
+	key_id: Option<Identifier>,
+	wallet_listener_url: Option<String>,
+	should_stop: impl Fn() -> bool,
+) -> Option<(core::Block, BlockFees)> {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
 	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	while let Err(e) = result {
+		if should_stop() {
+			return None;
+		}
 		let mut new_key_id = key_id.to_owned();
 		match e {
 			self::Error::Chain(c) => match c {
@@ -96,7 +125,9 @@ pub fn get_block(
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
-				thread::sleep(Duration::from_secs(wallet_retry_interval));
+				if sleep_or_stop(Duration::from_secs(wallet_retry_interval), &should_stop) {
+					return None;
+				}
 			}
 			ae => {
 				warn!("Error building new block: {:?}. Retrying.", ae);
@@ -105,13 +136,25 @@ pub fn get_block(
 
 		// only wait if we are still using the same key: a different coinbase commitment is unlikely
 		// to have duplication
-		if new_key_id.is_some() {
-			thread::sleep(Duration::from_millis(100));
+		if new_key_id.is_some() && sleep_or_stop(Duration::from_millis(100), &should_stop) {
+			return None;
 		}
 
 		result = build_block(chain, tx_pool, new_key_id, wallet_listener_url.clone());
 	}
-	return result.unwrap();
+	result.ok()
+}
+
+fn sleep_or_stop(duration: Duration, should_stop: &impl Fn() -> bool) -> bool {
+	let deadline = Instant::now() + duration;
+	while !should_stop() {
+		let remaining = deadline.saturating_duration_since(Instant::now());
+		if remaining.is_zero() {
+			return false;
+		}
+		thread::sleep(remaining.min(STOP_POLL_INTERVAL));
+	}
+	true
 }
 
 /// Builds a new block with the chain head as previous and eligible
