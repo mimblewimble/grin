@@ -576,7 +576,12 @@ impl Handler {
 					let mut state = self.current_state.write();
 					head = self.chain.head().unwrap();
 					let latest_hash = head.last_block_h;
+					// Preserve the wallet-provided key even if the chain advanced while
+					// the block was being built. The next attempt must reuse that key.
+					state.current_key_id = block_fees.key_id();
 					if new_block.header.prev_hash != latest_hash {
+						drop(state);
+						thread::sleep(Duration::from_millis(5));
 						continue;
 					}
 
@@ -586,8 +591,6 @@ impl Handler {
 					// scaled difficulty
 					state.current_difficulty =
 						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
-
-					state.current_key_id = block_fees.key_id();
 
 					current_hash = latest_hash;
 					// set the minimum acceptable share unscaled difficulty for this block
@@ -657,10 +660,9 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 
 	let framed = Framed::new(socket, LinesCodec::new_with_max_length(MAX_RPC_LINE_BYTES));
 	let (mut writer, mut reader) = framed.split();
-	let (activity_tx, mut activity_rx) = mpsc::channel::<()>(1);
+	let (read_activity, mut activity_rx) = mpsc::channel::<()>(1);
 
 	let reader_handler = handler.clone();
-	let read_activity = activity_tx.clone();
 	let read = async move {
 		while let Some(line) = reader
 			.try_next()
@@ -683,9 +685,7 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 	let write = async move {
 		while let Some(line) = rx.recv().await {
 			match timeout(WORKER_WRITE_TIMEOUT, writer.send(line)).await {
-				Ok(Ok(())) => {
-					let _ = activity_tx.try_send(());
-				}
+				Ok(Ok(())) => {}
 				Ok(Err(e)) => {
 					error!("Worker {} write error: {}", worker_id, e);
 					return Err(());
@@ -935,22 +935,28 @@ impl WorkersList {
 	}
 
 	fn queue_broadcast(&self, msg: &str) -> Vec<(usize, mpsc::Sender<()>)> {
-		let mut slow_workers = Vec::new();
+		let mut disconnected_workers = Vec::new();
 		let workers_list = self.workers_list.read();
 		for (worker_id, worker) in workers_list.iter() {
-			if worker.tx.try_send(msg.to_owned()).is_err() {
-				slow_workers.push((*worker_id, worker.shutdown_tx.clone()));
+			match worker.tx.try_send(msg.to_owned()) {
+				Ok(()) => {}
+				Err(mpsc::error::TrySendError::Full(_)) => {
+					debug!(
+						"Stratum: skipping broadcast to worker {} with a full queue",
+						worker_id
+					);
+				}
+				Err(mpsc::error::TrySendError::Closed(_)) => {
+					disconnected_workers.push((*worker_id, worker.shutdown_tx.clone()));
+				}
 			}
 		}
-		slow_workers
+		disconnected_workers
 	}
 
 	pub fn broadcast(&self, msg: String) {
 		for (worker_id, shutdown_tx) in self.queue_broadcast(&msg) {
-			warn!(
-				"Stratum: dropping slow or disconnected worker {}",
-				worker_id
-			);
+			warn!("Stratum: dropping disconnected worker {}", worker_id);
 			let _ = shutdown_tx.try_send(());
 		}
 	}
@@ -1121,8 +1127,8 @@ mod tests {
 		CHAIN
 			.get_or_init(|| {
 				global::set_local_chain_type(ChainTypes::AutomatedTesting);
-				// Under the crate-local target directory (servers/target/tmp), not
-				// the workspace target/, so interrupted tests do not litter the repo root.
+				// Keep interrupted test data under Cargo's target directory instead of
+				// littering the repository root.
 				let dir = "target/tmp/grin_stratum_test_shared_chain";
 				let _ = fs::remove_dir_all(dir);
 				Arc::new(
@@ -1176,7 +1182,7 @@ mod tests {
 
 	impl TestDir {
 		fn new(path: &str) -> Self {
-			let path = PathBuf::from(path);
+			let path = PathBuf::from("target/tmp").join(path);
 			let _ = std::fs::remove_dir_all(&path);
 			Self { path }
 		}
@@ -1288,13 +1294,13 @@ mod tests {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats);
 
-		let (old_tx, _old_rx) = mpsc::channel(1);
-		old_tx.try_send("queued".into()).unwrap();
+		let (old_tx, old_rx) = mpsc::channel(1);
+		drop(old_rx);
 		let (old_shutdown_tx, mut old_shutdown_rx) = mpsc::channel(1);
 		let old_id = workers.add_worker(old_tx, old_shutdown_tx);
 
-		let slow_workers = workers.queue_broadcast("next job");
-		assert_eq!(slow_workers.len(), 1);
+		let disconnected_workers = workers.queue_broadcast("next job");
+		assert_eq!(disconnected_workers.len(), 1);
 
 		workers.remove_worker(old_id);
 		let (new_tx, _new_rx) = mpsc::channel(1);
@@ -1302,16 +1308,34 @@ mod tests {
 		let new_id = workers.add_worker(new_tx, new_shutdown_tx);
 		assert_eq!(new_id, old_id);
 
-		let (slow_worker_id, shutdown_tx) = slow_workers.into_iter().next().unwrap();
-		assert_eq!(slow_worker_id, old_id);
+		let (disconnected_worker_id, shutdown_tx) =
+			disconnected_workers.into_iter().next().unwrap();
+		assert_eq!(disconnected_worker_id, old_id);
 		shutdown_tx.try_send(()).unwrap();
 		assert_eq!(old_shutdown_rx.try_recv(), Ok(()));
 		assert!(new_shutdown_rx.try_recv().is_err());
 	}
 
+	#[test]
+	fn test_full_queue_keeps_worker() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats);
+		let (tx, mut rx) = mpsc::channel(1);
+		tx.try_send("queued".into()).unwrap();
+		let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
+		let worker_id = workers.add_worker(tx, shutdown_tx);
+
+		workers.broadcast("next job".into());
+
+		assert_eq!(workers.count(), 1);
+		assert_eq!(rx.try_recv(), Ok("queued".into()));
+		assert!(shutdown_rx.try_recv().is_err());
+		workers.remove_worker(worker_id);
+	}
+
 	#[tokio::test]
 	async fn test_accept_loop_shutdown() {
-		let test_dir = TestDir::new(".grin_stratum_accept_loop_test");
+		let test_dir = TestDir::new("grin_stratum_accept_loop_test");
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 		let addr = listener.local_addr().unwrap();
 		let handler = setup_handler(test_dir.path());
@@ -1337,7 +1361,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_worker_limit() {
-		let test_dir = TestDir::new(".grin_stratum_max_workers_test");
+		let test_dir = TestDir::new("grin_stratum_max_workers_test");
 		const MAX_TEST_WORKERS: usize = 8;
 
 		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1367,7 +1391,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn test_sync_idle_timeout() {
-		let test_dir = TestDir::new(".grin_stratum_idle_test");
+		let test_dir = TestDir::new("grin_stratum_idle_test");
 		let (client, server_socket) = tcp_pair().await;
 		let handler = setup_handler(test_dir.path());
 		handler.sync_state.update(SyncStatus::Initial);
@@ -1391,8 +1415,38 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn test_outbound_does_not_reset_idle() {
+		let test_dir = TestDir::new("grin_stratum_outbound_idle_test");
+		let (client, server_socket) = tcp_pair().await;
+		let handler = setup_handler(test_dir.path());
+
+		let task = tokio::spawn(handle_connection(
+			server_socket,
+			handler.clone(),
+			Duration::from_millis(50),
+		));
+		wait_for_worker_count(&handler, 1).await;
+
+		let broadcast_handler = handler.clone();
+		let broadcaster = tokio::spawn(async move {
+			for _ in 0..20 {
+				broadcast_handler.workers.broadcast("job".into());
+				tokio::time::sleep(Duration::from_millis(10)).await;
+			}
+		});
+
+		timeout(Duration::from_millis(150), task)
+			.await
+			.expect("outbound broadcasts kept an idle worker connected")
+			.unwrap();
+		assert_eq!(handler.workers.count(), 0);
+		broadcaster.await.unwrap();
+		drop(client);
+	}
+
+	#[tokio::test]
 	async fn test_pipelined_backpressure() {
-		let test_dir = TestDir::new(".grin_stratum_pipeline_test");
+		let test_dir = TestDir::new("grin_stratum_pipeline_test");
 		use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 		const REQUEST_COUNT: usize = 200;
@@ -1440,7 +1494,7 @@ mod tests {
 		use crate::common::adapters::{PoolToChainAdapter, PoolToNetAdapter};
 		use std::net::TcpListener;
 
-		let test_dir = TestDir::new(".grin_stratum_shutdown_retry_test");
+		let test_dir = TestDir::new("grin_stratum_shutdown_retry_test");
 		let handler = setup_handler(test_dir.path());
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		pool_adapter.set_chain(handler.chain.clone());
