@@ -247,10 +247,6 @@ impl Handler {
 			"login" => self.handle_login(request.params, worker_id),
 			"submit" => {
 				let res = self.handle_submit(request.params, worker_id);
-				// this key_id has been used now, reset
-				if let Ok((_, true)) = res {
-					self.current_state.write().current_key_id = None;
-				}
 				res.map(|(v, _)| v)
 			}
 			"keepalive" => self.handle_keepalive(),
@@ -389,6 +385,7 @@ impl Handler {
 		let scaled_share_difficulty: u64;
 		let unscaled_share_difficulty: u64;
 		let mut share_is_block = false;
+		let current_difficulty = state.current_difficulty;
 
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the blocks header with this nonce and pow added
@@ -425,8 +422,10 @@ impl Handler {
 		}
 
 		// If the difficulty is high enough, submit it (which also validates it)
-		if scaled_share_difficulty >= state.current_difficulty {
+		if scaled_share_difficulty >= current_difficulty {
 			// This is a full solution, submit it to the network
+			drop(state);
+			let mut state = self.current_state.write();
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
 				// Return error status
@@ -444,6 +443,9 @@ impl Handler {
 					.update_stats(worker_id, |worker_stats| worker_stats.num_rejected += 1);
 				return Err(RpcError::cannot_validate());
 			}
+			// Reset the key before allowing the block builder to observe the new head.
+			state.current_key_id = None;
+			drop(state);
 			share_is_block = true;
 			self.workers
 				.update_stats(worker_id, |worker_stats| worker_stats.num_blocks_found += 1);
@@ -495,7 +497,7 @@ impl Handler {
 				b.header.pow.nonce,
 				params.job_id,
 				scaled_share_difficulty,
-				state.current_difficulty,
+				current_difficulty,
 				submitted_by,
 			);
 		self.workers
@@ -560,7 +562,8 @@ impl Handler {
 					} else {
 						None
 					};
-					let key_id = self.current_state.read().current_key_id.clone();
+					let state = self.current_state.read();
+					let key_id = state.current_key_id.clone();
 					let requested_key_id = key_id.clone();
 
 					// Build the new block (version)
@@ -573,6 +576,7 @@ impl Handler {
 					) else {
 						return;
 					};
+					drop(state);
 
 					let mut state = self.current_state.write();
 					head = self.chain.head().unwrap();
