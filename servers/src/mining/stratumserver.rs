@@ -842,21 +842,16 @@ impl WorkersList {
 		stratum_stats.num_workers = workers_list.len();
 		worker_id
 	}
-	pub fn remove_worker(&self, worker_id: usize) {
-		let mut workers_list = self.workers_list.write();
-		if workers_list.remove(&worker_id).is_none() {
-			let mut stratum_stats = self.stratum_stats.write();
-			stratum_stats.num_workers = workers_list.len();
-			return;
-		}
-		drop(workers_list);
 
-		self.update_stats(worker_id, |ws| {
-			ws.is_connected = false;
-			ws.last_seen = SystemTime::now();
-		});
+	pub fn remove_worker(&self, worker_id: usize) {
 		let mut stratum_stats = self.stratum_stats.write();
-		stratum_stats.num_workers = self.workers_list.read().len();
+		let mut workers_list = self.workers_list.write();
+		if workers_list.remove(&worker_id).is_some() {
+			let worker_stats = &mut stratum_stats.worker_stats[worker_id];
+			worker_stats.is_connected = false;
+			worker_stats.last_seen = SystemTime::now();
+		}
+		stratum_stats.num_workers = workers_list.len();
 	}
 
 	pub fn login(&self, worker_id: usize, login: String, agent: String) -> Result<(), RpcError> {
@@ -912,33 +907,24 @@ impl WorkersList {
 		tx.send(msg).await.is_ok()
 	}
 
-	pub fn disconnect_worker(&self, worker_id: usize) {
-		let shutdown_tx = self
-			.workers_list
-			.read()
-			.get(&worker_id)
-			.map(|worker| worker.shutdown_tx.clone());
-		if let Some(shutdown_tx) = shutdown_tx {
-			let _ = shutdown_tx.try_send(());
+	fn queue_broadcast(&self, msg: &str) -> Vec<(usize, mpsc::Sender<()>)> {
+		let mut slow_workers = Vec::new();
+		let workers_list = self.workers_list.read();
+		for (worker_id, worker) in workers_list.iter() {
+			if worker.tx.try_send(msg.to_owned()).is_err() {
+				slow_workers.push((*worker_id, worker.shutdown_tx.clone()));
+			}
 		}
+		slow_workers
 	}
 
 	pub fn broadcast(&self, msg: String) {
-		let mut slow_workers = Vec::new();
-		{
-			let workers_list = self.workers_list.read();
-			for (worker_id, worker) in workers_list.iter() {
-				if worker.tx.try_send(msg.clone()).is_err() {
-					slow_workers.push(*worker_id);
-				}
-			}
-		}
-		for worker_id in slow_workers {
+		for (worker_id, shutdown_tx) in self.queue_broadcast(&msg) {
 			warn!(
 				"Stratum: dropping slow or disconnected worker {}",
 				worker_id
 			);
-			self.disconnect_worker(worker_id);
+			let _ = shutdown_tx.try_send(());
 		}
 	}
 
@@ -1196,12 +1182,40 @@ mod tests {
 	#[test]
 	fn test_remove_worker_is_idempotent() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
-		let workers = WorkersList::new(stats);
+		let workers = WorkersList::new(stats.clone());
 		let (tx, _rx, shutdown_tx) = dummy_tx();
 		let id = workers.add_worker(tx, shutdown_tx);
 		workers.remove_worker(id);
 		workers.remove_worker(id);
 		assert_eq!(workers.count(), 0);
+		assert_eq!(stats.read().num_workers, 0);
+		assert!(!stats.read().worker_stats[id].is_connected);
+	}
+
+	#[test]
+	fn test_slow_worker_slot_reuse() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats);
+
+		let (old_tx, _old_rx) = mpsc::channel(1);
+		old_tx.try_send("queued".into()).unwrap();
+		let (old_shutdown_tx, mut old_shutdown_rx) = mpsc::channel(1);
+		let old_id = workers.add_worker(old_tx, old_shutdown_tx);
+
+		let slow_workers = workers.queue_broadcast("next job");
+		assert_eq!(slow_workers.len(), 1);
+
+		workers.remove_worker(old_id);
+		let (new_tx, _new_rx) = mpsc::channel(1);
+		let (new_shutdown_tx, mut new_shutdown_rx) = mpsc::channel(1);
+		let new_id = workers.add_worker(new_tx, new_shutdown_tx);
+		assert_eq!(new_id, old_id);
+
+		let (slow_worker_id, shutdown_tx) = slow_workers.into_iter().next().unwrap();
+		assert_eq!(slow_worker_id, old_id);
+		shutdown_tx.try_send(()).unwrap();
+		assert_eq!(old_shutdown_rx.try_recv(), Ok(()));
+		assert!(new_shutdown_rx.try_recv().is_err());
 	}
 
 	#[test]
