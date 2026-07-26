@@ -76,6 +76,7 @@ pub struct Server {
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
+	stratum_thread: Option<JoinHandle<()>>,
 }
 
 impl Server {
@@ -93,7 +94,7 @@ impl Server {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
-		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
+		let mut serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
 		if let Some(c) = mining_config {
 			let enable_stratum_server = c.enable_stratum_server;
@@ -345,6 +346,7 @@ impl Server {
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
+			stratum_thread: None,
 		})
 	}
 
@@ -374,9 +376,10 @@ impl Server {
 	}
 
 	/// Start a minimal "stratum" mining service on a separate thread
-	pub fn start_stratum_server(&self, config: StratumServerConfig) {
+	pub fn start_stratum_server(&mut self, config: StratumServerConfig) {
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
+		let stop_state = self.stop_state.clone();
 
 		let mut stratum_server = stratumserver::StratumServer::new(
 			config,
@@ -384,11 +387,13 @@ impl Server {
 			self.tx_pool.clone(),
 			self.state_info.stratum_stats.clone(),
 		);
-		let _ = thread::Builder::new()
+		self.stratum_thread = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(proof_size, sync_state);
-			});
+				stratum_server.run_loop(proof_size, sync_state, stop_state);
+			})
+			.map_err(|e| error!("Failed to start stratum server thread: {}", e))
+			.ok();
 	}
 
 	/// Start mining for blocks internally on a separate thread. Relies on
@@ -572,6 +577,13 @@ impl Server {
 				}
 			} else {
 				info!("No active connect_and_monitor thread")
+			}
+
+			if let Some(stratum_thread) = self.stratum_thread {
+				match stratum_thread.join() {
+					Err(e) => error!("failed to join stratum server thread: {:?}", e),
+					Ok(_) => info!("stratum server thread stopped"),
+				}
 			}
 
 			match self.sync_thread.join() {

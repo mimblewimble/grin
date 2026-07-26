@@ -22,7 +22,7 @@ use tokio::task::JoinSet;
 use tokio::time::{timeout, Instant};
 use tokio_util::codec::{Framed, LinesCodec};
 
-use crate::util::RwLock;
+use crate::util::{RwLock, StopState};
 use chrono::prelude::Utc;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -49,6 +49,7 @@ type Tx = mpsc::Sender<String>;
 const WORKER_QUEUE_SIZE: usize = 64;
 const WORKER_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(100);
+const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_RPC_LINE_BYTES: usize = 64 * 1024;
 
 // ----------------------------------------
@@ -531,12 +532,17 @@ impl Handler {
 		self.workers.broadcast(job_request_json);
 	}
 
-	pub fn run(&self, config: &StratumServerConfig, tx_pool: &ServerTxPool) {
+	pub fn run(
+		&self,
+		config: &StratumServerConfig,
+		tx_pool: &ServerTxPool,
+		stop_state: Arc<StopState>,
+	) {
 		debug!("Run main loop");
 		let mut deadline: i64 = 0;
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
-		loop {
+		while !stop_state.is_stopped() {
 			// get the latest chain state
 			head = self.chain.head().unwrap();
 			let latest_hash = head.last_block_h;
@@ -729,11 +735,18 @@ async fn accept_connections_loop(
 	handler: Arc<Handler>,
 	max_workers: usize,
 	idle_timeout: Duration,
+	stop_state: Arc<StopState>,
 ) {
 	let mut connections = JoinSet::new();
 	let worker_limit = Arc::new(Semaphore::new(max_workers));
+	let mut shutdown_poll = tokio::time::interval(SHUTDOWN_POLL_INTERVAL);
 	loop {
 		tokio::select! {
+			_ = shutdown_poll.tick() => {
+				if stop_state.is_stopped() {
+					break;
+				}
+			}
 			accepted = listener.accept() => {
 				match accepted {
 					Ok((socket, peer_addr)) => {
@@ -769,6 +782,7 @@ async fn accept_connections_loop(
 			}
 		}
 	}
+	connections.shutdown().await;
 }
 
 fn accept_connections(
@@ -776,13 +790,14 @@ fn accept_connections(
 	handler: Arc<Handler>,
 	max_workers: usize,
 	idle_timeout: Duration,
+	stop_state: Arc<StopState>,
 ) {
 	info!("Start tokio stratum server");
 	let task = async move {
 		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		accept_connections_loop(listener, handler, max_workers, idle_timeout).await;
+		accept_connections_loop(listener, handler, max_workers, idle_timeout, stop_state).await;
 	};
 
 	let rt = Runtime::new().unwrap();
@@ -1007,7 +1022,12 @@ impl StratumServer {
 	/// existing chain anytime required and sending that to the connected
 	/// stratum miner, proxy, or pool, and accepts full solutions to
 	/// be submitted.
-	pub fn run_loop(&mut self, proof_size: usize, sync_state: Arc<SyncState>) {
+	pub fn run_loop(
+		&mut self,
+		proof_size: usize,
+		sync_state: Arc<SyncState>,
+		stop_state: Arc<StopState>,
+	) {
 		info!(
 			"(Server ID: {}) Starting stratum server with proof_size = {}",
 			self.id, proof_size
@@ -1032,8 +1052,15 @@ impl StratumServer {
 			"Stratum: worker_idle_timeout_secs must be greater than zero"
 		);
 
-		let _listener_th = thread::spawn(move || {
-			accept_connections(listen_addr, h, max_workers, idle_timeout);
+		let listener_stop_state = stop_state.clone();
+		let listener_th = thread::spawn(move || {
+			accept_connections(
+				listen_addr,
+				h,
+				max_workers,
+				idle_timeout,
+				listener_stop_state,
+			);
 		});
 
 		// We have started
@@ -1050,11 +1077,18 @@ impl StratumServer {
 		);
 
 		// Initial Loop. Waiting node complete syncing
-		while self.sync_state.is_syncing() {
+		while self.sync_state.is_syncing() && !stop_state.is_stopped() {
 			thread::sleep(Duration::from_millis(50));
 		}
 
-		handler.run(&self.config, &self.tx_pool);
+		if !stop_state.is_stopped() {
+			handler.run(&self.config, &self.tx_pool, stop_state);
+		}
+
+		if let Err(e) = listener_th.join() {
+			error!("failed to join stratum listener thread: {:?}", e);
+		}
+		self.stratum_stats.write().is_running = false;
 	} // fn run_loop()
 } // StratumServer
 
@@ -1078,6 +1112,7 @@ mod tests {
 	use crate::core::pow::Difficulty;
 	use std::fs;
 	use std::net::TcpListener as StdTcpListener;
+	use std::path::{Path, PathBuf};
 	use std::sync::OnceLock;
 
 	// ----------------------------------------
@@ -1139,6 +1174,32 @@ mod tests {
 
 	fn parse_rpc_response(json: &str) -> RpcResponse {
 		serde_json::from_str(json).unwrap()
+	}
+
+	struct TestDir {
+		path: PathBuf,
+	}
+
+	impl TestDir {
+		fn new(path: &str) -> Self {
+			let path = PathBuf::from(path);
+			let _ = std::fs::remove_dir_all(&path);
+			Self { path }
+		}
+
+		fn path(&self) -> &Path {
+			&self.path
+		}
+	}
+
+	impl Drop for TestDir {
+		fn drop(&mut self) {
+			if let Err(e) = std::fs::remove_dir_all(&self.path) {
+				if e.kind() != std::io::ErrorKind::NotFound && !thread::panicking() {
+					panic!("failed to remove test directory {:?}: {}", self.path, e);
+				}
+			}
+		}
 	}
 
 	fn dummy_tx() -> (Tx, mpsc::Receiver<String>, mpsc::Sender<()>) {
@@ -1238,18 +1299,21 @@ mod tests {
 	}
 
 	#[test]
-	fn test_accept_loop_tracks_connection_tasks() {
+	fn test_accept_loop_stops_connection_tasks() {
+		let test_dir = TestDir::new(".grin_stratum_accept_loop_test");
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
 			let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 			let addr = listener.local_addr().unwrap();
-			let handler = setup_handler(".grin_stratum_accept_loop_test");
+			let handler = setup_handler(test_dir.path());
+			let stop_state = Arc::new(StopState::new());
 
 			let task = tokio::spawn(accept_connections_loop(
 				listener,
 				handler.clone(),
 				1,
 				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
+				stop_state.clone(),
 			));
 			let client = tokio::net::TcpStream::connect(addr).await.unwrap();
 			for _ in 0..100 {
@@ -1259,32 +1323,33 @@ mod tests {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 			assert_eq!(handler.workers.count(), 1);
-			drop(client);
-			for _ in 0..100 {
-				if handler.workers.count() == 0 {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
+			stop_state.stop();
+			timeout(Duration::from_millis(500), task)
+				.await
+				.unwrap()
+				.unwrap();
 			assert_eq!(handler.workers.count(), 0);
-			task.abort();
+			drop(client);
 		});
 	}
 
 	#[test]
 	fn test_accept_loop_enforces_max_connection_limit() {
+		let test_dir = TestDir::new(".grin_stratum_max_workers_test");
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
 			const MAX_TEST_WORKERS: usize = 8;
 
 			let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 			let addr = listener.local_addr().unwrap();
-			let handler = setup_handler(".grin_stratum_max_workers_test");
+			let handler = setup_handler(test_dir.path());
+			let stop_state = Arc::new(StopState::new());
 			let task = tokio::spawn(accept_connections_loop(
 				listener,
 				handler.clone(),
 				MAX_TEST_WORKERS,
 				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
+				stop_state.clone(),
 			));
 			let mut clients = Vec::new();
 			for _ in 0..(MAX_TEST_WORKERS + 8) {
@@ -1297,20 +1362,19 @@ mod tests {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 			assert_eq!(handler.workers.count(), MAX_TEST_WORKERS);
-			drop(clients);
-			for _ in 0..100 {
-				if handler.workers.count() == 0 {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
+			stop_state.stop();
+			timeout(Duration::from_millis(500), task)
+				.await
+				.unwrap()
+				.unwrap();
 			assert_eq!(handler.workers.count(), 0);
-			task.abort();
+			drop(clients);
 		});
 	}
 
 	#[test]
 	fn test_idle_timeout_after_sync() {
+		let test_dir = TestDir::new(".grin_stratum_idle_test");
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
 			let server = StdTcpListener::bind("127.0.0.1:0").unwrap();
@@ -1319,7 +1383,7 @@ mod tests {
 			let (server_socket, _) = server.accept().unwrap();
 			server_socket.set_nonblocking(true).unwrap();
 			let server_socket = TcpStream::from_std(server_socket).unwrap();
-			let handler = setup_handler(".grin_stratum_idle_test");
+			let handler = setup_handler(test_dir.path());
 			handler.sync_state.update(SyncStatus::Initial);
 
 			let task = tokio::spawn(handle_connection_with_idle_timeout(
@@ -1349,6 +1413,7 @@ mod tests {
 
 	#[test]
 	fn test_pipelined_requests_apply_backpressure() {
+		let test_dir = TestDir::new(".grin_stratum_pipeline_test");
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
 			use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -1361,7 +1426,7 @@ mod tests {
 			let (server_socket, _) = server.accept().unwrap();
 			server_socket.set_nonblocking(true).unwrap();
 			let server_socket = TcpStream::from_std(server_socket).unwrap();
-			let handler = setup_handler(".grin_stratum_pipeline_test");
+			let handler = setup_handler(test_dir.path());
 
 			let task = tokio::spawn(handle_connection_with_idle_timeout(
 				server_socket,
@@ -1398,12 +1463,11 @@ mod tests {
 		});
 	}
 
-	fn setup_handler(dir: &str) -> Arc<Handler> {
+	fn setup_handler(dir: &Path) -> Arc<Handler> {
 		global::set_local_chain_type(ChainTypes::AutomatedTesting);
-		let _ = std::fs::remove_dir_all(dir);
 		let chain = Arc::new(
 			chain::Chain::init(
-				dir.to_string(),
+				dir.to_string_lossy().into_owned(),
 				Arc::new(NoopAdapter {}),
 				genesis::genesis_dev(),
 				pow::verify_size,
