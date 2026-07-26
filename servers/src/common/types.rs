@@ -246,6 +246,10 @@ pub struct StratumServerConfig {
 	/// If enabled, the address and port to listen on
 	pub stratum_server_addr: Option<String>,
 
+	/// Maximum number of concurrent stratum workers
+	#[serde(default = "default_stratum_max_workers")]
+	pub max_workers: usize,
+
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
 	pub attempt_time_per_block: u32,
@@ -261,11 +265,16 @@ pub struct StratumServerConfig {
 	pub burn_reward: bool,
 }
 
+fn default_stratum_max_workers() -> usize {
+	256
+}
+
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
 			wallet_listener_url: "http://127.0.0.1:3415".to_string(),
 			burn_reward: false,
+			max_workers: default_stratum_max_workers(),
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
@@ -427,4 +436,18 @@ pub enum ServerInitStatus {
 pub enum NetAdapterWorkerMessage {
 	/// Received PIBD segment.
 	PIBDSegment(QueuedPIBDSegment),
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn stratum_max_workers_default() {
+		let mut value = serde_json::to_value(StratumServerConfig::default()).unwrap();
+		value.as_object_mut().unwrap().remove("max_workers");
+
+		let config: StratumServerConfig = serde_json::from_value(value).unwrap();
+		assert_eq!(config.max_workers, 256);
+	}
 }

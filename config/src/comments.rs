@@ -399,6 +399,14 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"max_workers".to_string(),
+		"
+#maximum number of concurrent stratum workers
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"attempt_time_per_block".to_string(),
 		"
 #the amount of time, in seconds, to attempt to mine on a particular

@@ -46,7 +46,6 @@ use crate::ServerTxPool;
 
 type Tx = mpsc::Sender<String>;
 
-const MAX_STRATUM_WORKERS: usize = 256;
 const WORKER_QUEUE_SIZE: usize = 64;
 const WORKER_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const WORKER_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -721,9 +720,9 @@ async fn handle_connection_with_idle_timeout(
 	}
 }
 
-async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>) {
+async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>, max_workers: usize) {
 	let mut connections = JoinSet::new();
-	let worker_limit = Arc::new(Semaphore::new(MAX_STRATUM_WORKERS));
+	let worker_limit = Arc::new(Semaphore::new(max_workers));
 	loop {
 		tokio::select! {
 			accepted = listener.accept() => {
@@ -734,7 +733,7 @@ async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>) {
 							Err(_) => {
 								warn!(
 									"Stratum: rejecting connection from {} (max workers: {})",
-									peer_addr, MAX_STRATUM_WORKERS
+									peer_addr, max_workers
 								);
 								drop(socket);
 								continue;
@@ -763,13 +762,13 @@ async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>) {
 	}
 }
 
-fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>) {
+fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>, max_workers: usize) {
 	info!("Start tokio stratum server");
 	let task = async move {
 		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		accept_connections_loop(listener, handler).await;
+		accept_connections_loop(listener, handler, max_workers).await;
 	};
 
 	let rt = Runtime::new().unwrap();
@@ -1012,9 +1011,10 @@ impl StratumServer {
 
 		let handler = Arc::new(Handler::from_stratum(&self));
 		let h = handler.clone();
+		let max_workers = self.config.max_workers;
 
 		let _listener_th = thread::spawn(move || {
-			accept_connections(listen_addr, h);
+			accept_connections(listen_addr, h, max_workers);
 		});
 
 		// We have started
@@ -1226,7 +1226,7 @@ mod tests {
 			let addr = listener.local_addr().unwrap();
 			let handler = setup_handler(".grin_stratum_accept_loop_test");
 
-			let task = tokio::spawn(accept_connections_loop(listener, handler.clone()));
+			let task = tokio::spawn(accept_connections_loop(listener, handler.clone(), 1));
 			let client = tokio::net::TcpStream::connect(addr).await.unwrap();
 			for _ in 0..100 {
 				if handler.workers.count() == 1 {
@@ -1251,23 +1251,27 @@ mod tests {
 	fn test_accept_loop_enforces_max_connection_limit() {
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
+			const MAX_TEST_WORKERS: usize = 8;
+
 			let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 			let addr = listener.local_addr().unwrap();
 			let handler = setup_handler(".grin_stratum_max_workers_test");
-			let task = tokio::spawn(accept_connections_loop(listener, handler.clone()));
+			let task = tokio::spawn(accept_connections_loop(
+				listener,
+				handler.clone(),
+				MAX_TEST_WORKERS,
+			));
 			let mut clients = Vec::new();
-			for _ in 0..(MAX_STRATUM_WORKERS + 8) {
-				if let Ok(client) = tokio::net::TcpStream::connect(addr).await {
-					clients.push(client);
-				}
+			for _ in 0..(MAX_TEST_WORKERS + 8) {
+				clients.push(tokio::net::TcpStream::connect(addr).await.unwrap());
 			}
 			for _ in 0..100 {
-				if handler.workers.count() == MAX_STRATUM_WORKERS {
+				if handler.workers.count() == MAX_TEST_WORKERS {
 					break;
 				}
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
-			assert_eq!(handler.workers.count(), MAX_STRATUM_WORKERS);
+			assert_eq!(handler.workers.count(), MAX_TEST_WORKERS);
 			drop(clients);
 			for _ in 0..100 {
 				if handler.workers.count() == 0 {
