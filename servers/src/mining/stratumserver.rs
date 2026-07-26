@@ -1439,6 +1439,7 @@ mod tests {
 	#[test]
 	fn test_block_retry_shutdown() {
 		use crate::common::adapters::{PoolToChainAdapter, PoolToNetAdapter};
+		use std::net::TcpListener;
 
 		let test_dir = TestDir::new(".grin_stratum_shutdown_retry_test");
 		let handler = setup_handler(test_dir.path());
@@ -1455,9 +1456,19 @@ mod tests {
 		let (tx, _rx, shutdown_tx) = dummy_tx();
 		handler.workers.add_worker(tx, shutdown_tx);
 
+		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+		let wallet_addr = listener.local_addr().unwrap();
+		let (accepted_tx, accepted_rx) = std::sync::mpsc::channel();
+		let (wallet_stop_tx, wallet_stop_rx) = std::sync::mpsc::channel();
+		let wallet_thread = thread::spawn(move || {
+			let (_socket, _) = listener.accept().unwrap();
+			let _ = accepted_tx.send(());
+			let _ = wallet_stop_rx.recv();
+		});
+
 		let mut config = StratumServerConfig::default();
 		config.burn_reward = false;
-		config.wallet_listener_url = "http://127.0.0.1:1".to_string();
+		config.wallet_listener_url = format!("http://{}", wallet_addr);
 		let stop_state = Arc::new(StopState::new());
 		let run_stop_state = stop_state.clone();
 		let request_handler = handler.clone();
@@ -1468,7 +1479,7 @@ mod tests {
 			let _ = done_tx.send(());
 		});
 
-		thread::sleep(Duration::from_millis(250));
+		assert_eq!(accepted_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
 		let (request_tx, request_rx) = std::sync::mpsc::channel();
 		thread::spawn(move || {
 			request_handler.build_block_template();
@@ -1478,6 +1489,8 @@ mod tests {
 
 		stop_state.stop();
 		assert_eq!(done_rx.recv_timeout(Duration::from_secs(1)), Ok(()));
+		let _ = wallet_stop_tx.send(());
+		wallet_thread.join().unwrap();
 	}
 
 	fn setup_handler(dir: &Path) -> Arc<Handler> {
