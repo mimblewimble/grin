@@ -639,6 +639,12 @@ fn validate_stratum_config(config: &StratumServerConfig) -> Result<(), Error> {
 			"stratum max_workers must be greater than zero".to_string(),
 		));
 	}
+	if config.max_workers > tokio::sync::Semaphore::MAX_PERMITS {
+		return Err(Error::Configuration(format!(
+			"stratum max_workers must not exceed {}",
+			tokio::sync::Semaphore::MAX_PERMITS
+		)));
+	}
 	if config.worker_idle_timeout_secs == 0 {
 		return Err(Error::Configuration(
 			"stratum worker_idle_timeout_secs must be greater than zero".to_string(),
@@ -671,6 +677,9 @@ mod tests {
 
 		let mut config = StratumServerConfig::default();
 		config.max_workers = 0;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.max_workers = tokio::sync::Semaphore::MAX_PERMITS + 1;
 		assert!(validate_stratum_config(&config).is_err());
 
 		config.max_workers = 1;

@@ -561,6 +561,7 @@ impl Handler {
 						None
 					};
 					let key_id = self.current_state.read().current_key_id.clone();
+					let requested_key_id = key_id.clone();
 
 					// Build the new block (version)
 					let Some((new_block, block_fees)) = mine_block::get_block_with_stop(
@@ -576,9 +577,11 @@ impl Handler {
 					let mut state = self.current_state.write();
 					head = self.chain.head().unwrap();
 					let latest_hash = head.last_block_h;
-					// Preserve the wallet-provided key even if the chain advanced while
-					// the block was being built. The next attempt must reuse that key.
-					state.current_key_id = block_fees.key_id();
+					// Preserve the wallet-provided key for a stale build unless a winning
+					// submission reset the key while the block was being built.
+					if state.current_key_id == requested_key_id {
+						state.current_key_id = block_fees.key_id();
+					}
 					if new_block.header.prev_hash != latest_hash {
 						drop(state);
 						thread::sleep(Duration::from_millis(5));
@@ -645,8 +648,7 @@ impl Drop for WorkerCleanup {
 async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeout: Duration) {
 	let peer_addr = socket.peer_addr().ok();
 	let (tx, mut rx) = mpsc::channel(WORKER_QUEUE_SIZE);
-	let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
-	let worker_id = handler.workers.add_worker(tx, shutdown_tx);
+	let worker_id = handler.workers.add_worker(tx);
 	let _cleanup = WorkerCleanup {
 		worker_id,
 		workers: handler.workers.clone(),
@@ -660,7 +662,8 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 
 	let framed = Framed::new(socket, LinesCodec::new_with_max_length(MAX_RPC_LINE_BYTES));
 	let (mut writer, mut reader) = framed.split();
-	let (read_activity, mut activity_rx) = mpsc::channel::<()>(1);
+	let (activity, mut activity_rx) = mpsc::channel::<()>(1);
+	let read_activity = activity.clone();
 
 	let reader_handler = handler.clone();
 	let read = async move {
@@ -685,7 +688,9 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 	let write = async move {
 		while let Some(line) = rx.recv().await {
 			match timeout(WORKER_WRITE_TIMEOUT, writer.send(line)).await {
-				Ok(Ok(())) => {}
+				Ok(Ok(())) => {
+					let _ = activity.try_send(());
+				}
 				Ok(Err(e)) => {
 					error!("Worker {} write error: {}", worker_id, e);
 					return Err(());
@@ -716,7 +721,6 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 				warn!("Worker {} idle for {:?}; disconnecting", worker_id, idle_timeout);
 				break;
 			}
-			_ = shutdown_rx.recv() => break,
 			activity = activity_rx.recv() => {
 				if activity.is_some() {
 					idle_sleep.as_mut().reset(Instant::now() + idle_timeout);
@@ -813,19 +817,17 @@ pub struct Worker {
 	login: Option<String>,
 	authenticated: bool,
 	tx: Tx,
-	shutdown_tx: mpsc::Sender<()>,
 }
 
 impl Worker {
 	/// Creates a new Stratum Worker.
-	pub fn new(id: usize, tx: Tx, shutdown_tx: mpsc::Sender<()>) -> Worker {
+	pub fn new(id: usize, tx: Tx) -> Worker {
 		Worker {
 			id: id,
 			agent: String::from(""),
 			login: None,
 			authenticated: false,
 			tx: tx,
-			shutdown_tx,
 		}
 	}
 } // impl Worker
@@ -843,7 +845,7 @@ impl WorkersList {
 		}
 	}
 
-	pub fn add_worker(&self, tx: Tx, shutdown_tx: mpsc::Sender<()>) -> usize {
+	pub fn add_worker(&self, tx: Tx) -> usize {
 		let mut stratum_stats = self.stratum_stats.write();
 		let mut workers_list = self.workers_list.write();
 		let worker_id = match stratum_stats
@@ -858,7 +860,7 @@ impl WorkersList {
 				id
 			}
 		};
-		let worker = Worker::new(worker_id, tx, shutdown_tx);
+		let worker = Worker::new(worker_id, tx);
 		workers_list.insert(worker_id, worker);
 
 		let mut worker_stats = WorkerStats::default();
@@ -934,8 +936,7 @@ impl WorkersList {
 		tx.send(msg).await.is_ok()
 	}
 
-	fn queue_broadcast(&self, msg: &str) -> Vec<(usize, mpsc::Sender<()>)> {
-		let mut disconnected_workers = Vec::new();
+	pub fn broadcast(&self, msg: String) {
 		let workers_list = self.workers_list.read();
 		for (worker_id, worker) in workers_list.iter() {
 			match worker.tx.try_send(msg.to_owned()) {
@@ -947,17 +948,12 @@ impl WorkersList {
 					);
 				}
 				Err(mpsc::error::TrySendError::Closed(_)) => {
-					disconnected_workers.push((*worker_id, worker.shutdown_tx.clone()));
+					debug!(
+						"Stratum: skipping broadcast to disconnected worker {}",
+						worker_id
+					);
 				}
 			}
-		}
-		disconnected_workers
-	}
-
-	pub fn broadcast(&self, msg: String) {
-		for (worker_id, shutdown_tx) in self.queue_broadcast(&msg) {
-			warn!("Stratum: dropping disconnected worker {}", worker_id);
-			let _ = shutdown_tx.try_send(());
 		}
 	}
 
@@ -1202,15 +1198,13 @@ mod tests {
 		}
 	}
 
-	fn dummy_tx() -> (Tx, mpsc::Receiver<String>, mpsc::Sender<()>) {
-		let (tx, rx) = mpsc::channel(WORKER_QUEUE_SIZE);
-		let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
-		(tx, rx, shutdown_tx)
+	fn dummy_tx() -> (Tx, mpsc::Receiver<String>) {
+		mpsc::channel(WORKER_QUEUE_SIZE)
 	}
 
 	fn add_dummy_worker(workers: &WorkersList) -> usize {
-		let (tx, _rx, shutdown_tx) = dummy_tx();
-		workers.add_worker(tx, shutdown_tx)
+		let (tx, _rx) = dummy_tx();
+		workers.add_worker(tx)
 	}
 
 	async fn tcp_pair() -> (TcpStream, TcpStream) {
@@ -1238,8 +1232,8 @@ mod tests {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats.clone());
 
-		let (tx0, _rx0, shutdown_tx0) = dummy_tx();
-		let id0 = workers.add_worker(tx0, shutdown_tx0);
+		let (tx0, _rx0) = dummy_tx();
+		let id0 = workers.add_worker(tx0);
 		assert_eq!(id0, 0);
 		assert_eq!(workers.count(), 1);
 		assert_eq!(stats.read().worker_stats.len(), 1);
@@ -1248,8 +1242,8 @@ mod tests {
 		assert_eq!(workers.count(), 0);
 		assert!(!stats.read().worker_stats[0].is_connected);
 
-		let (tx1, _rx1, shutdown_tx1) = dummy_tx();
-		let id1 = workers.add_worker(tx1, shutdown_tx1);
+		let (tx1, _rx1) = dummy_tx();
+		let id1 = workers.add_worker(tx1);
 		assert_eq!(id1, 0);
 		assert_eq!(stats.read().worker_stats.len(), 1);
 		assert!(stats.read().worker_stats[0].is_connected);
@@ -1264,8 +1258,7 @@ mod tests {
 		assert!(!workers.send_to(0, "missing".into()).await);
 
 		let (tx, mut rx) = mpsc::channel(1);
-		let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
-		let id = workers.add_worker(tx, shutdown_tx);
+		let id = workers.add_worker(tx);
 		assert!(workers.send_to(id, "one".into()).await);
 		assert_eq!(rx.try_recv().unwrap(), "one");
 
@@ -1280,8 +1273,8 @@ mod tests {
 	fn test_remove_worker_twice() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats.clone());
-		let (tx, _rx, shutdown_tx) = dummy_tx();
-		let id = workers.add_worker(tx, shutdown_tx);
+		let (tx, _rx) = dummy_tx();
+		let id = workers.add_worker(tx);
 		workers.remove_worker(id);
 		workers.remove_worker(id);
 		assert_eq!(workers.count(), 0);
@@ -1290,46 +1283,17 @@ mod tests {
 	}
 
 	#[test]
-	fn test_stale_worker_shutdown() {
-		let stats = Arc::new(RwLock::new(StratumStats::default()));
-		let workers = WorkersList::new(stats);
-
-		let (old_tx, old_rx) = mpsc::channel(1);
-		drop(old_rx);
-		let (old_shutdown_tx, mut old_shutdown_rx) = mpsc::channel(1);
-		let old_id = workers.add_worker(old_tx, old_shutdown_tx);
-
-		let disconnected_workers = workers.queue_broadcast("next job");
-		assert_eq!(disconnected_workers.len(), 1);
-
-		workers.remove_worker(old_id);
-		let (new_tx, _new_rx) = mpsc::channel(1);
-		let (new_shutdown_tx, mut new_shutdown_rx) = mpsc::channel(1);
-		let new_id = workers.add_worker(new_tx, new_shutdown_tx);
-		assert_eq!(new_id, old_id);
-
-		let (disconnected_worker_id, shutdown_tx) =
-			disconnected_workers.into_iter().next().unwrap();
-		assert_eq!(disconnected_worker_id, old_id);
-		shutdown_tx.try_send(()).unwrap();
-		assert_eq!(old_shutdown_rx.try_recv(), Ok(()));
-		assert!(new_shutdown_rx.try_recv().is_err());
-	}
-
-	#[test]
 	fn test_full_queue_keeps_worker() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats);
 		let (tx, mut rx) = mpsc::channel(1);
 		tx.try_send("queued".into()).unwrap();
-		let (shutdown_tx, mut shutdown_rx) = mpsc::channel(1);
-		let worker_id = workers.add_worker(tx, shutdown_tx);
+		let worker_id = workers.add_worker(tx);
 
 		workers.broadcast("next job".into());
 
 		assert_eq!(workers.count(), 1);
 		assert_eq!(rx.try_recv(), Ok("queued".into()));
-		assert!(shutdown_rx.try_recv().is_err());
 		workers.remove_worker(worker_id);
 	}
 
@@ -1415,7 +1379,7 @@ mod tests {
 	}
 
 	#[tokio::test]
-	async fn test_outbound_does_not_reset_idle() {
+	async fn test_outbound_resets_idle() {
 		let test_dir = TestDir::new("grin_stratum_outbound_idle_test");
 		let (client, server_socket) = tcp_pair().await;
 		let handler = setup_handler(test_dir.path());
@@ -1435,12 +1399,14 @@ mod tests {
 			}
 		});
 
-		timeout(Duration::from_millis(150), task)
+		broadcaster.await.unwrap();
+		assert!(!task.is_finished());
+
+		timeout(Duration::from_millis(500), task)
 			.await
-			.expect("outbound broadcasts kept an idle worker connected")
+			.expect("worker remained connected after outbound activity stopped")
 			.unwrap();
 		assert_eq!(handler.workers.count(), 0);
-		broadcaster.await.unwrap();
 		drop(client);
 	}
 
@@ -1506,8 +1472,8 @@ mod tests {
 			pool_adapter,
 			pool_net_adapter,
 		)));
-		let (tx, _rx, shutdown_tx) = dummy_tx();
-		handler.workers.add_worker(tx, shutdown_tx);
+		let (tx, _rx) = dummy_tx();
+		handler.workers.add_worker(tx);
 
 		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
 		let wallet_addr = listener.local_addr().unwrap();
@@ -1849,10 +1815,10 @@ mod tests {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats);
 
-		let (tx0, mut rx0, shutdown_tx0) = dummy_tx();
-		let (tx1, mut rx1, shutdown_tx1) = dummy_tx();
-		let id0 = workers.add_worker(tx0, shutdown_tx0);
-		let _id1 = workers.add_worker(tx1, shutdown_tx1);
+		let (tx0, mut rx0) = dummy_tx();
+		let (tx1, mut rx1) = dummy_tx();
+		let id0 = workers.add_worker(tx0);
+		let _id1 = workers.add_worker(tx1);
 
 		workers.broadcast("hello-all".to_string());
 		assert_eq!(rx0.try_recv().unwrap(), "hello-all");
