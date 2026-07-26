@@ -17,7 +17,7 @@
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{mpsc, Semaphore};
 use tokio::task::JoinSet;
 use tokio::time::{timeout, Instant};
 use tokio_util::codec::{Framed, LinesCodec};
@@ -639,20 +639,7 @@ impl Drop for WorkerCleanup {
 	}
 }
 
-async fn handle_connection(
-	socket: TcpStream,
-	handler: Arc<Handler>,
-	_permit: OwnedSemaphorePermit,
-	idle_timeout: Duration,
-) {
-	handle_connection_with_idle_timeout(socket, handler, idle_timeout).await;
-}
-
-async fn handle_connection_with_idle_timeout(
-	socket: TcpStream,
-	handler: Arc<Handler>,
-	idle_timeout: Duration,
-) {
+async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeout: Duration) {
 	let peer_addr = socket.peer_addr().ok();
 	let (tx, mut rx) = mpsc::channel(WORKER_QUEUE_SIZE);
 	let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
@@ -774,10 +761,11 @@ async fn accept_connections_loop(
 						};
 						let handler = handler.clone();
 						connections.spawn(async move {
+							let _permit = permit;
 							if let Err(e) = socket.set_nodelay(true) {
 								debug!("Stratum: set_nodelay failed for {}: {}", peer_addr, e);
 							}
-							handle_connection(socket, handler, permit, idle_timeout).await;
+							handle_connection(socket, handler, idle_timeout).await;
 						});
 					}
 					Err(e) => {
@@ -1220,8 +1208,28 @@ mod tests {
 		workers.add_worker(tx, shutdown_tx)
 	}
 
+	async fn tcp_pair() -> (TcpStream, TcpStream) {
+		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let client = TcpStream::connect(listener.local_addr().unwrap())
+			.await
+			.unwrap();
+		let (server, _) = listener.accept().await.unwrap();
+		(client, server)
+	}
+
+	async fn wait_for_worker_count(handler: &Handler, expected: usize) {
+		timeout(Duration::from_secs(1), async {
+			while handler.workers.count() != expected {
+				tokio::time::sleep(Duration::from_millis(10)).await;
+			}
+		})
+		.await
+		.expect("worker count did not change in time");
+		assert_eq!(handler.workers.count(), expected);
+	}
+
 	#[test]
-	fn test_worker_slot_reuse_after_disconnect() {
+	fn test_worker_slot_reuse() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats.clone());
 
@@ -1243,31 +1251,28 @@ mod tests {
 		assert_eq!(workers.count(), 1);
 	}
 
-	#[test]
-	fn test_send_to_missing_closed_and_ok() {
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			let stats = Arc::new(RwLock::new(StratumStats::default()));
-			let workers = WorkersList::new(stats);
+	#[tokio::test]
+	async fn test_worker_send() {
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats);
 
-			assert!(!workers.send_to(0, "missing".into()).await);
+		assert!(!workers.send_to(0, "missing".into()).await);
 
-			let (tx, mut rx) = mpsc::channel(1);
-			let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
-			let id = workers.add_worker(tx, shutdown_tx);
-			assert!(workers.send_to(id, "one".into()).await);
-			assert_eq!(rx.try_recv().unwrap(), "one");
+		let (tx, mut rx) = mpsc::channel(1);
+		let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
+		let id = workers.add_worker(tx, shutdown_tx);
+		assert!(workers.send_to(id, "one".into()).await);
+		assert_eq!(rx.try_recv().unwrap(), "one");
 
-			drop(rx);
-			assert!(!workers.send_to(id, "closed".into()).await);
+		drop(rx);
+		assert!(!workers.send_to(id, "closed".into()).await);
 
-			workers.remove_worker(id);
-			assert!(!workers.send_to(id, "after-remove".into()).await);
-		});
+		workers.remove_worker(id);
+		assert!(!workers.send_to(id, "after-remove".into()).await);
 	}
 
 	#[test]
-	fn test_remove_worker_is_idempotent() {
+	fn test_remove_worker_twice() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats.clone());
 		let (tx, _rx, shutdown_tx) = dummy_tx();
@@ -1280,7 +1285,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_slow_worker_slot_reuse() {
+	fn test_stale_worker_shutdown() {
 		let stats = Arc::new(RwLock::new(StratumStats::default()));
 		let workers = WorkersList::new(stats);
 
@@ -1305,173 +1310,134 @@ mod tests {
 		assert!(new_shutdown_rx.try_recv().is_err());
 	}
 
-	#[test]
-	fn test_accept_loop_stops_connection_tasks() {
+	#[tokio::test]
+	async fn test_accept_loop_shutdown() {
 		let test_dir = TestDir::new(".grin_stratum_accept_loop_test");
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-			let addr = listener.local_addr().unwrap();
-			let handler = setup_handler(test_dir.path());
-			let stop_state = Arc::new(StopState::new());
+		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let addr = listener.local_addr().unwrap();
+		let handler = setup_handler(test_dir.path());
+		let stop_state = Arc::new(StopState::new());
 
-			let task = tokio::spawn(accept_connections_loop(
-				listener,
-				handler.clone(),
-				1,
-				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
-				stop_state.clone(),
-			));
-			let client = tokio::net::TcpStream::connect(addr).await.unwrap();
-			for _ in 0..100 {
-				if handler.workers.count() == 1 {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-			assert_eq!(handler.workers.count(), 1);
-			stop_state.stop();
-			timeout(Duration::from_millis(500), task)
-				.await
-				.unwrap()
-				.unwrap();
-			assert_eq!(handler.workers.count(), 0);
-			drop(client);
-		});
+		let task = tokio::spawn(accept_connections_loop(
+			listener,
+			handler.clone(),
+			1,
+			Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
+			stop_state.clone(),
+		));
+		let client = tokio::net::TcpStream::connect(addr).await.unwrap();
+		wait_for_worker_count(&handler, 1).await;
+		stop_state.stop();
+		timeout(Duration::from_millis(500), task)
+			.await
+			.unwrap()
+			.unwrap();
+		assert_eq!(handler.workers.count(), 0);
+		drop(client);
 	}
 
-	#[test]
-	fn test_accept_loop_enforces_max_connection_limit() {
+	#[tokio::test]
+	async fn test_worker_limit() {
 		let test_dir = TestDir::new(".grin_stratum_max_workers_test");
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			const MAX_TEST_WORKERS: usize = 8;
+		const MAX_TEST_WORKERS: usize = 8;
 
-			let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-			let addr = listener.local_addr().unwrap();
-			let handler = setup_handler(test_dir.path());
-			let stop_state = Arc::new(StopState::new());
-			let task = tokio::spawn(accept_connections_loop(
-				listener,
-				handler.clone(),
-				MAX_TEST_WORKERS,
-				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
-				stop_state.clone(),
-			));
-			let mut clients = Vec::new();
-			for _ in 0..(MAX_TEST_WORKERS + 8) {
-				clients.push(tokio::net::TcpStream::connect(addr).await.unwrap());
-			}
-			for _ in 0..100 {
-				if handler.workers.count() == MAX_TEST_WORKERS {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-			assert_eq!(handler.workers.count(), MAX_TEST_WORKERS);
-			stop_state.stop();
-			timeout(Duration::from_millis(500), task)
-				.await
-				.unwrap()
-				.unwrap();
-			assert_eq!(handler.workers.count(), 0);
-			drop(clients);
-		});
+		let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let addr = listener.local_addr().unwrap();
+		let handler = setup_handler(test_dir.path());
+		let stop_state = Arc::new(StopState::new());
+		let task = tokio::spawn(accept_connections_loop(
+			listener,
+			handler.clone(),
+			MAX_TEST_WORKERS,
+			Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
+			stop_state.clone(),
+		));
+		let mut clients = Vec::new();
+		for _ in 0..(MAX_TEST_WORKERS + 8) {
+			clients.push(tokio::net::TcpStream::connect(addr).await.unwrap());
+		}
+		wait_for_worker_count(&handler, MAX_TEST_WORKERS).await;
+		stop_state.stop();
+		timeout(Duration::from_millis(500), task)
+			.await
+			.unwrap()
+			.unwrap();
+		assert_eq!(handler.workers.count(), 0);
+		drop(clients);
 	}
 
-	#[test]
-	fn test_idle_timeout_after_sync() {
+	#[tokio::test]
+	async fn test_sync_idle_timeout() {
 		let test_dir = TestDir::new(".grin_stratum_idle_test");
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			let server = StdTcpListener::bind("127.0.0.1:0").unwrap();
-			let addr = server.local_addr().unwrap();
-			let client = TcpStream::connect(addr).await.unwrap();
-			let (server_socket, _) = server.accept().unwrap();
-			server_socket.set_nonblocking(true).unwrap();
-			let server_socket = TcpStream::from_std(server_socket).unwrap();
-			let handler = setup_handler(test_dir.path());
-			handler.sync_state.update(SyncStatus::Initial);
+		let (client, server_socket) = tcp_pair().await;
+		let handler = setup_handler(test_dir.path());
+		handler.sync_state.update(SyncStatus::Initial);
 
-			let task = tokio::spawn(handle_connection_with_idle_timeout(
-				server_socket,
-				handler.clone(),
-				Duration::from_millis(50),
-			));
-			for _ in 0..100 {
-				if handler.workers.count() == 1 {
-					break;
-				}
-				tokio::time::sleep(Duration::from_millis(10)).await;
-			}
-			assert_eq!(handler.workers.count(), 1);
-			tokio::time::sleep(Duration::from_millis(120)).await;
-			assert_eq!(handler.workers.count(), 1);
+		let task = tokio::spawn(handle_connection(
+			server_socket,
+			handler.clone(),
+			Duration::from_millis(50),
+		));
+		wait_for_worker_count(&handler, 1).await;
+		tokio::time::sleep(Duration::from_millis(120)).await;
+		assert_eq!(handler.workers.count(), 1);
 
-			handler.sync_state.update(SyncStatus::NoSync);
-			timeout(Duration::from_millis(500), task)
+		handler.sync_state.update(SyncStatus::NoSync);
+		timeout(Duration::from_millis(500), task)
+			.await
+			.unwrap()
+			.unwrap();
+		assert_eq!(handler.workers.count(), 0);
+		drop(client);
+	}
+
+	#[tokio::test]
+	async fn test_pipelined_backpressure() {
+		let test_dir = TestDir::new(".grin_stratum_pipeline_test");
+		use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+		const REQUEST_COUNT: usize = 200;
+
+		let (mut client, server_socket) = tcp_pair().await;
+		let handler = setup_handler(test_dir.path());
+
+		let task = tokio::spawn(handle_connection(
+			server_socket,
+			handler.clone(),
+			Duration::from_secs(5),
+		));
+
+		let requests = (0..REQUEST_COUNT)
+			.map(|id| {
+				format!(
+					r#"{{"id":{},"jsonrpc":"2.0","method":"keepalive","params":null}}"#,
+					id
+				)
+			})
+			.collect::<Vec<_>>()
+			.join("\n")
+			+ "\n";
+		client.write_all(requests.as_bytes()).await.unwrap();
+
+		let mut lines = BufReader::new(client).lines();
+		for expected_id in 0..REQUEST_COUNT {
+			let line = timeout(Duration::from_secs(5), lines.next_line())
 				.await
 				.unwrap()
+				.unwrap()
 				.unwrap();
-			assert_eq!(handler.workers.count(), 0);
-			drop(client);
-		});
+			let response: Value = serde_json::from_str(&line).unwrap();
+			assert_eq!(response["id"], expected_id);
+		}
+		assert_eq!(handler.workers.count(), 1);
+
+		drop(lines);
+		task.await.unwrap();
+		assert_eq!(handler.workers.count(), 0);
 	}
 
 	#[test]
-	fn test_pipelined_requests_apply_backpressure() {
-		let test_dir = TestDir::new(".grin_stratum_pipeline_test");
-		let rt = Runtime::new().unwrap();
-		rt.block_on(async {
-			use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-
-			const REQUEST_COUNT: usize = 200;
-
-			let server = StdTcpListener::bind("127.0.0.1:0").unwrap();
-			let addr = server.local_addr().unwrap();
-			let mut client = TcpStream::connect(addr).await.unwrap();
-			let (server_socket, _) = server.accept().unwrap();
-			server_socket.set_nonblocking(true).unwrap();
-			let server_socket = TcpStream::from_std(server_socket).unwrap();
-			let handler = setup_handler(test_dir.path());
-
-			let task = tokio::spawn(handle_connection_with_idle_timeout(
-				server_socket,
-				handler.clone(),
-				Duration::from_secs(5),
-			));
-
-			let requests = (0..REQUEST_COUNT)
-				.map(|id| {
-					format!(
-						r#"{{"id":{},"jsonrpc":"2.0","method":"keepalive","params":null}}"#,
-						id
-					)
-				})
-				.collect::<Vec<_>>()
-				.join("\n") + "\n";
-			client.write_all(requests.as_bytes()).await.unwrap();
-
-			let mut lines = BufReader::new(client).lines();
-			for expected_id in 0..REQUEST_COUNT {
-				let line = timeout(Duration::from_secs(5), lines.next_line())
-					.await
-					.unwrap()
-					.unwrap()
-					.unwrap();
-				let response: Value = serde_json::from_str(&line).unwrap();
-				assert_eq!(response["id"], expected_id);
-			}
-			assert_eq!(handler.workers.count(), 1);
-
-			drop(lines);
-			task.await.unwrap();
-			assert_eq!(handler.workers.count(), 0);
-		});
-	}
-
-	#[test]
-	fn test_block_retry_stays_responsive() {
+	fn test_block_retry_shutdown() {
 		use crate::common::adapters::{PoolToChainAdapter, PoolToNetAdapter};
 
 		let test_dir = TestDir::new(".grin_stratum_shutdown_retry_test");
