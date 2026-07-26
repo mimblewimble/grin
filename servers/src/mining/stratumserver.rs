@@ -47,7 +47,6 @@ use crate::ServerTxPool;
 type Tx = mpsc::Sender<String>;
 
 const WORKER_QUEUE_SIZE: usize = 64;
-const WORKER_IDLE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const WORKER_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(100);
 const MAX_RPC_LINE_BYTES: usize = 64 * 1024;
@@ -627,8 +626,9 @@ async fn handle_connection(
 	socket: TcpStream,
 	handler: Arc<Handler>,
 	_permit: OwnedSemaphorePermit,
+	idle_timeout: Duration,
 ) {
-	handle_connection_with_idle_timeout(socket, handler, WORKER_IDLE_TIMEOUT).await;
+	handle_connection_with_idle_timeout(socket, handler, idle_timeout).await;
 }
 
 async fn handle_connection_with_idle_timeout(
@@ -705,6 +705,10 @@ async fn handle_connection_with_idle_timeout(
 			_ = &mut read => break,
 			_ = &mut write => break,
 			_ = &mut idle_sleep => {
+				if handler.sync_state.is_syncing() {
+					idle_sleep.as_mut().reset(Instant::now() + idle_timeout);
+					continue;
+				}
 				warn!("Worker {} idle for {:?}; disconnecting", worker_id, idle_timeout);
 				break;
 			}
@@ -720,7 +724,12 @@ async fn handle_connection_with_idle_timeout(
 	}
 }
 
-async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>, max_workers: usize) {
+async fn accept_connections_loop(
+	listener: TcpListener,
+	handler: Arc<Handler>,
+	max_workers: usize,
+	idle_timeout: Duration,
+) {
 	let mut connections = JoinSet::new();
 	let worker_limit = Arc::new(Semaphore::new(max_workers));
 	loop {
@@ -744,7 +753,7 @@ async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>, m
 							if let Err(e) = socket.set_nodelay(true) {
 								debug!("Stratum: set_nodelay failed for {}: {}", peer_addr, e);
 							}
-							handle_connection(socket, handler, permit).await;
+							handle_connection(socket, handler, permit, idle_timeout).await;
 						});
 					}
 					Err(e) => {
@@ -762,13 +771,18 @@ async fn accept_connections_loop(listener: TcpListener, handler: Arc<Handler>, m
 	}
 }
 
-fn accept_connections(listen_addr: SocketAddr, handler: Arc<Handler>, max_workers: usize) {
+fn accept_connections(
+	listen_addr: SocketAddr,
+	handler: Arc<Handler>,
+	max_workers: usize,
+	idle_timeout: Duration,
+) {
 	info!("Start tokio stratum server");
 	let task = async move {
 		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
 			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
 		});
-		accept_connections_loop(listener, handler, max_workers).await;
+		accept_connections_loop(listener, handler, max_workers, idle_timeout).await;
 	};
 
 	let rt = Runtime::new().unwrap();
@@ -1012,9 +1026,14 @@ impl StratumServer {
 		let handler = Arc::new(Handler::from_stratum(&self));
 		let h = handler.clone();
 		let max_workers = self.config.max_workers;
+		let idle_timeout = Duration::from_secs(self.config.worker_idle_timeout_secs);
+		assert!(
+			!idle_timeout.is_zero(),
+			"Stratum: worker_idle_timeout_secs must be greater than zero"
+		);
 
 		let _listener_th = thread::spawn(move || {
-			accept_connections(listen_addr, h, max_workers);
+			accept_connections(listen_addr, h, max_workers, idle_timeout);
 		});
 
 		// We have started
@@ -1226,7 +1245,12 @@ mod tests {
 			let addr = listener.local_addr().unwrap();
 			let handler = setup_handler(".grin_stratum_accept_loop_test");
 
-			let task = tokio::spawn(accept_connections_loop(listener, handler.clone(), 1));
+			let task = tokio::spawn(accept_connections_loop(
+				listener,
+				handler.clone(),
+				1,
+				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
+			));
 			let client = tokio::net::TcpStream::connect(addr).await.unwrap();
 			for _ in 0..100 {
 				if handler.workers.count() == 1 {
@@ -1260,6 +1284,7 @@ mod tests {
 				listener,
 				handler.clone(),
 				MAX_TEST_WORKERS,
+				Duration::from_secs(StratumServerConfig::default().worker_idle_timeout_secs),
 			));
 			let mut clients = Vec::new();
 			for _ in 0..(MAX_TEST_WORKERS + 8) {
@@ -1285,7 +1310,7 @@ mod tests {
 	}
 
 	#[test]
-	fn test_idle_connection_is_disconnected() {
+	fn test_idle_timeout_after_sync() {
 		let rt = Runtime::new().unwrap();
 		rt.block_on(async {
 			let server = StdTcpListener::bind("127.0.0.1:0").unwrap();
@@ -1295,6 +1320,7 @@ mod tests {
 			server_socket.set_nonblocking(true).unwrap();
 			let server_socket = TcpStream::from_std(server_socket).unwrap();
 			let handler = setup_handler(".grin_stratum_idle_test");
+			handler.sync_state.update(SyncStatus::Initial);
 
 			let task = tokio::spawn(handle_connection_with_idle_timeout(
 				server_socket,
@@ -1308,7 +1334,14 @@ mod tests {
 				tokio::time::sleep(Duration::from_millis(10)).await;
 			}
 			assert_eq!(handler.workers.count(), 1);
-			task.await.unwrap();
+			tokio::time::sleep(Duration::from_millis(120)).await;
+			assert_eq!(handler.workers.count(), 1);
+
+			handler.sync_state.update(SyncStatus::NoSync);
+			timeout(Duration::from_millis(500), task)
+				.await
+				.unwrap()
+				.unwrap();
 			assert_eq!(handler.workers.count(), 0);
 			drop(client);
 		});

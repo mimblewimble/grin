@@ -250,6 +250,11 @@ pub struct StratumServerConfig {
 	#[serde(default = "default_stratum_max_workers")]
 	pub max_workers: usize,
 
+	/// Disconnect workers after this many seconds without traffic. Must be
+	/// greater than zero.
+	#[serde(default = "default_stratum_worker_idle_timeout_secs")]
+	pub worker_idle_timeout_secs: u64,
+
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
 	pub attempt_time_per_block: u32,
@@ -269,12 +274,17 @@ fn default_stratum_max_workers() -> usize {
 	256
 }
 
+fn default_stratum_worker_idle_timeout_secs() -> u64 {
+	5 * 60
+}
+
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
 			wallet_listener_url: "http://127.0.0.1:3415".to_string(),
 			burn_reward: false,
 			max_workers: default_stratum_max_workers(),
+			worker_idle_timeout_secs: default_stratum_worker_idle_timeout_secs(),
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
@@ -443,11 +453,14 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn stratum_max_workers_default() {
+	fn stratum_config_defaults() {
 		let mut value = serde_json::to_value(StratumServerConfig::default()).unwrap();
-		value.as_object_mut().unwrap().remove("max_workers");
+		let config = value.as_object_mut().unwrap();
+		config.remove("max_workers");
+		config.remove("worker_idle_timeout_secs");
 
 		let config: StratumServerConfig = serde_json::from_value(value).unwrap();
 		assert_eq!(config.max_workers, 256);
+		assert_eq!(config.worker_idle_timeout_secs, 5 * 60);
 	}
 }
