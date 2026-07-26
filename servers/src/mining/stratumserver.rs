@@ -669,8 +669,8 @@ async fn handle_connection_with_idle_timeout(
 				error!("Worker {} invalid JSON: {}", worker_id, e);
 			})?;
 			let resp = reader_handler.handle_rpc_requests(request, worker_id);
-			if !reader_handler.workers.try_send_to(worker_id, resp) {
-				warn!("Worker {} outbound queue full or closed", worker_id);
+			if !reader_handler.workers.send_to(worker_id, resp).await {
+				warn!("Worker {} outbound queue closed", worker_id);
 				return Err(());
 			}
 		}
@@ -901,13 +901,15 @@ impl WorkersList {
 		f(&mut stratum_stats.worker_stats[worker_id]);
 	}
 
-	pub fn try_send_to(&self, worker_id: usize, msg: String) -> bool {
-		let workers_list = self.workers_list.read();
-		let worker = match workers_list.get(&worker_id) {
-			Some(worker) => worker,
-			None => return false,
+	pub async fn send_to(&self, worker_id: usize, msg: String) -> bool {
+		let tx = {
+			let workers_list = self.workers_list.read();
+			match workers_list.get(&worker_id) {
+				Some(worker) => worker.tx.clone(),
+				None => return false,
+			}
 		};
-		worker.tx.try_send(msg).is_ok()
+		tx.send(msg).await.is_ok()
 	}
 
 	pub fn disconnect_worker(&self, worker_id: usize) {
@@ -1169,22 +1171,26 @@ mod tests {
 	}
 
 	#[test]
-	fn test_try_send_to_missing_full_and_ok() {
-		let stats = Arc::new(RwLock::new(StratumStats::default()));
-		let workers = WorkersList::new(stats);
+	fn test_send_to_missing_closed_and_ok() {
+		let rt = Runtime::new().unwrap();
+		rt.block_on(async {
+			let stats = Arc::new(RwLock::new(StratumStats::default()));
+			let workers = WorkersList::new(stats);
 
-		assert!(!workers.try_send_to(0, "missing".into()));
+			assert!(!workers.send_to(0, "missing".into()).await);
 
-		let (tx, mut rx) = mpsc::channel(1);
-		let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
-		let id = workers.add_worker(tx, shutdown_tx);
-		assert!(workers.try_send_to(id, "one".into()));
-		assert!(!workers.try_send_to(id, "two".into()));
-		assert_eq!(rx.try_recv().unwrap(), "one");
-		assert!(workers.try_send_to(id, "three".into()));
+			let (tx, mut rx) = mpsc::channel(1);
+			let (shutdown_tx, _shutdown_rx) = mpsc::channel(1);
+			let id = workers.add_worker(tx, shutdown_tx);
+			assert!(workers.send_to(id, "one".into()).await);
+			assert_eq!(rx.try_recv().unwrap(), "one");
 
-		workers.remove_worker(id);
-		assert!(!workers.try_send_to(id, "after-remove".into()));
+			drop(rx);
+			assert!(!workers.send_to(id, "closed".into()).await);
+
+			workers.remove_worker(id);
+			assert!(!workers.send_to(id, "after-remove".into()).await);
+		});
 	}
 
 	#[test]
@@ -1287,6 +1293,57 @@ mod tests {
 			task.await.unwrap();
 			assert_eq!(handler.workers.count(), 0);
 			drop(client);
+		});
+	}
+
+	#[test]
+	fn test_pipelined_requests_apply_backpressure() {
+		let rt = Runtime::new().unwrap();
+		rt.block_on(async {
+			use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+			const REQUEST_COUNT: usize = 200;
+
+			let server = StdTcpListener::bind("127.0.0.1:0").unwrap();
+			let addr = server.local_addr().unwrap();
+			let mut client = TcpStream::connect(addr).await.unwrap();
+			let (server_socket, _) = server.accept().unwrap();
+			server_socket.set_nonblocking(true).unwrap();
+			let server_socket = TcpStream::from_std(server_socket).unwrap();
+			let handler = setup_handler(".grin_stratum_pipeline_test");
+
+			let task = tokio::spawn(handle_connection_with_idle_timeout(
+				server_socket,
+				handler.clone(),
+				Duration::from_secs(5),
+			));
+
+			let requests = (0..REQUEST_COUNT)
+				.map(|id| {
+					format!(
+						r#"{{"id":{},"jsonrpc":"2.0","method":"keepalive","params":null}}"#,
+						id
+					)
+				})
+				.collect::<Vec<_>>()
+				.join("\n") + "\n";
+			client.write_all(requests.as_bytes()).await.unwrap();
+
+			let mut lines = BufReader::new(client).lines();
+			for expected_id in 0..REQUEST_COUNT {
+				let line = timeout(Duration::from_secs(5), lines.next_line())
+					.await
+					.unwrap()
+					.unwrap()
+					.unwrap();
+				let response: Value = serde_json::from_str(&line).unwrap();
+				assert_eq!(response["id"], expected_id);
+			}
+			assert_eq!(handler.workers.count(), 1);
+
+			drop(lines);
+			task.await.unwrap();
+			assert_eq!(handler.workers.count(), 0);
 		});
 	}
 
