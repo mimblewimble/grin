@@ -1106,7 +1106,6 @@ mod tests {
 	use crate::core::global::{self, ChainTypes};
 	use crate::core::pow::Difficulty;
 	use std::fs;
-	use std::net::TcpListener as StdTcpListener;
 	use std::path::{Path, PathBuf};
 	use std::sync::OnceLock;
 
@@ -1805,7 +1804,9 @@ mod tests {
 		assert_eq!(rx0.try_recv().unwrap(), "hello-all");
 		assert_eq!(rx1.try_recv().unwrap(), "hello-all");
 
-		workers.send_to(id0, "hello-one".to_string());
+		assert!(futures::executor::block_on(
+			workers.send_to(id0, "hello-one".to_string())
+		));
 		assert_eq!(rx0.try_recv().unwrap(), "hello-one");
 		// Unicast must not deliver to the other worker (channel open but empty).
 		assert!(rx1.try_recv().is_err());
