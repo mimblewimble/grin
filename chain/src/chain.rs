@@ -32,7 +32,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::util::{Mutex, RwLock};
 use crate::{
 	core::core::hash::{Hash, Hashed},
 	store::Batch,
@@ -159,6 +159,10 @@ pub struct Chain {
 	denylist: Arc<RwLock<Vec<Hash>>>,
 	archive_mode: bool,
 	genesis: Block,
+	/// Wall-clock of last compaction start. Process-local: a restart clears it so
+	/// the wall-clock gate allows compact immediately; the height threshold in
+	/// `compact()` still limits compacting across frequent restarts.
+	last_compact_trigger: Mutex<Option<Instant>>,
 }
 
 impl Chain {
@@ -209,6 +213,7 @@ impl Chain {
 			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
 			genesis: genesis,
+			last_compact_trigger: Mutex::new(None),
 		};
 
 		chain.log_heads()?;
@@ -1328,6 +1333,9 @@ impl Chain {
 	/// * compacts the txhashset based on current prune_list
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
+	/// Shared entry point for all compaction triggers (sync dice, sync→NoSync,
+	/// owner API). Enforces `MIN_COMPACTION_INTERVAL_SECS` so callers cannot
+	/// compact more often than that wall-clock gap.
 	pub fn compact(&self) -> Result<(), Error> {
 		// A node may be restarted multiple times in a short period of time.
 		// We compact at most once per 60 blocks in this situation by comparing
@@ -1344,6 +1352,14 @@ impl Chain {
 				);
 				return Ok(());
 			}
+		}
+
+		// Wall-clock throttle (see MIN_COMPACTION_INTERVAL_SECS). Stamp under the
+		// lock before work so concurrent callers cannot double-trigger.
+		let min_interval = Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
+		if !try_record_compact_trigger(&self.last_compact_trigger, min_interval, Instant::now()) {
+			debug!("compact: skipping, within min wall-clock interval");
+			return Ok(());
 		}
 
 		// Retrieve archive header here, so as not to attempt a read
@@ -1861,4 +1877,92 @@ fn setup_head(
 	};
 	batch.commit()?;
 	Ok(())
+}
+
+/// If the wall-clock gate allows a compact start, records `now` and returns true.
+/// Lock is held across check+stamp so concurrent callers cannot double-trigger.
+fn try_record_compact_trigger(
+	last: &Mutex<Option<Instant>>,
+	min_interval: Duration,
+	now: Instant,
+) -> bool {
+	let mut last = last.lock();
+	if let Some(t) = *last {
+		if now.duration_since(t) < min_interval {
+			return false;
+		}
+	}
+	*last = Some(now);
+	true
+}
+
+#[cfg(test)]
+mod compact_gate_tests {
+	use super::try_record_compact_trigger;
+	use crate::util::Mutex;
+	use std::sync::atomic::{AtomicU32, Ordering};
+	use std::sync::{Arc, Barrier};
+	use std::thread;
+	use std::time::{Duration, Instant};
+
+	#[test]
+	fn compact_gate_boundary_inside_and_outside_interval() {
+		let min = Duration::from_secs(3600);
+		let gate = Mutex::new(None);
+		let t0 = Instant::now();
+
+		// First trigger always allowed.
+		assert!(try_record_compact_trigger(&gate, min, t0));
+
+		// Just inside the interval: still blocked.
+		assert!(!try_record_compact_trigger(
+			&gate,
+			min,
+			t0 + min - Duration::from_secs(1)
+		));
+
+		// Exactly at the boundary: allowed again.
+		assert!(try_record_compact_trigger(&gate, min, t0 + min));
+
+		// Just outside the next window: allowed.
+		assert!(try_record_compact_trigger(
+			&gate,
+			min,
+			t0 + min + min + Duration::from_secs(1)
+		));
+	}
+
+	#[test]
+	fn concurrent_compact_gate_triggers_at_most_once() {
+		let min = Duration::from_secs(3600);
+		let gate = Arc::new(Mutex::new(None));
+		let triggers = Arc::new(AtomicU32::new(0));
+		let num_threads = 64;
+		let barrier = Arc::new(Barrier::new(num_threads));
+		let now = Instant::now();
+
+		let handles: Vec<_> = (0..num_threads)
+			.map(|_| {
+				let gate = gate.clone();
+				let triggers = triggers.clone();
+				let barrier = barrier.clone();
+				thread::spawn(move || {
+					barrier.wait();
+					if try_record_compact_trigger(&gate, min, now) {
+						triggers.fetch_add(1, Ordering::SeqCst);
+					}
+				})
+			})
+			.collect();
+
+		for h in handles {
+			h.join().unwrap();
+		}
+
+		assert_eq!(
+			triggers.load(Ordering::SeqCst),
+			1,
+			"concurrent callers must stamp the gate at most once"
+		);
+	}
 }

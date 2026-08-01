@@ -1238,19 +1238,20 @@ where
 	}
 
 	fn check_compact(&self) {
-		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
-		// uses a different thread to avoid blocking the caller thread (likely a peer)
+		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block.
+		// Wall-clock throttle lives in Chain::compact so every caller shares it.
 		let mut rng = thread_rng();
-		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
-			let chain = self.chain();
-			let _ = thread::Builder::new()
-				.name("compactor".to_string())
-				.spawn(move || {
-					if let Err(e) = chain.compact() {
-						error!("Could not compact chain: {:?}", e);
-					}
-				});
+		if 0 != rng.gen_range(0, global::COMPACTION_CHECK) {
+			return;
 		}
+		let chain = self.chain();
+		let _ = thread::Builder::new()
+			.name("compactor".to_string())
+			.spawn(move || {
+				if let Err(e) = chain.compact() {
+					error!("Could not compact chain: {:?}", e);
+				}
+			});
 	}
 
 	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {

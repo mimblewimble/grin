@@ -102,6 +102,15 @@ pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 /// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
+/// Minimum wall-clock interval between compaction runs (seconds).
+///
+/// `COMPACTION_CHECK` assumes ~1 block/minute. During fast sync many blocks
+/// arrive per second, so the probabilistic check alone would compact too often.
+/// Enforced in `Chain::compact` so every trigger path shares the same policy.
+/// Process-local (cleared on restart); the height threshold in `compact()`
+/// still limits compacting across frequent restarts.
+pub const MIN_COMPACTION_INTERVAL_SECS: u64 = 60 * 60;
+
 /// Number of blocks to reuse a txhashset zip for (automated testing and user testing).
 pub const TESTING_TXHASHSET_ARCHIVE_INTERVAL: u64 = 10;
 
