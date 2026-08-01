@@ -22,9 +22,12 @@ use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
 use crate::rest::*;
-use crate::types::Status;
+use crate::types::{MiningStatus, Status};
 use std::net::SocketAddr;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
+
+/// Callback that returns a snapshot of stratum mining stats for the Owner API.
+pub type MiningStatsProvider = Arc<dyn Fn() -> MiningStatus + Send + Sync>;
 
 /// Main interface into all node API functions.
 /// Node APIs are split into two separate blocks of functionality
@@ -37,6 +40,8 @@ pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
+	/// Optional provider of live stratum mining stats (set by the server process).
+	pub mining_stats: Option<MiningStatsProvider>,
 }
 
 impl Owner {
@@ -58,6 +63,22 @@ impl Owner {
 			chain,
 			peers,
 			sync_state,
+			mining_stats: None,
+		}
+	}
+
+	/// Create a new Owner API instance with a mining stats provider.
+	pub fn with_mining_stats(
+		chain: Weak<Chain>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+		mining_stats: Option<MiningStatsProvider>,
+	) -> Self {
+		Owner {
+			chain,
+			peers,
+			sync_state,
+			mining_stats,
 		}
 	}
 
@@ -76,6 +97,23 @@ impl Owner {
 			sync_state: self.sync_state.clone(),
 		};
 		status_handler.get_status()
+	}
+
+	/// Returns current stratum mining statistics, mirroring the TUI mining tab.
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`MiningStatus`](types/struct.MiningStatus.html)
+	/// * or [`Error`](struct.Error.html) if no mining stats provider is configured.
+	///
+
+	pub fn get_mining_status(&self) -> Result<MiningStatus, Error> {
+		match &self.mining_stats {
+			Some(provider) => Ok(provider()),
+			None => Err(Error::Internal(
+				"no mining stats provider configured".to_string(),
+			)),
+		}
 	}
 
 	/// Trigger a validation of the chain state.
@@ -199,5 +237,100 @@ impl Owner {
 			peers: self.peers.clone(),
 		};
 		peer_handler.unban_peer(addr)
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::owner_rpc::OwnerRpc;
+	use crate::types::{MiningStatus, WorkerInfo};
+	use easy_jsonrpc_mw::{Handler, MaybeReply};
+	use serde_json::json;
+	use std::sync::Arc;
+
+	fn mining_status_request() -> serde_json::Value {
+		json!({
+			"jsonrpc": "2.0",
+			"method": "get_mining_status",
+			"params": [],
+			"id": 1
+		})
+	}
+
+	#[test]
+	fn get_mining_status_without_provider_returns_error() {
+		let owner = Owner::new(Weak::new(), Weak::new(), Weak::new());
+		assert!(owner.get_mining_status().is_err());
+
+		// Also cover the generated JSON-RPC wire path for the error case.
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+		assert_eq!(reply["id"], 1);
+		assert_eq!(reply["jsonrpc"], "2.0");
+		assert!(
+			reply["result"]["Err"].is_object(),
+			"expected Err result, got {}",
+			reply
+		);
+	}
+
+	#[test]
+	fn get_mining_status_jsonrpc_wire_response() {
+		let expected = MiningStatus {
+			is_enabled: true,
+			is_running: true,
+			num_workers: 2,
+			block_height: 50,
+			network_difficulty: 10,
+			edge_bits: 29,
+			blocks_found: 1,
+			network_hashrate: 0.5,
+			minimum_share_difficulty: 1,
+			worker_stats: vec![WorkerInfo {
+				id: "w0".into(),
+				last_seen: 100,
+				initial_block_height: 40,
+				pow_difficulty: 1,
+				num_accepted: 3,
+				num_rejected: 0,
+				num_stale: 0,
+				num_blocks_found: 0,
+			}],
+		};
+		let expected_clone = expected.clone();
+		let provider: MiningStatsProvider = Arc::new(move || expected_clone.clone());
+		let owner = Owner::with_mining_stats(Weak::new(), Weak::new(), Weak::new(), Some(provider));
+
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+
+		assert_eq!(reply["id"], 1);
+		assert_eq!(reply["jsonrpc"], "2.0");
+		let ok = &reply["result"]["Ok"];
+		assert_eq!(ok["is_enabled"], true);
+		assert_eq!(ok["is_running"], true);
+		assert_eq!(ok["num_workers"], 2);
+		assert_eq!(ok["block_height"], 50);
+		assert_eq!(ok["network_difficulty"], 10);
+		assert_eq!(ok["edge_bits"], 29);
+		assert_eq!(ok["blocks_found"], 1);
+		assert_eq!(ok["network_hashrate"], 0.5);
+		assert_eq!(ok["minimum_share_difficulty"], 1);
+		assert_eq!(ok["worker_stats"][0]["id"], "w0");
+		assert_eq!(ok["worker_stats"][0]["last_seen"], 100);
+		assert_eq!(ok["worker_stats"][0]["num_accepted"], 3);
+		// Field dropped from the public WorkerInfo shape.
+		assert!(ok["worker_stats"][0].get("is_connected").is_none());
+
+		// Round-trip the Ok payload into MiningStatus to lock the wire schema.
+		let status: MiningStatus = serde_json::from_value(ok.clone()).unwrap();
+		assert_eq!(status, expected);
 	}
 }

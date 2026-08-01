@@ -27,7 +27,7 @@ use crate::auth::{
 use crate::chain::{Chain, SyncState};
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
-use crate::owner::Owner;
+use crate::owner::{MiningStatsProvider, Owner};
 use crate::owner_rpc::OwnerRpc;
 use crate::pool;
 use crate::pool::{BlockChain, PoolAdapter};
@@ -67,6 +67,40 @@ where
 	B: BlockChain + 'static,
 	P: PoolAdapter + 'static,
 {
+	node_apis_with_mining_stats(
+		addr,
+		chain,
+		tx_pool,
+		peers,
+		sync_state,
+		api_secret,
+		foreign_api_secret,
+		tls_config,
+		api_chan,
+		stop_state,
+		None,
+	)
+}
+
+/// Same as [`node_apis`] but additionally wires a provider of live stratum
+/// mining stats into the Owner API `get_mining_status` method.
+pub fn node_apis_with_mining_stats<B, P>(
+	addr: &str,
+	chain: Arc<Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<B, P>>>,
+	peers: Arc<p2p::Peers>,
+	sync_state: Arc<SyncState>,
+	api_secret: Option<String>,
+	foreign_api_secret: Option<String>,
+	tls_config: Option<TLSConfig>,
+	api_chan: (mpsc::Sender<()>, mpsc::Receiver<()>),
+	stop_state: Arc<StopState>,
+	mining_stats: Option<MiningStatsProvider>,
+) -> Result<(), Error>
+where
+	B: BlockChain + 'static,
+	P: PoolAdapter + 'static,
+{
 	let mut router = Router::new();
 
 	// Add basic auth to v2 owner API
@@ -85,6 +119,7 @@ where
 		Arc::downgrade(&chain),
 		Arc::downgrade(&peers),
 		Arc::downgrade(&sync_state),
+		mining_stats,
 	);
 	router.add_route("/v2/owner", Arc::new(api_handler))?;
 
@@ -142,25 +177,33 @@ pub struct OwnerAPIHandlerV2 {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
+	pub mining_stats: Option<MiningStatsProvider>,
 }
 
 impl OwnerAPIHandlerV2 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+	pub fn new(
+		chain: Weak<Chain>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+		mining_stats: Option<MiningStatsProvider>,
+	) -> Self {
 		OwnerAPIHandlerV2 {
 			chain,
 			peers,
 			sync_state,
+			mining_stats,
 		}
 	}
 }
 
 impl crate::router::Handler for OwnerAPIHandlerV2 {
 	fn post(&self, req: Request<Incoming>) -> ResponseFuture {
-		let api = Owner::new(
+		let api = Owner::with_mining_stats(
 			self.chain.clone(),
 			self.peers.clone(),
 			self.sync_state.clone(),
+			self.mining_stats.clone(),
 		);
 
 		Box::pin(async move {
