@@ -15,7 +15,7 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use crate::util::{Mutex, RwLock};
+use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
@@ -61,43 +61,6 @@ const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
-/// Wall-clock + probabilistic gate for chain compaction. If the dice hit and
-/// at least `min_interval` has passed since the last recorded trigger (`None`
-/// means never, always allowed), runs `start` and returns its result; the
-/// trigger time is only recorded if `start` reports success.
-///
-/// The lock is held across check+start+stamp so concurrent callers cannot
-/// double-trigger in the same window, and `now` is read under the lock so an
-/// older caller cannot move the timestamp backwards.
-fn try_trigger_compaction<F>(
-	gate: &Mutex<Option<Instant>>,
-	min_interval: std::time::Duration,
-	dice_hit: bool,
-	start: F,
-) -> bool
-where
-	F: FnOnce() -> bool,
-{
-	if !dice_hit {
-		return false;
-	}
-	let mut last = gate.lock();
-	let now = Instant::now();
-	let wall_clock_ok = match *last {
-		None => true,
-		Some(t) => now
-			.checked_duration_since(t)
-			.map(|d| d >= min_interval)
-			.unwrap_or(true),
-	};
-	if wall_clock_ok && start() {
-		*last = Some(now);
-		true
-	} else {
-		false
-	}
-}
-
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -113,9 +76,6 @@ where
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
-	/// Wall-clock time of last successful compaction *trigger* (not completion).
-	/// Used with `MIN_COMPACTION_INTERVAL_SECS` to avoid compact storms during sync.
-	last_compact_trigger: Mutex<Option<Instant>>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -748,7 +708,6 @@ where
 			config,
 			hooks,
 			header_segment_requests: RwLock::new(HashMap::new()),
-			last_compact_trigger: Mutex::new(None),
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -1007,32 +966,20 @@ where
 	}
 
 	fn check_compact(&self) {
-		// Wall-clock throttle + height-based dice. During fast sync blocks arrive much
-		// faster than mainnet's 1/min, so the dice alone is too aggressive.
-		let min_interval = std::time::Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
-		let dice_hit = {
-			let mut rng = thread_rng();
-			0 == rng.gen_range(0, global::COMPACTION_CHECK)
-		};
-
-		try_trigger_compaction(&self.last_compact_trigger, min_interval, dice_hit, || {
-			let chain = self.chain();
-			let syncing = self.sync_state.is_syncing();
-			match thread::Builder::new()
-				.name("compactor".to_string())
-				.spawn(move || {
-					info!("check_compact: starting compaction (syncing={})", syncing);
-					if let Err(e) = chain.compact() {
-						error!("Could not compact chain: {:?}", e);
-					}
-				}) {
-				Ok(_) => true,
-				Err(e) => {
-					error!("Could not spawn compactor thread: {:?}", e);
-					false
+		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block.
+		// Wall-clock throttle lives in Chain::compact so every caller shares it.
+		let mut rng = thread_rng();
+		if 0 != rng.gen_range(0, global::COMPACTION_CHECK) {
+			return;
+		}
+		let chain = self.chain();
+		let _ = thread::Builder::new()
+			.name("compactor".to_string())
+			.spawn(move || {
+				if let Err(e) = chain.compact() {
+					error!("Could not compact chain: {:?}", e);
 				}
-			}
-		});
+			});
 	}
 
 	fn request_transaction(&self, h: Hash, peer_info: &PeerInfo) {
@@ -1353,100 +1300,5 @@ impl pool::BlockChain for PoolToChainAdapter {
 		self.chain()
 			.verify_tx_lock_height(tx)
 			.map_err(|_| pool::PoolError::ImmatureTransaction)
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use std::cell::Cell;
-	use std::time::Duration;
-
-	/// Simulate fast sync through the real gate: many "blocks" with the dice
-	/// always hitting must trigger compaction exactly once per wall-clock window.
-	/// Also covers dice misses and a failed start not consuming the window.
-	#[test]
-	fn compaction_gate_triggers_at_most_once_per_wall_clock_window() {
-		let min = Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
-		let gate: Mutex<Option<Instant>> = Mutex::new(None);
-		let triggers = Cell::new(0u32);
-		let start = || {
-			triggers.set(triggers.get() + 1);
-			true
-		};
-
-		// 50k "blocks" in one wall-clock window (worst-case sync).
-		for _ in 0..50_000 {
-			try_trigger_compaction(&gate, min, true, start);
-		}
-		assert_eq!(
-			triggers.get(),
-			1,
-			"expected exactly one compact trigger in a single wall-clock window"
-		);
-
-		// Dice miss never triggers, even on a fresh gate.
-		assert!(!try_trigger_compaction(
-			&Mutex::new(None),
-			min,
-			false,
-			start
-		));
-		assert_eq!(triggers.get(), 1);
-
-		// A failed start must not consume the window: the next successful
-		// start is still allowed.
-		let gate = Mutex::new(None);
-		assert!(!try_trigger_compaction(&gate, min, true, || false));
-		assert!(try_trigger_compaction(&gate, min, true, start));
-		assert_eq!(triggers.get(), 2);
-
-		// Once the interval has elapsed the gate opens again (zero interval
-		// stands in for elapsed time, since `Instant` cannot be advanced).
-		assert!(try_trigger_compaction(
-			&gate,
-			Duration::from_secs(0),
-			true,
-			start
-		));
-		assert_eq!(triggers.get(), 3);
-	}
-
-	/// Concurrent callers racing on the shared gate must trigger at most once.
-	#[test]
-	fn concurrent_compaction_gate_triggers_at_most_once() {
-		use std::sync::atomic::{AtomicU32, Ordering};
-		use std::sync::Barrier;
-
-		let min = Duration::from_secs(global::MIN_COMPACTION_INTERVAL_SECS);
-		let gate: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
-		let triggers = Arc::new(AtomicU32::new(0));
-		let num_threads = 64;
-		let barrier = Arc::new(Barrier::new(num_threads));
-
-		let handles: Vec<_> = (0..num_threads)
-			.map(|_| {
-				let gate = gate.clone();
-				let triggers = triggers.clone();
-				let barrier = barrier.clone();
-				thread::spawn(move || {
-					barrier.wait();
-					try_trigger_compaction(&gate, min, true, || {
-						triggers.fetch_add(1, Ordering::SeqCst);
-						true
-					});
-				})
-			})
-			.collect();
-
-		for h in handles {
-			h.join().unwrap();
-		}
-
-		assert_eq!(
-			triggers.load(Ordering::SeqCst),
-			1,
-			"concurrent callers sharing the gate must trigger compaction at most once per window"
-		);
 	}
 }

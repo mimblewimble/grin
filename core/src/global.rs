@@ -104,10 +104,11 @@ pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
 /// Minimum wall-clock interval between compaction runs (seconds).
 ///
-/// `COMPACTION_CHECK` is height-based and assumes ~1 block/minute. During fast
-/// sync many blocks arrive per second, so the probabilistic check alone would
-/// compact far too often and slow sync down. Enforcing a wall-clock gap (1 hour)
-/// limits that without changing post-sync average behavior.
+/// `COMPACTION_CHECK` assumes ~1 block/minute. During fast sync many blocks
+/// arrive per second, so the probabilistic check alone would compact too often.
+/// Enforced in `Chain::compact` so every trigger path shares the same policy.
+/// Process-local (cleared on restart); the height threshold in `compact()`
+/// still limits compacting across frequent restarts.
 pub const MIN_COMPACTION_INTERVAL_SECS: u64 = 60 * 60;
 
 /// Number of blocks to reuse a txhashset zip for (automated testing and user testing).
