@@ -24,7 +24,8 @@ chrono = "0.4.11"
 thiserror = "1"
 clap = { version = "2.33", features = ["yaml"] }
 ctrlc = { version = "3.1", features = ["termination"] }
-cursive_table_view = "0.15.0"
+ratatui = { version = "0.29", features = ["unstable-rendered-line-info"] }
+crossterm = "0.28"
 humansize = "1.1.0"
 serde = "1"
 serde_derive = "1"
@@ -41,11 +42,6 @@ grin_p2p = { path = "./p2p", version = "5.5.1-alpha.0" }
 grin_servers = { path = "./servers", version = "5.5.1-alpha.0" }
 grin_util = { path = "./util", version = "5.5.1-alpha.0" }
 grin_store = { path = "./store", version = "5.5.1-alpha.0" }
-
-[dependencies.cursive]
-version = "0.21"
-default-features = false
-features = ["crossterm-backend"]
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"]}

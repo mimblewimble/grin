@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod constants;
+mod app;
 mod logs;
 mod menu;
 mod mining;
 mod peers;
 mod status;
-mod types;
 pub mod ui;
 mod version;

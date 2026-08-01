@@ -14,74 +14,43 @@
 
 //! Main Menu definition
 
-use cursive::align::HAlign;
-use cursive::direction::Orientation;
-use cursive::event::Key;
-use cursive::view::Nameable;
-use cursive::view::View;
-use cursive::views::{
-	LinearLayout, OnEventView, ResizedView, SelectView, StackView, TextView, ViewRef,
-};
-use cursive::Cursive;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Line;
+use ratatui::widgets::{List, ListItem, Paragraph};
+use ratatui::Frame;
 
-use crate::tui::constants::{
-	MAIN_MENU, ROOT_STACK, SUBMENU_MINING_BUTTON, VIEW_BASIC_STATUS, VIEW_LOGS, VIEW_MINING,
-	VIEW_PEER_SYNC, VIEW_VERSION,
-};
+use crate::tui::app::{App, Focus, Tab};
 
-pub fn create() -> impl View {
-	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_name(MAIN_MENU);
-	main_menu
-		.get_mut()
-		.add_item("Basic Status", VIEW_BASIC_STATUS);
-	main_menu
-		.get_mut()
-		.add_item("Peers and Sync", VIEW_PEER_SYNC);
-	main_menu.get_mut().add_item("Mining", VIEW_MINING);
-	main_menu.get_mut().add_item("Logs", VIEW_LOGS);
-	main_menu.get_mut().add_item("Version Info", VIEW_VERSION);
-	let change_view = |s: &mut Cursive, v: &&str| {
-		if *v == "" {
-			return;
-		}
+/// Draw the main menu (tab list) and its keybinding hints
+pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
+	let chunks = Layout::vertical([Constraint::Min(0), Constraint::Length(5)]).split(area);
+	app.menu_area = chunks[0];
 
-		let _ = s.call_on_name(ROOT_STACK, |sv: &mut StackView| {
-			let pos = sv.find_layer_from_name(v).unwrap();
-			sv.move_to_front(pos);
-		});
-	};
-
-	main_menu.get_mut().set_on_select(change_view);
-	main_menu
-		.get_mut()
-		.set_on_submit(|c: &mut Cursive, v: &str| {
-			if v == VIEW_MINING {
-				let _ = c.focus_name(SUBMENU_MINING_BUTTON);
-			}
-		});
-	let main_menu = OnEventView::new(main_menu)
-		.on_pre_event('j', move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
-			s.select_down(1)(c);
-		})
-		.on_pre_event('k', move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
-			s.select_up(1)(c);
-		})
-		.on_pre_event(Key::Tab, move |c| {
-			let mut s: ViewRef<SelectView<&str>> = c.find_name(MAIN_MENU).unwrap();
-			if s.selected_id().unwrap() == s.len() - 1 {
-				s.set_selection(0)(c);
+	let items: Vec<ListItem> = Tab::ALL
+		.iter()
+		.map(|t| {
+			let style = if *t == app.tab {
+				let base = Style::default().add_modifier(Modifier::BOLD);
+				if app.focus == Focus::Menu {
+					base.fg(Color::Cyan)
+				} else {
+					base.fg(Color::Blue)
+				}
 			} else {
-				s.select_down(1)(c);
-			}
-		});
-	let main_menu = LinearLayout::new(Orientation::Vertical)
-		.child(ResizedView::with_full_height(main_menu))
-		.child(TextView::new("------------------"))
-		.child(TextView::new("Tab/Arrow : Cycle "))
-		.child(TextView::new("Enter     : Select"))
-		.child(TextView::new("Esc       : Back  "))
-		.child(TextView::new("Q         : Quit  "));
-	main_menu
+				Style::default()
+			};
+			ListItem::new(t.title()).style(style)
+		})
+		.collect();
+	f.render_widget(List::new(items), chunks[0]);
+
+	let hints = vec![
+		Line::from("------------------"),
+		Line::from("Tab/Arrow : Cycle "),
+		Line::from("Enter     : Select"),
+		Line::from("Esc       : Back  "),
+		Line::from("Q         : Quit  "),
+	];
+	f.render_widget(Paragraph::new(hints), chunks[1]);
 }

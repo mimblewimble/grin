@@ -14,371 +14,216 @@
 
 //! Mining status view definition
 
-use std::cmp::Ordering;
-
 use chrono::prelude::{DateTime, Utc};
-use cursive::direction::Orientation;
-use cursive::event::Key;
-use cursive::traits::{Nameable, Resizable};
-use cursive::view::View;
-use cursive::views::{
-	Button, Dialog, LinearLayout, OnEventView, Panel, ResizedView, StackView, TextView,
-};
-use cursive::Cursive;
 use std::time;
 
-use crate::tui::constants::{
-	MAIN_MENU, SUBMENU_MINING_BUTTON, TABLE_MINING_DIFF_STATUS, TABLE_MINING_STATUS, VIEW_MINING,
-};
-use crate::tui::types::TUIStatusListener;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::Line;
+use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use ratatui::Frame;
 
 use crate::servers::{DiffBlock, ServerStats, WorkerStats};
-use cursive_table_view::{TableView, TableViewItem};
+use crate::tui::app::{App, MiningSubview};
+use ratatui::widgets::TableState;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-enum StratumWorkerColumn {
-	Id,
-	IsConnected,
-	LastSeen,
-	PowDifficulty,
-	NumAccepted,
-	NumRejected,
-	NumStale,
-	NumBlocksFound,
+fn worker_row(w: &WorkerStats) -> Row<'static> {
+	let naive_datetime = DateTime::<Utc>::from_timestamp(
+		w.last_seen
+			.duration_since(time::UNIX_EPOCH)
+			.unwrap()
+			.as_secs() as i64,
+		0,
+	)
+	.unwrap_or_default()
+	.naive_utc();
+	let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
+
+	Row::new(vec![
+		Cell::from(w.id.clone()),
+		Cell::from(w.is_connected.to_string()),
+		Cell::from(datetime.to_string()),
+		Cell::from(w.pow_difficulty.to_string()),
+		Cell::from(w.num_accepted.to_string()),
+		Cell::from(w.num_rejected.to_string()),
+		Cell::from(w.num_stale.to_string()),
+		Cell::from(w.num_blocks_found.to_string()),
+	])
 }
 
-impl StratumWorkerColumn {
-	fn _as_str(&self) -> &str {
-		match *self {
-			StratumWorkerColumn::Id => "ID",
-			StratumWorkerColumn::IsConnected => "Connected",
-			StratumWorkerColumn::LastSeen => "Last Seen",
-			StratumWorkerColumn::PowDifficulty => "PowDifficulty",
-			StratumWorkerColumn::NumAccepted => "Num Accepted",
-			StratumWorkerColumn::NumRejected => "Num Rejected",
-			StratumWorkerColumn::NumStale => "Num Stale",
-			StratumWorkerColumn::NumBlocksFound => "Blocks Found",
-		}
-	}
-}
+const WORKER_HEADERS: [&str; 8] = [
+	"ID",
+	"Connected",
+	"Last Seen",
+	"Difficulty",
+	"Accepted",
+	"Rejected",
+	"Stale",
+	"Blocks Found",
+];
+const WORKER_WIDTHS: [u16; 8] = [6, 14, 20, 10, 5, 5, 5, 35];
 
-impl TableViewItem<StratumWorkerColumn> for WorkerStats {
-	fn to_column(&self, column: StratumWorkerColumn) -> String {
-		let naive_datetime = DateTime::<Utc>::from_timestamp(
-			self.last_seen
-				.duration_since(time::UNIX_EPOCH)
-				.unwrap()
-				.as_secs() as i64,
-			0,
-		)
+fn diff_row(d: &DiffBlock) -> Row<'static> {
+	let naive_datetime = DateTime::<Utc>::from_timestamp(d.time as i64, 0)
 		.unwrap_or_default()
 		.naive_utc();
-		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
+	let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
 
-		match column {
-			StratumWorkerColumn::Id => self.id.clone(),
-			StratumWorkerColumn::IsConnected => self.is_connected.to_string(),
-			StratumWorkerColumn::LastSeen => datetime.to_string(),
-			StratumWorkerColumn::PowDifficulty => self.pow_difficulty.to_string(),
-			StratumWorkerColumn::NumAccepted => self.num_accepted.to_string(),
-			StratumWorkerColumn::NumRejected => self.num_rejected.to_string(),
-			StratumWorkerColumn::NumStale => self.num_stale.to_string(),
-			StratumWorkerColumn::NumBlocksFound => self.num_blocks_found.to_string(),
-		}
-	}
-
-	fn cmp(&self, other: &Self, column: StratumWorkerColumn) -> Ordering
-	where
-		Self: Sized,
-	{
-		match column {
-			StratumWorkerColumn::Id => self.id.cmp(&other.id),
-			StratumWorkerColumn::IsConnected => self.is_connected.cmp(&other.is_connected),
-			StratumWorkerColumn::LastSeen => self.last_seen.cmp(&other.last_seen),
-			StratumWorkerColumn::PowDifficulty => self.pow_difficulty.cmp(&other.pow_difficulty),
-			StratumWorkerColumn::NumAccepted => self.num_accepted.cmp(&other.num_accepted),
-			StratumWorkerColumn::NumRejected => self.num_rejected.cmp(&other.num_rejected),
-			StratumWorkerColumn::NumStale => self.num_stale.cmp(&other.num_stale),
-			StratumWorkerColumn::NumBlocksFound => {
-				self.num_blocks_found.cmp(&other.num_blocks_found)
-			}
-		}
-	}
-}
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-enum DiffColumn {
-	Height,
-	Hash,
-	Difficulty,
-	Time,
-	Duration,
+	Row::new(vec![
+		Cell::from(d.block_height.to_string()),
+		Cell::from(d.block_hash.to_string()),
+		Cell::from(d.difficulty.to_string()),
+		Cell::from(format!("{}", datetime)),
+		Cell::from(format!("{}s", d.duration)),
+	])
 }
 
-impl DiffColumn {
-	fn _as_str(&self) -> &str {
-		match *self {
-			DiffColumn::Height => "Height",
-			DiffColumn::Hash => "Hash",
-			DiffColumn::Difficulty => "Network Difficulty",
-			DiffColumn::Time => "Block Time",
-			DiffColumn::Duration => "Duration",
-		}
+const DIFF_HEADERS: [&str; 5] = [
+	"Height",
+	"Hash",
+	"Network Difficulty",
+	"Block Time",
+	"Duration",
+];
+const DIFF_WIDTHS: [u16; 5] = [15, 15, 15, 30, 25];
+
+/// Draw the mining view
+pub fn draw(f: &mut Frame, area: Rect, app: &mut App) {
+	let App {
+		stats,
+		mining_subview,
+		mining_workers_table,
+		mining_diff_table,
+		..
+	} = app;
+	let stats = stats.as_ref();
+
+	let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(area);
+
+	let submenu = Line::from(vec![
+		ratatui::text::Span::styled(
+			" Mining Server Status ",
+			if *mining_subview == MiningSubview::Workers {
+				Style::default().add_modifier(Modifier::REVERSED)
+			} else {
+				Style::default()
+			},
+		),
+		ratatui::text::Span::raw("  "),
+		ratatui::text::Span::styled(
+			" Difficulty ",
+			if *mining_subview == MiningSubview::Difficulty {
+				Style::default().add_modifier(Modifier::REVERSED)
+			} else {
+				Style::default()
+			},
+		),
+		ratatui::text::Span::raw("   (w: workers, d: difficulty)"),
+	]);
+	f.render_widget(Paragraph::new(submenu), chunks[0]);
+
+	match mining_subview {
+		MiningSubview::Workers => draw_workers(f, chunks[1], stats, mining_workers_table),
+		MiningSubview::Difficulty => draw_difficulty(f, chunks[1], stats, mining_diff_table),
 	}
 }
 
-impl TableViewItem<DiffColumn> for DiffBlock {
-	fn to_column(&self, column: DiffColumn) -> String {
-		let naive_datetime = DateTime::<Utc>::from_timestamp(self.time as i64, 0)
-			.unwrap_or_default()
-			.naive_utc();
-		let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive_datetime, Utc);
+fn draw_workers(f: &mut Frame, area: Rect, stats: Option<&ServerStats>, state: &mut TableState) {
+	let chunks = Layout::vertical([Constraint::Length(7), Constraint::Min(0)]).split(area);
 
-		match column {
-			DiffColumn::Height => self.block_height.to_string(),
-			DiffColumn::Hash => self.block_hash.to_string(),
-			DiffColumn::Difficulty => self.difficulty.to_string(),
-			DiffColumn::Time => format!("{}", datetime),
-			DiffColumn::Duration => format!("{}s", self.duration),
-		}
-	}
-
-	fn cmp(&self, other: &Self, column: DiffColumn) -> Ordering
-	where
-		Self: Sized,
-	{
-		match column {
-			DiffColumn::Height => self.block_height.cmp(&other.block_height),
-			DiffColumn::Hash => self.block_hash.cmp(&other.block_hash),
-			DiffColumn::Difficulty => self.difficulty.cmp(&other.difficulty),
-			DiffColumn::Time => self.time.cmp(&other.time),
-			DiffColumn::Duration => self.duration.cmp(&other.duration),
-		}
-	}
-}
-/// Mining status view
-pub struct TUIMiningView;
-
-impl TUIMiningView {
-	/// Create the mining view
-	pub fn create() -> impl View {
-		let devices_button = Button::new_raw("Mining Server Status", |s| {
-			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
-				let pos = sv.find_layer_from_name("mining_device_view").unwrap();
-				sv.move_to_front(pos);
-			});
-		})
-		.with_name(SUBMENU_MINING_BUTTON);
-		let difficulty_button = Button::new_raw("Difficulty", |s| {
-			let _ = s.call_on_name("mining_stack_view", |sv: &mut StackView| {
-				let pos = sv.find_layer_from_name("mining_difficulty_view").unwrap();
-				sv.move_to_front(pos);
-			});
-		});
-		let mining_submenu = LinearLayout::new(Orientation::Horizontal)
-			.child(Panel::new(devices_button))
-			.child(Panel::new(difficulty_button));
-
-		let mut table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
-			.column(StratumWorkerColumn::Id, "ID", |c| c.width_percent(6))
-			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
-				c.width_percent(14)
-			})
-			.column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
-				c.width_percent(20)
-			})
-			.column(StratumWorkerColumn::PowDifficulty, "Difficulty", |c| {
-				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::NumAccepted, "Accepted", |c| {
-				c.width_percent(5)
-			})
-			.column(StratumWorkerColumn::NumRejected, "Rejected", |c| {
-				c.width_percent(5)
-			})
-			.column(StratumWorkerColumn::NumStale, "Stale", |c| {
-				c.width_percent(5)
-			})
-			.column(StratumWorkerColumn::NumBlocksFound, "Blocks Found", |c| {
-				c.width_percent(35)
-			})
-			.default_column(StratumWorkerColumn::IsConnected);
-		table_view.sort_by(StratumWorkerColumn::IsConnected, Ordering::Greater);
-
-		let status_view = LinearLayout::new(Orientation::Vertical)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_config_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_is_running_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_num_workers_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_block_height_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_blocks_found_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_network_difficulty_status")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_name("stratum_network_hashrate")),
-			);
-
-		let mining_device_view = LinearLayout::new(Orientation::Vertical)
-			.child(status_view)
-			.child(ResizedView::with_full_screen(
-				Dialog::around(table_view.with_name(TABLE_MINING_STATUS).min_size((50, 20)))
-					.title("Mining Workers"),
-			))
-			.with_name("mining_device_view");
-
-		let diff_status_view = LinearLayout::new(Orientation::Vertical)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("Tip Height: "))
-					.child(TextView::new("").with_name("diff_cur_height")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("Difficulty Adjustment Window: "))
-					.child(TextView::new("").with_name("diff_adjust_window")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("Average Block Time: "))
-					.child(TextView::new("").with_name("diff_avg_block_time")),
-			)
-			.child(
-				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("Average Difficulty: "))
-					.child(TextView::new("").with_name("diff_avg_difficulty")),
-			);
-
-		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
-			.column(DiffColumn::Height, "Height", |c| c.width_percent(15))
-			.column(DiffColumn::Hash, "Hash", |c| c.width_percent(15))
-			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
-				c.width_percent(15)
-			})
-			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(30))
-			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25))
-			.default_column(DiffColumn::Height);
-
-		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
-			.child(diff_status_view)
-			.child(ResizedView::with_full_screen(
-				Dialog::around(
-					diff_table_view
-						.with_name(TABLE_MINING_DIFF_STATUS)
-						.min_size((50, 20)),
+	let lines = match stats {
+		Some(stats) => {
+			let s = &stats.stratum_stats;
+			let block_height = if s.num_workers == 0 {
+				"Solving Block Height:  n/a".to_string()
+			} else {
+				format!("Solving Block Height:  {}", s.block_height)
+			};
+			let network_difficulty = if s.num_workers == 0 {
+				"Network Difficulty:    n/a".to_string()
+			} else {
+				format!("Network Difficulty:    {}", s.network_difficulty)
+			};
+			let network_hashrate = if s.num_workers == 0 {
+				"Network Hashrate:      n/a".to_string()
+			} else {
+				format!(
+					"Network Hashrate C{}:  {:.2}",
+					s.edge_bits, s.network_hashrate
 				)
-				.title("Mining Difficulty Data"),
-			))
-			.with_name("mining_difficulty_view");
+			};
+			vec![
+				Line::from(format!("Mining server enabled: {}", s.is_enabled)),
+				Line::from(format!("Mining server running: {}", s.is_running)),
+				Line::from(format!("Active workers:        {}", s.num_workers)),
+				Line::from(block_height),
+				Line::from(format!("Blocks Found:          {}", s.blocks_found)),
+				Line::from(network_difficulty),
+				Line::from(network_hashrate),
+			]
+		}
+		None => (0..7).map(|_| Line::from("")).collect(),
+	};
+	f.render_widget(Paragraph::new(lines), chunks[0]);
 
-		let view_stack = StackView::new()
-			.layer(mining_difficulty_view)
-			.layer(mining_device_view)
-			.with_name("mining_stack_view");
-
-		let mining_view = LinearLayout::new(Orientation::Vertical)
-			.child(mining_submenu)
-			.child(view_stack);
-
-		let mining_view = OnEventView::new(mining_view).on_pre_event(Key::Esc, move |c| {
-			let _ = c.focus_name(MAIN_MENU);
-		});
-
-		mining_view.with_name(VIEW_MINING)
-	}
+	let workers: &[WorkerStats] = stats
+		.map(|s| s.stratum_stats.worker_stats.as_slice())
+		.unwrap_or(&[]);
+	let rows: Vec<Row> = workers.iter().map(worker_row).collect();
+	let widths: Vec<Constraint> = WORKER_WIDTHS
+		.iter()
+		.map(|w| Constraint::Percentage(*w))
+		.collect();
+	let table = Table::new(rows, widths)
+		.header(Row::new(WORKER_HEADERS.to_vec()))
+		.block(
+			Block::default()
+				.borders(Borders::ALL)
+				.title("Mining Workers"),
+		)
+		.row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+	f.render_stateful_widget(table, chunks[1], state);
 }
 
-impl TUIStatusListener for TUIMiningView {
-	/// update
-	fn update(c: &mut Cursive, stats: &ServerStats) {
-		c.call_on_name("diff_cur_height", |t: &mut TextView| {
-			t.set_content(stats.diff_stats.height.to_string());
-		});
-		c.call_on_name("diff_adjust_window", |t: &mut TextView| {
-			t.set_content(stats.diff_stats.window_size.to_string());
-		});
-		let dur = time::Duration::from_secs(stats.diff_stats.average_block_time);
-		c.call_on_name("diff_avg_block_time", |t: &mut TextView| {
-			t.set_content(format!("{} Secs", dur.as_secs()));
-		});
-		c.call_on_name("diff_avg_difficulty", |t: &mut TextView| {
-			t.set_content(stats.diff_stats.average_difficulty.to_string());
-		});
+fn draw_difficulty(f: &mut Frame, area: Rect, stats: Option<&ServerStats>, state: &mut TableState) {
+	let chunks = Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).split(area);
 
-		let mut diff_stats = stats.diff_stats.last_blocks.clone();
-		diff_stats.reverse();
-		let _ = c.call_on_name(
-			TABLE_MINING_DIFF_STATUS,
-			|t: &mut TableView<DiffBlock, DiffColumn>| {
-				t.set_items(diff_stats);
-			},
-		);
-		let stratum_stats = stats.stratum_stats.clone();
-		let worker_stats = stratum_stats.worker_stats;
-		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);
-		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
-		let stratum_num_workers = format!("Active workers:        {}", stratum_stats.num_workers);
-		let stratum_blocks_found = format!("Blocks Found:          {}", stratum_stats.blocks_found);
-		let stratum_block_height = match stratum_stats.num_workers {
-			0 => "Solving Block Height:  n/a".to_string(),
-			_ => format!("Solving Block Height:  {}", stratum_stats.block_height),
-		};
-		let stratum_network_difficulty = match stratum_stats.num_workers {
-			0 => "Network Difficulty:    n/a".to_string(),
-			_ => format!(
-				"Network Difficulty:    {}",
-				stratum_stats.network_difficulty
-			),
-		};
-		let stratum_network_hashrate = match stratum_stats.num_workers {
-			0 => "Network Hashrate:      n/a".to_string(),
-			_ => format!(
-				"Network Hashrate C{}:  {:.*}",
-				stratum_stats.edge_bits, 2, stratum_stats.network_hashrate
-			),
-		};
+	let lines = match stats {
+		Some(stats) => {
+			let d = &stats.diff_stats;
+			let dur = time::Duration::from_secs(d.average_block_time);
+			vec![
+				Line::from(format!("Tip Height: {}", d.height)),
+				Line::from(format!("Difficulty Adjustment Window: {}", d.window_size)),
+				Line::from(format!("Average Block Time: {} Secs", dur.as_secs())),
+				Line::from(format!("Average Difficulty: {}", d.average_difficulty)),
+			]
+		}
+		None => vec![
+			Line::from(""),
+			Line::from(""),
+			Line::from(""),
+			Line::from(""),
+		],
+	};
+	f.render_widget(Paragraph::new(lines), chunks[0]);
 
-		c.call_on_name("stratum_config_status", |t: &mut TextView| {
-			t.set_content(stratum_enabled);
-		});
-		c.call_on_name("stratum_is_running_status", |t: &mut TextView| {
-			t.set_content(stratum_is_running);
-		});
-		c.call_on_name("stratum_num_workers_status", |t: &mut TextView| {
-			t.set_content(stratum_num_workers);
-		});
-		c.call_on_name("stratum_blocks_found_status", |t: &mut TextView| {
-			t.set_content(stratum_blocks_found);
-		});
-		c.call_on_name("stratum_block_height_status", |t: &mut TextView| {
-			t.set_content(stratum_block_height);
-		});
-		c.call_on_name("stratum_network_difficulty_status", |t: &mut TextView| {
-			t.set_content(stratum_network_difficulty);
-		});
-		c.call_on_name("stratum_network_hashrate", |t: &mut TextView| {
-			t.set_content(stratum_network_hashrate);
-		});
-		let _ = c.call_on_name(
-			TABLE_MINING_STATUS,
-			|t: &mut TableView<WorkerStats, StratumWorkerColumn>| {
-				t.set_items_stable(worker_stats);
-			},
-		);
-	}
+	let diff_blocks: &[DiffBlock] = stats
+		.map(|s| s.diff_stats.last_blocks.as_slice())
+		.unwrap_or(&[]);
+	// Newest block first, matching the previous view's reversed ordering
+	let rows: Vec<Row> = diff_blocks.iter().rev().map(diff_row).collect();
+	let widths: Vec<Constraint> = DIFF_WIDTHS
+		.iter()
+		.map(|w| Constraint::Percentage(*w))
+		.collect();
+	let table = Table::new(rows, widths)
+		.header(Row::new(DIFF_HEADERS.to_vec()))
+		.block(
+			Block::default()
+				.borders(Borders::ALL)
+				.title("Mining Difficulty Data"),
+		)
+		.row_highlight_style(Style::default().add_modifier(Modifier::REVERSED));
+	f.render_stateful_widget(table, chunks[1], state);
 }
