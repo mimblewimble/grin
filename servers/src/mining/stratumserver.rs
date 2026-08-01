@@ -878,11 +878,23 @@ impl StratumServer {
 		let handler = Arc::new(Handler::from_stratum(&self));
 		let h = handler.clone();
 
+		// Wait until the node has finished syncing before accepting miner connections
+		// (#3546). Previously we listened early and returned confusing "syncing" /
+		// failed job responses while the chain was still catching up.
+		info!(
+			"(Server ID: {}) Stratum waiting for node sync before listening on {}",
+			self.id,
+			self.config.stratum_server_addr.clone().unwrap()
+		);
+		while self.sync_state.is_syncing() {
+			thread::sleep(Duration::from_millis(50));
+		}
+
 		let _listener_th = thread::spawn(move || {
 			accept_connections(listen_addr, h);
 		});
 
-		// We have started
+		// We have started (only after sync so is_running matches actual readiness).
 		{
 			let mut stratum_stats = self.stratum_stats.write();
 			stratum_stats.is_running = true;
@@ -894,11 +906,6 @@ impl StratumServer {
 			"Stratum server started on {}",
 			self.config.stratum_server_addr.clone().unwrap()
 		);
-
-		// Initial Loop. Waiting node complete syncing
-		while self.sync_state.is_syncing() {
-			thread::sleep(Duration::from_millis(50));
-		}
 
 		handler.run(&self.config, &self.tx_pool);
 	} // fn run_loop()
