@@ -238,12 +238,6 @@ pub fn draw(f: &mut Frame, area: Rect, app: &App) {
 				lines.push(line("Transaction Pool Size:", "0 (0)"));
 				lines.push(line("Stem Pool Size:", "0 (0)"));
 			}
-			lines.push(Line::from(SEPARATOR));
-			// These three lines are reserved for mining config/status/network info,
-			// matching the original view - never actually populated upstream.
-			lines.push(Line::from(""));
-			lines.push(Line::from(""));
-			lines.push(Line::from(""));
 		}
 	}
 

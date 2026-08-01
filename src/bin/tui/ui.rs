@@ -18,7 +18,6 @@
 use crate::built_info;
 use crate::servers::Server;
 use crate::tui::app::{App, Dialog, DialogKind, Focus, MiningSubview, Tab};
-use crate::tui::types::UIMessage;
 use crate::tui::{logs, menu, mining, peers, status, version};
 use chrono::prelude::Utc;
 use crossterm::event::{
@@ -44,30 +43,54 @@ use std::time::{Duration, Instant};
 type Backend = CrosstermBackend<Stdout>;
 
 /// Redraw at least this often even without input or new data, so
-/// time-based fields (peer "last seen" ages, etc.) stay fresh.
-const MAX_REDRAW_INTERVAL: Duration = Duration::from_millis(250);
+/// time-based fields (peer "last seen" ages, uptime, etc.) stay fresh.
+/// Matches the 1s stats-update cadence of those fields.
+const MAX_REDRAW_INTERVAL: Duration = Duration::from_secs(1);
 
 /// How far PageUp/PageDown move a table selection
 const TABLE_PAGE_SIZE: i64 = 10;
 
+/// Undo raw mode / alternate screen / mouse capture set up in `UI::new`.
+/// Shared by the panic hook, `stop()`, and `Drop` so the sequence cannot drift.
+fn restore_terminal() {
+	let _ = disable_raw_mode();
+	let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+}
+
 fn install_panic_hook() {
 	let original_hook = std::panic::take_hook();
 	std::panic::set_hook(Box::new(move |panic_info| {
-		let _ = disable_raw_mode();
-		let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture);
+		restore_terminal();
 		original_hook(panic_info);
 	}));
+}
+
+/// Compute the next table selection given the current selection, row count,
+/// and a signed delta (or `i64::MIN`/`i64::MAX` for Home/End).
+///
+/// `TableState` starts with no selection; the first move anchors to row 0
+/// (or the last row for End) rather than jumping past it.
+fn next_table_selection(selected: Option<usize>, len: usize, delta: i64) -> Option<usize> {
+	if len == 0 {
+		return None;
+	}
+	let next = match selected {
+		None if delta == i64::MAX => len - 1,
+		None => 0,
+		Some(i) => (i as i64).saturating_add(delta).clamp(0, len as i64 - 1) as usize,
+	};
+	Some(next)
 }
 
 pub struct UI {
 	terminal: Terminal<Backend>,
 	app: App,
-	ui_rx: mpsc::Receiver<UIMessage>,
-	ui_tx: mpsc::Sender<UIMessage>,
 	controller_tx: mpsc::Sender<ControllerMessage>,
 	logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	needs_redraw: bool,
 	last_draw: Instant,
+	/// Ensures terminal restore runs only once across `stop()` and `Drop`.
+	restored: bool,
 }
 
 impl UI {
@@ -76,8 +99,6 @@ impl UI {
 		controller_tx: mpsc::Sender<ControllerMessage>,
 		logs_rx: Option<mpsc::Receiver<LogEntry>>,
 	) -> io::Result<UI> {
-		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
-
 		install_panic_hook();
 		enable_raw_mode()?;
 		let mut stdout = io::stdout();
@@ -87,23 +108,35 @@ impl UI {
 		Ok(UI {
 			terminal,
 			app: App::new(),
-			ui_tx,
-			ui_rx,
 			controller_tx,
 			logs_rx,
 			needs_redraw: true,
 			last_draw: Instant::now(),
+			restored: false,
 		})
 	}
 
 	fn handle_key(&mut self, code: KeyCode) {
+		// Dialogs are modal: only allow quit (and for errors, dismiss-to-exit).
+		// Startup info dialogs must not let Tab/j/Enter change the view behind them.
 		if let Some(dialog) = &self.app.dialog {
-			if dialog.kind == DialogKind::Error {
-				if matches!(code, KeyCode::Enter | KeyCode::Char('q') | KeyCode::Esc) {
-					self.app.should_quit = true;
+			match dialog.kind {
+				DialogKind::Error => {
+					if matches!(code, KeyCode::Enter | KeyCode::Char('q') | KeyCode::Esc) {
+						self.app.should_quit = true;
+					}
 				}
-				return;
+				DialogKind::Info => {
+					if code == KeyCode::Char('q') {
+						self.app.dialog = Some(Dialog {
+							text: "Shutting down...".to_string(),
+							kind: DialogKind::Info,
+						});
+						let _ = self.controller_tx.send(ControllerMessage::Shutdown);
+					}
+				}
 			}
+			return;
 		}
 
 		match code {
@@ -162,13 +195,7 @@ impl UI {
 			_ => None,
 		};
 		if let Some(state) = state {
-			if len == 0 {
-				state.select(None);
-				return;
-			}
-			let current = state.selected().unwrap_or(0) as i64;
-			let next = current.saturating_add(delta).clamp(0, len as i64 - 1);
-			state.select(Some(next as usize));
+			state.select(next_table_selection(state.selected(), len, delta));
 		}
 	}
 
@@ -195,9 +222,11 @@ impl UI {
 
 	/// Step the UI: drain pending messages, handle one input event (if any),
 	/// then redraw if anything changed (or the periodic refresh is due).
-	pub fn step(&mut self) -> bool {
+	///
+	/// Returns `Ok(false)` when the UI should exit, `Err` on terminal I/O failure.
+	pub fn step(&mut self) -> io::Result<bool> {
 		if self.app.should_quit {
-			return false;
+			return Ok(false);
 		}
 
 		if let Some(logs_rx) = &self.logs_rx {
@@ -207,60 +236,51 @@ impl UI {
 			}
 		}
 
-		while let Some(message) = self.ui_rx.try_iter().next() {
-			match message {
-				UIMessage::UpdateStatus(update) => self.app.stats = Some(update),
-			}
-			self.needs_redraw = true;
-		}
-
-		if event::poll(Duration::from_millis(50)).unwrap_or(false) {
-			match event::read() {
-				Ok(Event::Key(key)) => {
+		if event::poll(Duration::from_millis(50))? {
+			match event::read()? {
+				Event::Key(key) => {
 					if key.kind == KeyEventKind::Press {
 						self.handle_key(key.code);
 						self.needs_redraw = true;
 					}
 				}
-				Ok(Event::Mouse(mouse)) => {
+				Event::Mouse(mouse) => {
 					self.handle_mouse(mouse.kind, mouse.column, mouse.row);
 					self.needs_redraw = true;
 				}
-				Ok(Event::Resize(_, _)) => self.needs_redraw = true,
+				Event::Resize(_, _) => self.needs_redraw = true,
 				_ => {}
 			}
 		}
 
 		if self.needs_redraw || self.last_draw.elapsed() >= MAX_REDRAW_INTERVAL {
 			let app = &mut self.app;
-			let _ = self.terminal.draw(|f| draw(f, app));
+			self.terminal.draw(|f| draw(f, app))?;
 			self.needs_redraw = false;
 			self.last_draw = Instant::now();
 		}
-		true
+		Ok(true)
 	}
 
 	/// Stop the UI and restore the terminal
 	pub fn stop(&mut self) {
 		self.app.should_quit = true;
-		let _ = disable_raw_mode();
-		let _ = execute!(
-			self.terminal.backend_mut(),
-			LeaveAlternateScreen,
-			DisableMouseCapture
-		);
+		self.restore();
+	}
+
+	fn restore(&mut self) {
+		if self.restored {
+			return;
+		}
+		self.restored = true;
+		restore_terminal();
 		let _ = self.terminal.show_cursor();
 	}
 }
 
 impl Drop for UI {
 	fn drop(&mut self) {
-		let _ = disable_raw_mode();
-		let _ = execute!(
-			self.terminal.backend_mut(),
-			LeaveAlternateScreen,
-			DisableMouseCapture
-		);
+		self.restore();
 	}
 }
 
@@ -395,13 +415,6 @@ impl Controller {
 		}
 	}
 
-	/// Server UI after initialization.
-	pub fn server(&mut self, server: &Server) {
-		if let Ok(stats) = server.get_server_stats() {
-			let _ = self.ui.ui_tx.send(UIMessage::UpdateStatus(stats));
-		}
-	}
-
 	/// Run the controller
 	pub fn run(&mut self) -> i32 {
 		self.init_status("Starting server...", false);
@@ -409,7 +422,17 @@ impl Controller {
 		let stat_update_interval = 1;
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		let mut exit_code = 0;
-		while self.ui.step() {
+		loop {
+			match self.ui.step() {
+				Ok(true) => {}
+				Ok(false) => break,
+				Err(e) => {
+					error!("TUI terminal error: {}", e);
+					exit_code = 1;
+					break;
+				}
+			}
+
 			if let Some(message) = self.rx.try_iter().next() {
 				return match message {
 					ControllerMessage::Shutdown => {
@@ -443,14 +466,46 @@ impl Controller {
 
 			if Utc::now().timestamp() > next_stat_update {
 				next_stat_update = Utc::now().timestamp() + stat_update_interval;
+				// Same controller thread owns App; update stats directly (no UI channel).
 				if let Some(server) = &self.server {
 					if let Ok(stats) = server.get_server_stats() {
-						let _ = self.ui.ui_tx.send(UIMessage::UpdateStatus(stats));
+						self.ui.app.stats = Some(stats);
+						self.ui.needs_redraw = true;
 					}
 				}
 			}
 		}
 		self.stop_server();
 		exit_code
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::next_table_selection;
+
+	#[test]
+	fn first_table_move_anchors_to_row_zero() {
+		assert_eq!(next_table_selection(None, 5, 1), Some(0));
+		assert_eq!(next_table_selection(None, 5, -1), Some(0));
+		assert_eq!(next_table_selection(None, 5, 10), Some(0));
+		assert_eq!(next_table_selection(None, 5, i64::MIN), Some(0));
+		assert_eq!(next_table_selection(None, 5, i64::MAX), Some(4));
+	}
+
+	#[test]
+	fn empty_table_clears_selection() {
+		assert_eq!(next_table_selection(None, 0, 1), None);
+		assert_eq!(next_table_selection(Some(2), 0, 1), None);
+	}
+
+	#[test]
+	fn table_selection_clamps_and_moves() {
+		assert_eq!(next_table_selection(Some(0), 5, 1), Some(1));
+		assert_eq!(next_table_selection(Some(4), 5, 1), Some(4));
+		assert_eq!(next_table_selection(Some(0), 5, -1), Some(0));
+		assert_eq!(next_table_selection(Some(2), 5, i64::MAX), Some(4));
+		assert_eq!(next_table_selection(Some(2), 5, i64::MIN), Some(0));
+		assert_eq!(next_table_selection(Some(0), 5, 10), Some(4));
 	}
 }

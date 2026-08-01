@@ -13,12 +13,10 @@
 // limitations under the License.
 
 mod app;
-mod constants;
 mod logs;
 mod menu;
 mod mining;
 mod peers;
 mod status;
-mod types;
 pub mod ui;
 mod version;

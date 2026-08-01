@@ -24,7 +24,7 @@ chrono = "0.4.11"
 thiserror = "1"
 clap = { version = "2.33", features = ["yaml"] }
 ctrlc = { version = "3.1", features = ["termination"] }
-ratatui = "0.29"
+ratatui = { version = "0.29", features = ["unstable-rendered-line-info"] }
 crossterm = "0.28"
 humansize = "1.1.0"
 serde = "1"
