@@ -1441,6 +1441,22 @@ impl<'a> Extension<'a> {
 								.rewind(0, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
 						}
+						// A pruned-subtree hash must cover a region that is
+						// entirely absent locally. If any position under
+						// pos0 was already applied (leftmost < current
+						// size), collapsing here would silently discard
+						// already-applied leaves/hashes and desynchronize
+						// the prune list from the physical hash file -
+						// reject instead of corrupting local state.
+						let leftmost = pmmr::bintree_leftmost(pos0);
+						if leftmost < self.output_pmmr.size {
+							return Err(Error::InvalidSegment(format!(
+								"output segment hash at pos {} would overwrite {} already-applied position(s) starting at {} (sparse/dense segment mismatch)",
+								pos0,
+								self.output_pmmr.size - leftmost,
+								leftmost
+							)));
+						}
 						self.output_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
 							.map_err(&Error::TxHashSetErr)?;
@@ -1484,6 +1500,18 @@ impl<'a> Extension<'a> {
 							self.rproof_pmmr
 								.rewind(0, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
+						}
+						// See apply_output_segment: reject a collapse that
+						// would overwrite already-applied positions instead
+						// of silently corrupting the prune list.
+						let leftmost = pmmr::bintree_leftmost(pos0);
+						if leftmost < self.rproof_pmmr.size {
+							return Err(Error::InvalidSegment(format!(
+								"rangeproof segment hash at pos {} would overwrite {} already-applied position(s) starting at {} (sparse/dense segment mismatch)",
+								pos0,
+								self.rproof_pmmr.size - leftmost,
+								leftmost
+							)));
 						}
 						self.rproof_pmmr
 							.push_pruned_subtree(hashes[idx], pos0)
