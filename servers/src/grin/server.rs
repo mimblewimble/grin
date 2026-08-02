@@ -32,7 +32,8 @@ use crate::api;
 use crate::api::TLSConfig;
 use crate::chain::{self, SyncState, SyncStatus};
 use crate::common::adapters::{
-	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
+	ChainToPoolAndNetAdapter, CompactorTracker, NetToChainAdapter, PoolToChainAdapter,
+	PoolToNetAdapter,
 };
 use crate::common::hooks::{init_chain_hooks, init_net_hooks};
 use crate::common::stats::{
@@ -76,6 +77,8 @@ pub struct Server {
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
+	/// Background chain-compaction thread (joined on stop so replace finishes).
+	compactor: Arc<CompactorTracker>,
 }
 
 impl Server {
@@ -217,6 +220,7 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
+		let compactor = CompactorTracker::new();
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			sync_state.clone(),
 			shared_chain.clone(),
@@ -224,6 +228,7 @@ impl Server {
 			config.clone(),
 			init_net_hooks(&config)?,
 			stop_state.clone(),
+			compactor.clone(),
 		));
 
 		// Initialize our capabilities.
@@ -341,6 +346,7 @@ impl Server {
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
+			compactor,
 		})
 	}
 
@@ -578,6 +584,11 @@ impl Server {
 				Err(e) => error!("failed to join to dandelion_monitor thread: {:?}", e),
 				Ok(_) => info!("dandelion_monitor thread stopped"),
 			}
+
+			// Wait for any in-flight compaction so the replace phase can finish
+			// (or abort cleanly and discard tmp) before we exit.
+			self.compactor.join();
+			info!("compactor thread stopped");
 		}
 		// this call is blocking and makes sure all peers stop, however
 		// we can't be sure that we stopped a listener blocked on accept, so we don't join the p2p thread

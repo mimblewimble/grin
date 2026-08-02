@@ -528,12 +528,12 @@ impl TxHashSet {
 		horizon_header: &BlockHeader,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
-		self.compact_until(horizon_header, batch, || false)
+		self.compact_with_abort(horizon_header, batch, || false)
 	}
 
 	/// Compact MMR data files, honouring an abort callback so shutdown can
-	/// cancel before live files are replaced (see #3842).
-	pub fn compact_until<F>(
+	/// cancel before live files are replaced.
+	pub fn compact_with_abort<F>(
 		&mut self,
 		horizon_header: &BlockHeader,
 		batch: &Batch<'_>,
@@ -554,7 +554,7 @@ impl TxHashSet {
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
-		let output_done = self.output_pmmr_h.backend.check_compact_until(
+		let output_done = self.output_pmmr_h.backend.check_compact_with_abort(
 			horizon_header.output_mmr_size,
 			&rewind_rm_pos,
 			should_abort,
@@ -570,7 +570,7 @@ impl TxHashSet {
 		}
 
 		debug!("txhashset: check_compact rangeproof mmr backend...");
-		let rproof_done = self.rproof_pmmr_h.backend.check_compact_until(
+		let rproof_done = self.rproof_pmmr_h.backend.check_compact_with_abort(
 			horizon_header.output_mmr_size,
 			&rewind_rm_pos,
 			should_abort,

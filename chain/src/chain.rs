@@ -1334,7 +1334,7 @@ impl Chain {
 
 	/// Compact the chain, optionally aborting if `stop_state` is stopped.
 	/// Used on shutdown so long compaction does not keep rewriting files after
-	/// the node was asked to stop (#3842).
+	/// the node was asked to stop.
 	pub fn compact_with_stop(
 		&self,
 		stop_state: Option<Arc<crate::util::StopState>>,
@@ -1381,7 +1381,7 @@ impl Chain {
 			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
-			txhashset.compact_until(&horizon_header, &batch, should_abort)?;
+			txhashset.compact_with_abort(&horizon_header, &batch, should_abort)?;
 		}
 
 		if should_abort() {

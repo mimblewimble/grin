@@ -15,14 +15,14 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use crate::util::{RwLock, StopState};
+use crate::util::{Mutex, RwLock, StopState};
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{mpsc, Arc, Weak};
-use std::thread;
+use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
 use crate::chain::txhashset::BitmapChunk;
@@ -61,6 +61,49 @@ const WORKER_CHANNEL_BUFFER_SIZE: usize = 64;
 const HEADER_SEGMENT_REQUEST_WINDOW_SECS: i64 = 60;
 const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 120;
 
+/// Tracks the background compactor thread so shutdown can join it and let any
+/// in-progress replace phase finish before the process exits.
+#[derive(Default)]
+pub struct CompactorTracker {
+	thread: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl CompactorTracker {
+	/// Create an empty tracker.
+	pub fn new() -> Arc<Self> {
+		Arc::new(Self::default())
+	}
+
+	/// Block until any running (or finished) compactor thread has exited.
+	pub fn join(&self) {
+		if let Some(h) = self.thread.lock().take() {
+			if let Err(e) = h.join() {
+				error!("compactor thread panicked: {:?}", e);
+			}
+		}
+	}
+
+	/// True if no compact is running; reaps a finished handle if present.
+	fn ready(&self) -> bool {
+		let mut slot = self.thread.lock();
+		match slot.take() {
+			None => true,
+			Some(h) if h.is_finished() => {
+				let _ = h.join();
+				true
+			}
+			Some(h) => {
+				*slot = Some(h);
+				false
+			}
+		}
+	}
+
+	fn store(&self, h: JoinHandle<()>) {
+		*self.thread.lock() = Some(h);
+	}
+}
+
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -76,8 +119,10 @@ where
 	config: ServerConfig,
 	hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 	header_segment_requests: RwLock<HashMap<SocketAddr, (DateTime<Utc>, usize)>>,
-	/// Shared shutdown flag so compaction can abort cleanly (#3842).
+	/// Shared shutdown flag so compaction can abort cleanly.
 	stop_state: Arc<StopState>,
+	/// Join handle for the last spawned compactor (joined on server stop).
+	compactor: Arc<CompactorTracker>,
 	tx: mpsc::SyncSender<NetAdapterWorkerMessage>,
 }
 
@@ -701,6 +746,7 @@ where
 		config: ServerConfig,
 		hooks: Vec<Box<dyn NetEvents + Send + Sync>>,
 		stop_state: Arc<StopState>,
+		compactor: Arc<CompactorTracker>,
 	) -> Self {
 		let (tx, rx) = mpsc::sync_channel(WORKER_CHANNEL_BUFFER_SIZE);
 		let adapter = NetToChainAdapter {
@@ -712,6 +758,7 @@ where
 			hooks,
 			header_segment_requests: RwLock::new(HashMap::new()),
 			stop_state,
+			compactor,
 			tx,
 		};
 		adapter.spawn_net_adapter_worker(Arc::downgrade(&chain), rx);
@@ -974,6 +1021,10 @@ where
 		if self.stop_state.is_stopped() {
 			return;
 		}
+		// Only one background compact at a time; reap finished handles.
+		if !self.compactor.ready() {
+			return;
+		}
 
 		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
 		// uses a different thread to avoid blocking the caller thread (likely a peer)
@@ -981,7 +1032,7 @@ where
 		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
 			let chain = self.chain();
 			let stop_state = self.stop_state.clone();
-			let _ = thread::Builder::new()
+			match thread::Builder::new()
 				.name("compactor".to_string())
 				.spawn(move || {
 					if stop_state.is_stopped() {
@@ -991,7 +1042,10 @@ where
 					if let Err(e) = chain.compact_with_stop(Some(stop_state)) {
 						error!("Could not compact chain: {:?}", e);
 					}
-				});
+				}) {
+				Ok(h) => self.compactor.store(h),
+				Err(e) => error!("Could not spawn compactor thread: {:?}", e),
+			}
 		}
 	}
 

@@ -18,7 +18,6 @@ use crate::grin_core::ser::{
 	self, BinWriter, DeserializationMode, ProtocolVersion, Readable, Reader, StreamingReader,
 	Writeable, Writer,
 };
-use log::warn;
 use std::fmt::Debug;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Seek, SeekFrom, Write};
@@ -162,7 +161,7 @@ where
 	}
 
 	/// Discard any temporary pruned file without applying it.
-	pub fn discard_tmp(&self) {
+	pub fn discard_tmp(&self) -> io::Result<()> {
 		self.file.discard_tmp()
 	}
 
@@ -528,13 +527,12 @@ where
 	}
 
 	/// Drop any `.tmp` companion file without replacing the live file.
-	pub fn discard_tmp(&self) {
+	pub fn discard_tmp(&self) -> io::Result<()> {
 		let tmp = self.tmp_path();
 		if tmp.exists() {
-			if let Err(e) = fs::remove_file(&tmp) {
-				warn!("discard_tmp: failed to remove {:?}: {}", tmp, e);
-			}
+			fs::remove_file(&tmp)?;
 		}
+		Ok(())
 	}
 
 	/// Replace the underlying file with the file at tmp path.

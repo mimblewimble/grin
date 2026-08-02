@@ -414,13 +414,17 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// will have a suitable output_pos. This is used to enforce a horizon
 	/// after which the local node should have all the data to allow rewinding.
 	pub fn check_compact(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> io::Result<bool> {
-		self.check_compact_until(cutoff_pos, rewind_rm_pos, || false)
+		self.check_compact_with_abort(cutoff_pos, rewind_rm_pos, || false)
 	}
 
 	/// Compact backend files, optionally aborting before live files are replaced
-	/// when `should_abort` returns true (e.g. node shutdown). Aborted compaction
-	/// discards `.tmp` files and leaves the live PMMR files untouched (#3842).
-	pub fn check_compact_until<F>(
+	/// when `should_abort` returns true (e.g. node shutdown).
+	///
+	/// If aborting after tmp files were written: discard them and leave live
+	/// PMMR files untouched. Once this check decides to proceed, the replace of
+	/// hash then data is not interrupted by further abort polls — callers that
+	/// shut down must join the compacting thread so that section can finish.
+	pub fn check_compact_with_abort<F>(
 		&mut self,
 		cutoff_pos: u64,
 		rewind_rm_pos: &Bitmap,
@@ -467,12 +471,12 @@ impl<T: PMMRable> PMMRBackend<T> {
 			self.data_file.write_tmp_pruned(&pos_to_rm)?;
 		}
 
-		// Critical section: do not replace live files if we are shutting down.
-		// Leaving a half-applied replace causes Invalid Root on next start (#3842).
+		// Decision point: after this, replace always runs to completion (no
+		// further should_abort checks) so hash/data stay consistent.
 		if should_abort() {
 			info!("compact: aborted before replace; discarding tmp files");
-			self.hash_file.discard_tmp();
-			self.data_file.discard_tmp();
+			self.hash_file.discard_tmp()?;
+			self.data_file.discard_tmp()?;
 			return Ok(false);
 		}
 

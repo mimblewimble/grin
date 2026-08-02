@@ -100,19 +100,23 @@ impl ChainResetHandler {
 /// POST /v1/chain/compact
 pub struct ChainCompactHandler {
 	pub chain: Weak<chain::Chain>,
+	/// Optional shutdown flag so API-triggered compact can abort on stop.
+	pub stop_state: Weak<crate::util::StopState>,
 }
 
 impl ChainCompactHandler {
 	pub fn compact_chain(&self) -> Result<(), Error> {
 		let chain = w(&self.chain)?;
-		chain.compact()?;
+		let stop = self.stop_state.upgrade();
+		chain.compact_with_stop(stop)?;
 		Ok(())
 	}
 }
 
 impl Handler for ChainCompactHandler {
 	fn post(&self, _req: Request<Incoming>) -> ResponseFuture {
-		match w_fut!(&self.chain).compact() {
+		let stop = self.stop_state.upgrade();
+		match w_fut!(&self.chain).compact_with_stop(stop) {
 			Ok(_) => response(StatusCode::OK, "{}".into()),
 			Err(e) => response(
 				StatusCode::INTERNAL_SERVER_ERROR,
