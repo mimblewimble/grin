@@ -60,7 +60,7 @@ impl PoWContext for CuckaroodContext {
 		if size != global::proofsize() {
 			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
-		let nonces = &proof.nonces;
+		let nonces = proof.nonces();
 		let mut uvs = vec![0u64; 2 * size];
 		let mut ndir = vec![0usize; 2];
 		let mut xor0: u64 = 0;

@@ -790,7 +790,7 @@ fn output_header_mappings() {
 			} else {
 				global::min_edge_bits()
 			};
-			b.header.pow.proof.edge_bits = edge_bits;
+			b.header.pow.proof.set_edge_bits(edge_bits);
 			pow::pow_size(
 				&mut b.header,
 				next_header_info.difficulty,
@@ -798,7 +798,7 @@ fn output_header_mappings() {
 				edge_bits,
 			)
 			.unwrap();
-			b.header.pow.proof.edge_bits = edge_bits;
+			b.header.pow.proof.set_edge_bits(edge_bits);
 
 			chain.process_block(b, chain::Options::MINE).unwrap();
 

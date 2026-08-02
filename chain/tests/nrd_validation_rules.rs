@@ -65,7 +65,11 @@ where
 
 	chain.set_txhashset_roots(&mut block)?;
 
-	block.header.pow.proof.edge_bits = global::min_edge_bits();
+	block
+		.header
+		.pow
+		.proof
+		.set_edge_bits(global::min_edge_bits());
 	pow::pow_size(
 		&mut block.header,
 		next_header_info.difficulty,

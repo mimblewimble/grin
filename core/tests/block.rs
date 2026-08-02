@@ -416,7 +416,7 @@ fn serialize_deserialize_block_header() {
 fn set_pow(header: &mut BlockHeader) {
 	// Set valid pow on the block as we will test deserialization of this "untrusted" from the network.
 	let edge_bits = global::min_edge_bits();
-	header.pow.proof.edge_bits = edge_bits;
+	header.pow.proof.set_edge_bits(edge_bits);
 	pow::pow_size(
 		header,
 		pow::Difficulty::min_dma(),

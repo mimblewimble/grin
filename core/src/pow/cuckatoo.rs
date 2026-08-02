@@ -86,7 +86,7 @@ impl Graph {
 		let adj_v = self.adj_list[(v ^ 1) as usize];
 		if adj_u != self.nil && adj_v != self.nil {
 			let sol_index = self.solutions.len() - 1;
-			self.solutions[sol_index].nonces[0] = self.links.len() as u64 / 2;
+			self.solutions[sol_index].nonces_mut()[0] = self.links.len() as u64 / 2;
 			self.cycles_with_link(1, u, v)?;
 		}
 		let ulink = self.links.len() as u64;
@@ -131,7 +131,7 @@ impl Graph {
 			self.visited.add((u >> 1) as u32);
 			while au1 != self.nil {
 				let i = self.solutions.len() - 1;
-				self.solutions[i].nonces[len as usize] = au1 / 2;
+				self.solutions[i].nonces_mut()[len as usize] = au1 / 2;
 				let link_index = (au1 ^ 1) as usize;
 				let link = self.links[link_index].to;
 				if link != self.nil {
@@ -239,8 +239,9 @@ impl CuckatooContext {
 		}
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
-			s.nonces = map_vec!(s.nonces, |n| val[*n as usize]);
-			s.nonces.sort_unstable();
+			let mut nonces = map_vec!(s.nonces(), |n| val[*n as usize]);
+			nonces.sort_unstable();
+			s.set_nonces(nonces);
 		}
 		for s in &self.graph.solutions {
 			self.verify_impl(&s)?;
@@ -259,7 +260,7 @@ impl CuckatooContext {
 		if size != global::proofsize() {
 			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
-		let nonces = &proof.nonces;
+		let nonces = proof.nonces();
 		let mut uvs = vec![0u64; 2 * size];
 		let mask = u64::MAX >> (size as u64).leading_zeros(); // round size up to 2-power - 1
 		let mut xor0: u64 = (size as u64 / 2) & 1;
