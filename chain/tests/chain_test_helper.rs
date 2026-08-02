@@ -98,7 +98,7 @@ where
 		chain.set_txhashset_roots(&mut b).unwrap();
 
 		let edge_bits = global::min_edge_bits();
-		b.header.pow.proof.edge_bits = edge_bits;
+		b.header.pow.proof.set_edge_bits(edge_bits);
 		pow::pow_size(
 			&mut b.header,
 			next_header_info.difficulty,

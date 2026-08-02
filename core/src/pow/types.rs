@@ -330,12 +330,19 @@ impl ProofOfWork {
 /// (i+1) * edge_bits - 1, padding it with up to 7 0-bits to a multiple of 8 bits,
 /// writing as a little endian byte array, and hashing with blake2b using 256 bit digest.
 
-#[derive(Clone, PartialOrd, PartialEq, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
-	pub edge_bits: u8,
+	edge_bits: u8,
 	/// The nonces
-	pub nonces: Vec<u64>,
+	nonces: Vec<u64>,
+	/// Packed nonces cached for **hash** serialization only.
+	///
+	/// Filled when the proof is deserialized from on-wire / on-disk packing so
+	/// later `hash()` calls skip re-running bit packing. Full wire/disk writes
+	/// always repack from `edge_bits`/`nonces`. Setters clear this automatically.
+	#[serde(skip)]
+	packed_nonces: Option<Vec<u8>>,
 }
 
 impl DefaultHashable for Proof {}
@@ -353,7 +360,27 @@ impl fmt::Debug for Proof {
 	}
 }
 
+impl PartialEq for Proof {
+	fn eq(&self, other: &Proof) -> bool {
+		self.edge_bits == other.edge_bits && self.nonces == other.nonces
+	}
+}
+
 impl Eq for Proof {}
+
+impl PartialOrd for Proof {
+	fn partial_cmp(&self, other: &Proof) -> Option<std::cmp::Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for Proof {
+	fn cmp(&self, other: &Proof) -> std::cmp::Ordering {
+		self.edge_bits
+			.cmp(&other.edge_bits)
+			.then_with(|| self.nonces.cmp(&other.nonces))
+	}
+}
 
 impl Proof {
 	/// Builds a proof with provided nonces at default edge_bits
@@ -362,6 +389,7 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
+			packed_nonces: None,
 		}
 	}
 
@@ -370,6 +398,7 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: vec![0; proof_size],
+			packed_nonces: None,
 		}
 	}
 
@@ -394,7 +423,36 @@ impl Proof {
 		Proof {
 			edge_bits: global::min_edge_bits(),
 			nonces: v,
+			packed_nonces: None,
 		}
+	}
+
+	/// Power of 2 used for the size of the cuckoo graph
+	pub fn edge_bits(&self) -> u8 {
+		self.edge_bits
+	}
+
+	/// The solution nonces
+	pub fn nonces(&self) -> &[u64] {
+		&self.nonces
+	}
+
+	/// Set edge_bits, invalidating any packed-nonces cache.
+	pub fn set_edge_bits(&mut self, edge_bits: u8) {
+		self.edge_bits = edge_bits;
+		self.packed_nonces = None;
+	}
+
+	/// Replace nonces, invalidating any packed-nonces cache.
+	pub fn set_nonces(&mut self, nonces: Vec<u64>) {
+		self.nonces = nonces;
+		self.packed_nonces = None;
+	}
+
+	/// Mutable access to nonces; clears the packed cache so it cannot go stale.
+	pub fn nonces_mut(&mut self) -> &mut Vec<u64> {
+		self.packed_nonces = None;
+		&mut self.nonces
 	}
 
 	/// Returns the proof size
@@ -402,8 +460,19 @@ impl Proof {
 		self.nonces.len()
 	}
 
-	/// Pack the nonces of the proof to their exact bit size as described above
+	/// Whether this proof currently holds a packed-nonces cache.
+	#[cfg(test)]
+	pub fn has_packed_cache(&self) -> bool {
+		self.packed_nonces.is_some()
+	}
+
+	/// Pack the nonces of the proof to their exact bit size as described above.
+	/// Always packs from fields (same bytes full serialization would emit).
 	pub fn pack_nonces(&self) -> Vec<u8> {
+		self.compute_packed_nonces()
+	}
+
+	fn compute_packed_nonces(&self) -> Vec<u8> {
 		let mut compressed = vec![0u8; Proof::pack_len(self.edge_bits)];
 		pack_bits(
 			self.edge_bits,
@@ -510,11 +579,17 @@ impl Readable for Proof {
 			if read_number(&bits, end_of_data, bytes_len * 8 - end_of_data) != 0 {
 				return Err(ser::Error::CorruptedData);
 			}
-			Ok(Proof { edge_bits, nonces })
+			// Cache the on-wire packed form so later hash()/write() skip re-packing.
+			Ok(Proof {
+				edge_bits,
+				nonces,
+				packed_nonces: Some(bits),
+			})
 		} else {
 			Ok(Proof {
 				edge_bits,
 				nonces: vec![],
+				packed_nonces: None,
 			})
 		}
 	}
@@ -523,9 +598,17 @@ impl Readable for Proof {
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			// Full wire/disk write: always repack from fields so a stale cache
+			// can never be emitted.
 			writer.write_u8(self.edge_bits)?;
+			return writer.write_fixed_bytes(&self.compute_packed_nonces());
 		}
-		writer.write_fixed_bytes(&self.pack_nonces())
+		// Hash mode: use the deserialized packed form when present.
+		if let Some(ref packed) = self.packed_nonces {
+			writer.write_fixed_bytes(packed)
+		} else {
+			writer.write_fixed_bytes(&self.compute_packed_nonces())
+		}
 	}
 }
 
@@ -535,29 +618,112 @@ mod tests {
 	use crate::ser::{BinReader, BinWriter, DeserializationMode, ProtocolVersion};
 	use rand::Rng;
 	use std::io::Cursor;
+	use std::time::Instant;
+
+	fn round_trip(proof: &Proof) -> Proof {
+		let mut buf = Cursor::new(Vec::new());
+		let mut w = BinWriter::new(&mut buf, ProtocolVersion::local());
+		proof.write(&mut w).expect("write proof");
+		buf.set_position(0);
+		let mut r = BinReader::new(
+			&mut buf,
+			ProtocolVersion::local(),
+			DeserializationMode::default(),
+		);
+		Proof::read(&mut r).expect("read proof")
+	}
 
 	#[test]
 	fn test_proof_rw() {
 		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		for edge_bits in 10..63 {
 			let mut proof = Proof::new(gen_proof(edge_bits as u32));
-			proof.edge_bits = edge_bits;
-			let mut buf = Cursor::new(Vec::new());
-			let mut w = BinWriter::new(&mut buf, ProtocolVersion::local());
-			if let Err(e) = proof.write(&mut w) {
-				panic!("failed to write proof {:?}", e);
-			}
-			buf.set_position(0);
-			let mut r = BinReader::new(
-				&mut buf,
-				ProtocolVersion::local(),
-				DeserializationMode::default(),
+			proof.set_edge_bits(edge_bits);
+			let p = round_trip(&proof);
+			assert_eq!(p, proof);
+			assert!(
+				p.has_packed_cache(),
+				"deserialized proof should cache packed nonces"
 			);
-			match Proof::read(&mut r) {
-				Err(e) => panic!("failed to read proof: {:?}", e),
-				Ok(p) => assert_eq!(p, proof),
-			}
 		}
+	}
+
+	#[test]
+	fn packed_cache_from_round_trip_matches_hash() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+		let mut proof = Proof::new(gen_proof(29));
+		proof.set_edge_bits(29);
+		let hash_before = proof.hash();
+		let packed = proof.pack_nonces();
+
+		// Real serialize → deserialize path fills the cache.
+		let cached = round_trip(&proof);
+		assert!(cached.has_packed_cache());
+		assert_eq!(cached.pack_nonces(), packed);
+		assert_eq!(cached.hash(), hash_before);
+
+		// Mutation via setters clears the cache automatically.
+		let mut mutated = cached.clone();
+		let mut nonces = mutated.nonces().to_vec();
+		nonces[0] = nonces[0].wrapping_add(1);
+		mutated.set_nonces(nonces);
+		assert!(!mutated.has_packed_cache());
+		assert_ne!(mutated.hash(), hash_before);
+	}
+
+	#[test]
+	fn full_write_does_not_emit_stale_cache() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+		let mut proof = Proof::new(gen_proof(29));
+		proof.set_edge_bits(29);
+		let mut cached = round_trip(&proof);
+		assert!(cached.has_packed_cache());
+
+		// Corrupt the private cache as if it went stale, then full-write.
+		// Hash mode would use it; full mode must repack from fields.
+		cached.packed_nonces = Some(vec![0u8; Proof::pack_len(29)]);
+		let rewritten = round_trip(&cached);
+		assert_eq!(rewritten, proof);
+		assert_eq!(rewritten.hash(), proof.hash());
+	}
+
+	/// Manual timing: `cargo test -p grin_core packed_cache_hash_bench -- --nocapture --ignored`
+	#[test]
+	#[ignore]
+	fn packed_cache_hash_bench() {
+		global::set_local_chain_type(global::ChainTypes::Mainnet);
+		let mut proof = Proof::new(gen_proof(29));
+		proof.set_edge_bits(29);
+		let iters = 50_000;
+
+		// Uncached: hash path must pack every time.
+		let uncached = proof.clone();
+		assert!(!uncached.has_packed_cache());
+		let t0 = Instant::now();
+		let mut h = uncached.hash();
+		for _ in 1..iters {
+			h = uncached.hash();
+		}
+		let uncached_ns = t0.elapsed().as_nanos() / iters as u128;
+
+		// Cached: after a full read, hash reuses packed bytes.
+		let cached = round_trip(&proof);
+		assert!(cached.has_packed_cache());
+		let t1 = Instant::now();
+		let mut h2 = cached.hash();
+		for _ in 1..iters {
+			h2 = cached.hash();
+		}
+		let cached_ns = t1.elapsed().as_nanos() / iters as u128;
+
+		assert_eq!(h, h2);
+		println!(
+			"proof.hash() x{}: uncached ~{} ns/op, cached ~{} ns/op (ratio {:.2}x)",
+			iters,
+			uncached_ns,
+			cached_ns,
+			uncached_ns as f64 / cached_ns.max(1) as f64
+		);
 	}
 
 	fn gen_proof(bits: u32) -> Vec<u64> {

@@ -385,9 +385,10 @@ impl Handler {
 
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the blocks header with this nonce and pow added
-		b.header.pow.proof.edge_bits = params.edge_bits as u8;
+		b.header.pow.proof.set_edge_bits(params.edge_bits as u8);
 		b.header.pow.nonce = params.nonce;
-		b.header.pow.proof.nonces = params.pow;
+		// set_nonces clears any packed-nonces cache automatically.
+		b.header.pow.proof.set_nonces(params.pow);
 
 		if !b.header.pow.is_primary() && !b.header.pow.is_secondary() {
 			// Return error status
@@ -484,7 +485,7 @@ impl Handler {
 				self.id,
 				b.header.height,
 				b.hash(),
-				b.header.pow.proof.edge_bits,
+				b.header.pow.proof.edge_bits(),
 				b.header.pow.nonce,
 				params.job_id,
 				scaled_share_difficulty,
