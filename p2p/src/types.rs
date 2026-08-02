@@ -399,6 +399,7 @@ impl PeerAddr {
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,

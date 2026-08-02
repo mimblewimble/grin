@@ -212,6 +212,59 @@ pub fn initial_setup_server(chain_type: &global::ChainTypes) -> Result<GlobalCon
 	}
 }
 
+/// Deep-merge TOML tables: keys from `overlay` replace or recursively merge into `base`.
+/// Non-table values always take the overlay. Used so a trimmed config only overrides
+/// keys present in the file while retaining chain-specific defaults for the rest.
+fn merge_toml(base: &mut toml::Value, overlay: toml::Value) {
+	match (base, overlay) {
+		(toml::Value::Table(base_map), toml::Value::Table(overlay_map)) => {
+			for (key, value) in overlay_map {
+				match base_map.get_mut(&key) {
+					Some(base_value) => merge_toml(base_value, value),
+					None => {
+						base_map.insert(key, value);
+					}
+				}
+			}
+		}
+		(base, overlay) => {
+			*base = overlay;
+		}
+	}
+}
+
+/// Parse config TOML using chain-specific defaults for missing keys.
+///
+/// 1. Read `server.chain_type` (default Mainnet) for the defaults base.
+/// 2. Start from `GlobalConfig::for_chain` serialized to a TOML table.
+/// 3. Deep-merge the file contents on top so only present keys override.
+/// 4. Deserialize with `deny_unknown_fields` so typos fail loudly.
+fn parse_config_members(toml_str: &str) -> Result<ConfigMembers, String> {
+	let chain_type = {
+		let prelim: ChainTypeConfig = toml::from_str(toml_str).map_err(|e| e.to_string())?;
+		prelim.server.and_then(|s| s.chain_type).unwrap_or_default()
+	};
+
+	let defaults = GlobalConfig::for_chain(&chain_type)
+		.members
+		.expect("for_chain always sets members");
+	let defaults_toml =
+		toml::to_string(&defaults).map_err(|e| format!("serialize defaults: {}", e))?;
+	let mut base: toml::Value =
+		toml::from_str(&defaults_toml).map_err(|e| format!("defaults as value: {}", e))?;
+	let overlay: toml::Value = toml::from_str(toml_str).map_err(|e| e.to_string())?;
+	merge_toml(&mut base, overlay);
+
+	let mut members: ConfigMembers = base
+		.try_into()
+		.map_err(|e: toml::de::Error| e.to_string())?;
+	// Guarantee logging is present after load (startup unwraps it).
+	if members.logging.is_none() {
+		members.logging = Some(LoggingConfig::default());
+	}
+	Ok(members)
+}
+
 /// Returns the defaults, as strewn throughout the code
 impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
@@ -299,27 +352,19 @@ impl GlobalConfig {
 	/// Read config
 	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
 		let config_file_path = self.config_file_path.as_ref().unwrap();
+		let path_str = config_file_path.to_str().unwrap().to_string();
 		let contents = fs::read_to_string(config_file_path)?;
 		let migrated = GlobalConfig::migrate_config_file_version_none_to_2(contents.clone())
-			.map_err(|e| {
-				ConfigError::ParseError(config_file_path.to_str().unwrap().to_string(), e)
-			})?;
+			.map_err(|e| ConfigError::ParseError(path_str.clone(), e))?;
 		if contents != migrated {
 			fs::write(config_file_path, &migrated)?;
 		}
 
 		let fixed = GlobalConfig::fix_warning_level(migrated);
-		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&fixed);
-		match decoded {
-			Ok(gc) => {
-				self.members = Some(gc);
-				Ok(self)
-			}
-			Err(e) => Err(ConfigError::ParseError(
-				self.config_file_path.unwrap().to_str().unwrap().to_string(),
-				format!("{}", e),
-			)),
-		}
+		let members =
+			parse_config_members(&fixed).map_err(|e| ConfigError::ParseError(path_str, e))?;
+		self.members = Some(members);
+		Ok(self)
 	}
 
 	/// Update paths
@@ -603,8 +648,8 @@ api_http_addr = "127.0.0.1:3413"
 [logging]
 log_to_stdout = false
 "#;
-	let members: ConfigMembers = toml::from_str(toml).expect("minimal config should parse");
-	let logging = members.logging.expect("logging section present");
+	let members = parse_config_members(toml).expect("minimal config should parse");
+	let logging = members.logging.expect("logging always present after load");
 	assert_eq!(logging.log_to_stdout, false);
 	assert_eq!(logging.log_to_file, true); // default
 	assert_eq!(logging.log_file_append, true); // default
@@ -612,7 +657,7 @@ log_to_stdout = false
 	assert_eq!(format!("{:?}", logging.file_log_level), "Info");
 }
 
-/// Entire [logging] section can be omitted.
+/// Entire [logging] section can be omitted (defaults applied; no panic on unwrap).
 #[test]
 fn test_logging_section_optional() {
 	let toml = r#"
@@ -620,8 +665,9 @@ fn test_logging_section_optional() {
 db_root = "chain_data"
 api_http_addr = "127.0.0.1:3413"
 "#;
-	let members: ConfigMembers = toml::from_str(toml).expect("config without logging should parse");
-	assert!(members.logging.is_none());
+	let members = parse_config_members(toml).expect("config without logging should parse");
+	assert!(members.logging.is_some());
+	assert_eq!(members.logging.as_ref().unwrap().log_to_file, true);
 	assert_eq!(members.server.db_root, "chain_data");
 	assert_eq!(members.server.api_http_addr, "127.0.0.1:3413");
 	// Other server fields use defaults
@@ -638,7 +684,7 @@ db_root = "chain_data"
 [server.stratum_mining_config]
 enable_stratum_server = true
 "#;
-	let members: ConfigMembers = toml::from_str(toml).expect("partial stratum config should parse");
+	let members = parse_config_members(toml).expect("partial stratum config should parse");
 	let stratum = members
 		.server
 		.stratum_mining_config
@@ -648,4 +694,42 @@ enable_stratum_server = true
 	assert_eq!(stratum.minimum_share_difficulty, 1);
 	assert_eq!(stratum.wallet_listener_url, "http://127.0.0.1:3415");
 	assert!(!stratum.burn_reward);
+}
+
+/// Missing keys use chain-specific defaults from `for_chain`, not always mainnet.
+#[test]
+fn test_chain_specific_defaults_for_testnet() {
+	let toml = r#"
+[server]
+chain_type = "Testnet"
+db_root = "my_testnet_data"
+"#;
+	let members = parse_config_members(toml).expect("testnet config should parse");
+	assert_eq!(members.server.chain_type, global::ChainTypes::Testnet);
+	assert_eq!(members.server.db_root, "my_testnet_data");
+	// From GlobalConfig::for_chain(Testnet), not mainnet ServerConfig::default()
+	assert_eq!(members.server.api_http_addr, "127.0.0.1:13413");
+	assert_eq!(members.server.p2p_config.port, TESTNET_PEER_PORT);
+	let stratum = members.server.stratum_mining_config.unwrap();
+	assert_eq!(
+		stratum.stratum_server_addr,
+		Some("127.0.0.1:13416".to_owned())
+	);
+	assert_eq!(stratum.wallet_listener_url, "http://127.0.0.1:13415");
+}
+
+/// Typos / unknown keys are rejected rather than silently defaulted.
+#[test]
+fn test_unknown_config_key_rejected() {
+	let toml = r#"
+[server]
+db_root = "chain_data"
+archive_mod = true
+"#;
+	let err = parse_config_members(toml).expect_err("typo should fail");
+	assert!(
+		err.contains("unknown field") || err.contains("archive_mod"),
+		"unexpected error: {}",
+		err
+	);
 }

@@ -63,7 +63,7 @@ pub struct LogEntry {
 ///
 /// Missing keys in `grin-server.toml` fall back to these defaults (see #3002).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct LoggingConfig {
 	/// whether to log to stdout
 	#[serde(default = "default_true")]

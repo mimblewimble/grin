@@ -139,9 +139,10 @@ impl Default for ChainValidationMode {
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 ///
-/// Missing optional keys fall back to [`Default`] (see #3002).
+/// Missing optional keys fall back to chain-aware defaults on load (see #3002).
+/// Unknown keys are rejected so typos are not silently ignored.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
 	#[serde(default = "default_db_root")]
@@ -278,7 +279,7 @@ impl Default for ServerConfig {
 
 /// Stratum (Mining server) configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct StratumServerConfig {
 	/// Run a stratum mining server (the only way to communicate to mine this
 	/// node via grin-miner
@@ -339,6 +340,7 @@ impl Default for StratumServerConfig {
 
 /// Web hooks configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct WebHooksConfig {
 	/// url to POST transaction data when a new transaction arrives from a peer
 	pub tx_received_url: Option<String>,
