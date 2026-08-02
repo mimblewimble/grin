@@ -138,23 +138,33 @@ impl Default for ChainValidationMode {
 
 /// Full server configuration, aggregating configurations required for the
 /// different components.
+///
+/// Missing optional keys fall back to chain-aware defaults on load (see #3002).
+/// Unknown keys are rejected so typos are not silently ignored.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
+	#[serde(default = "default_db_root")]
 	pub db_root: String,
 
 	/// Network address for the Rest API HTTP server.
+	#[serde(default = "default_api_http_addr")]
 	pub api_http_addr: String,
 
 	/// Location of secret for basic auth on Rest API HTTP and V2 Owner API server.
+	#[serde(default = "default_api_secret_path")]
 	pub api_secret_path: Option<String>,
 
 	/// Location of secret for basic auth on v2 Foreign API server.
+	#[serde(default = "default_foreign_api_secret_path")]
 	pub foreign_api_secret_path: Option<String>,
 
 	/// TLS certificate file
+	#[serde(default)]
 	pub tls_certificate_file: Option<String>,
 	/// TLS certificate private key file
+	#[serde(default)]
 	pub tls_certificate_key: Option<String>,
 
 	/// Setup the server for tests, testnet or mainnet
@@ -170,23 +180,29 @@ pub struct ServerConfig {
 	pub chain_validation_mode: ChainValidationMode,
 
 	/// Whether this node is a full archival node or a fast-sync, pruned node
+	#[serde(default = "default_archive_mode")]
 	pub archive_mode: Option<bool>,
 
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
+	#[serde(default = "default_skip_sync_wait")]
 	pub skip_sync_wait: Option<bool>,
 
 	/// Whether to run the TUI
 	/// if enabled, this will disable logging to stdout
+	#[serde(default = "default_run_tui")]
 	pub run_tui: Option<bool>,
 
 	/// Whether to run the test miner (internal, cuckoo 16)
+	#[serde(default = "default_run_test_miner")]
 	pub run_test_miner: Option<bool>,
 
 	/// Test miner wallet URL
+	#[serde(default)]
 	pub test_miner_wallet_url: Option<String>,
 
 	/// Configuration for the peer-to-peer server
+	#[serde(default)]
 	pub p2p_config: p2p::P2PConfig,
 
 	/// Transaction pool configuration
@@ -204,6 +220,31 @@ pub struct ServerConfig {
 	/// Configuration for the webhooks that trigger on certain events
 	#[serde(default)]
 	pub webhook_config: WebHooksConfig,
+}
+
+fn default_db_root() -> String {
+	"grin_chain".to_string()
+}
+fn default_api_http_addr() -> String {
+	"127.0.0.1:3413".to_string()
+}
+fn default_api_secret_path() -> Option<String> {
+	Some(".api_secret".to_string())
+}
+fn default_foreign_api_secret_path() -> Option<String> {
+	Some(".foreign_api_secret".to_string())
+}
+fn default_archive_mode() -> Option<bool> {
+	Some(false)
+}
+fn default_skip_sync_wait() -> Option<bool> {
+	Some(false)
+}
+fn default_run_tui() -> Option<bool> {
+	Some(true)
+}
+fn default_run_test_miner() -> Option<bool> {
+	Some(false)
 }
 
 fn default_future_time_limit() -> u64 {
@@ -238,36 +279,59 @@ impl Default for ServerConfig {
 
 /// Stratum (Mining server) configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct StratumServerConfig {
 	/// Run a stratum mining server (the only way to communicate to mine this
 	/// node via grin-miner
+	#[serde(default = "default_enable_stratum_server")]
 	pub enable_stratum_server: Option<bool>,
 
 	/// If enabled, the address and port to listen on
+	#[serde(default = "default_stratum_server_addr")]
 	pub stratum_server_addr: Option<String>,
 
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
+	#[serde(default = "default_attempt_time_per_block")]
 	pub attempt_time_per_block: u32,
 
 	/// Minimum difficulty for worker shares
+	#[serde(default = "default_minimum_share_difficulty")]
 	pub minimum_share_difficulty: u64,
 
 	/// Base address to the HTTP wallet receiver
+	#[serde(default = "default_wallet_listener_url")]
 	pub wallet_listener_url: String,
 
 	/// Attributes the reward to a random private key instead of contacting the
 	/// wallet receiver. Mostly used for tests.
+	#[serde(default)]
 	pub burn_reward: bool,
+}
+
+fn default_attempt_time_per_block() -> u32 {
+	15
+}
+fn default_minimum_share_difficulty() -> u64 {
+	1
+}
+fn default_wallet_listener_url() -> String {
+	"http://127.0.0.1:3415".to_string()
+}
+fn default_enable_stratum_server() -> Option<bool> {
+	Some(false)
+}
+fn default_stratum_server_addr() -> Option<String> {
+	Some("127.0.0.1:3416".to_string())
 }
 
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
-			wallet_listener_url: "http://127.0.0.1:3415".to_string(),
+			wallet_listener_url: default_wallet_listener_url(),
 			burn_reward: false,
-			attempt_time_per_block: 15,
-			minimum_share_difficulty: 1,
+			attempt_time_per_block: default_attempt_time_per_block(),
+			minimum_share_difficulty: default_minimum_share_difficulty(),
 			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:3416".to_string()),
 		}
@@ -276,6 +340,7 @@ impl Default for StratumServerConfig {
 
 /// Web hooks configuration
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct WebHooksConfig {
 	/// url to POST transaction data when a new transaction arrives from a peer
 	pub tx_received_url: Option<String>,
