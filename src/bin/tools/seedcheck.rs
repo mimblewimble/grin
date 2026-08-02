@@ -215,12 +215,12 @@ fn check_seed_health(
 	let handshake = p2p::handshake::Handshake::new(genesis_hash, config.clone());
 
 	match TcpStream::connect_timeout(&addr.0, Duration::from_secs(5)) {
-		Ok(stream) => {
+		Ok(tcp) => {
 			let self_addr = p2p::PeerAddr::from_ip(config.host);
 			let total_diff = Difficulty::from_num(1);
 
 			let peer = p2p::Peer::connect(
-				stream,
+				p2p::Stream::plain(tcp),
 				capabilities,
 				total_diff,
 				self_addr,

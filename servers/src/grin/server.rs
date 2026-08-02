@@ -231,11 +231,20 @@ impl Server {
 
 		// Initialize our capabilities.
 		// Currently, either "default" or with optional "archive_mode" (block history) support enabled.
-		let capabilities = if let Some(true) = config.archive_mode {
+		// When P2P TLS is enabled, advertise the TLS capability so peers can select us for encrypted links.
+		let mut capabilities = if let Some(true) = config.archive_mode {
 			Capabilities::default() | Capabilities::BLOCK_HIST
 		} else {
 			Capabilities::default()
 		};
+		if config.p2p_config.tls_enabled {
+			capabilities |= Capabilities::TLS;
+		}
+		if config.p2p_config.tls_required && !config.p2p_config.tls_enabled {
+			warn!(
+				"p2p_config.tls_required is set but tls_enabled is false; TLS peer filter is ignored"
+			);
+		}
 		debug!("Capabilities: {:?}", capabilities);
 
 		if let Some(ref server_tx) = server_tx {

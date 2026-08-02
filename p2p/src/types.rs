@@ -460,6 +460,27 @@ pub struct P2PConfig {
 	pub peer_listener_buffer_count: Option<u32>,
 
 	pub dandelion_peer: Option<PeerAddr>,
+
+	/// Encrypt P2P traffic with TLS (privacy against passive observers).
+	/// Both peers must enable TLS to connect. Default: false (plaintext).
+	/// When true, this node advertises the `TLS` capability.
+	#[serde(default)]
+	pub tls_enabled: bool,
+
+	/// When true (and `tls_enabled`), only attempt outbound connections to peers
+	/// known to advertise the `TLS` capability, and request TLS-capable peers
+	/// in peer-list queries. Seeds, preferred, and allow-listed addresses still
+	/// get connection attempts for bootstrap. Default: false.
+	#[serde(default)]
+	pub tls_required: bool,
+
+	/// Path to PEM certificate file for P2P TLS (server side).
+	/// If unset while `tls_enabled`, a self-signed cert is auto-generated
+	/// under the node data directory (`p2p_tls/`).
+	pub tls_certificate_file: Option<String>,
+
+	/// Path to PEM private key for the P2P TLS certificate.
+	pub tls_certificate_key: Option<String>,
 }
 
 /// Default address for peer-to-peer connections.
@@ -480,6 +501,10 @@ impl Default for P2PConfig {
 			peer_min_preferred_outbound_count: None,
 			peer_listener_buffer_count: None,
 			dandelion_peer: None,
+			tls_enabled: false,
+			tls_required: false,
+			tls_certificate_file: None,
+			tls_certificate_key: None,
 		}
 	}
 }
@@ -514,6 +539,34 @@ impl P2PConfig {
 	pub fn peer_listener_buffer_count(&self) -> u32 {
 		self.peer_listener_buffer_count
 			.unwrap_or_else(|| PEER_LISTENER_BUFFER_COUNT)
+	}
+
+	/// Whether outbound peer selection should require the `TLS` capability.
+	/// Only meaningful when TLS transport is enabled.
+	pub fn tls_peers_required(&self) -> bool {
+		self.tls_enabled && self.tls_required
+	}
+
+	/// Capabilities filter used when asking peers for more peer addresses.
+	pub fn peer_list_request_capabilities(&self) -> Capabilities {
+		if self.tls_peers_required() {
+			Capabilities::PEER_LIST | Capabilities::TLS
+		} else {
+			Capabilities::PEER_LIST
+		}
+	}
+
+	/// Whether a peer with the given *known* capabilities is eligible for an
+	/// automatic outbound connection attempt under the current TLS policy.
+	/// When TLS is required, the peer must advertise `Capabilities::TLS`.
+	/// Address-only peers (`State::Unknown` from peer lists) are not filtered
+	/// here — they are still dialed so handshake can discover capabilities.
+	pub fn accepts_outbound_peer_capabilities(&self, caps: Capabilities) -> bool {
+		if self.tls_peers_required() {
+			caps.contains(Capabilities::TLS)
+		} else {
+			true
+		}
 	}
 }
 
@@ -559,6 +612,10 @@ bitflags! {
 		const PIBD_HIST_1 = 0b0100_0000;
 		/// Can provide deterministic historical header segments.
 		const PIHD_HIST = 0b1000_0000;
+		/// Supports TLS-encrypted P2P transport (privacy against passive observers).
+		/// Advertised when `p2p_config.tls_enabled` is true. Not part of default
+		/// capabilities — TLS is opt-in for network compatibility.
+		const TLS = 0b1_0000_0000;
 	}
 }
 

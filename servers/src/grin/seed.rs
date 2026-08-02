@@ -217,25 +217,30 @@ fn monitor_peers(
 	let default_peers = PeerAddrs::default();
 	let enough_outbound = peers.enough_outbound_peers();
 
+	// When tls_required, request PEER_LIST|TLS so returned addresses are TLS-capable when known.
+	let peer_list_caps = config.peer_list_request_capabilities();
+
 	if !enough_outbound {
 		// loop over connected peers that can provide peer lists
-		// ask them for their list of peers
+		// ask them for their list of peers (optionally TLS-capable only)
 		for p in peers
 			.iter()
 			.with_capabilities(p2p::Capabilities::PEER_LIST)
 			.connected()
 		{
 			trace!(
-				"monitor_peers: {}:{} ask {} for more peers",
+				"monitor_peers: {}:{} ask {} for more peers ({:?})",
 				config.host,
 				config.port,
 				p.info.addr,
+				peer_list_caps,
 			);
-			let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
+			let _ = p.send_peer_request(peer_list_caps);
 		}
 	}
 
 	// Attempt to connect to any preferred peers even if all outbound slots are full.
+	// Preferred peers are bootstrap; do not apply the TLS capability filter.
 	let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
 	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 	let connected_peers: Vec<_> = peers.iter().connected().into_iter().collect();
@@ -256,11 +261,13 @@ fn monitor_peers(
 	let max_peer_attempts = 128;
 	let max_attempt_delay = Duration::hours(1).num_seconds();
 	// check maximum 64 random disconnected healthy peers no more often than 1 hour per peer.
+	// When tls_required, only healthy peers already known to advertise TLS.
 	for hp in healthy
 		.iter()
 		.filter(|p| {
 			!peers_deny.matches_addr(&p.addr)
 				&& peers.get_connected_peer(p.addr).is_none()
+				&& config.accepts_outbound_peer_capabilities(p.capabilities)
 				&& (!enough_outbound
 					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
@@ -270,7 +277,8 @@ fn monitor_peers(
 	}
 	let healthy_count = new_peers.len();
 
-	// always check min 32 (max 96, if there are no healthy) random unknown peers received from peer list request.
+	// Always try unknown peers from peer-list responses: capabilities are unknown
+	// until a successful handshake (including TLS support).
 	let req_unk_count = cmp::max(
 		max_peer_attempts / 2 - healthy_count + max_peer_attempts / 4,
 		max_peer_attempts / 4,
@@ -289,6 +297,7 @@ fn monitor_peers(
 		.iter()
 		.filter(|p| {
 			!peers_deny.matches_addr(&p.addr)
+				&& config.accepts_outbound_peer_capabilities(p.capabilities)
 				&& (!enough_outbound
 					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
@@ -299,11 +308,15 @@ fn monitor_peers(
 	let defuncts_count = new_peers.len() - unk_count - healthy_count;
 
 	debug!(
-		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
-		healthy_count, unk_count, defuncts_count
+		"monitor_peers: check {} healthy, {} unknown, {} defuncts (tls_required={})",
+		healthy_count,
+		unk_count,
+		defuncts_count,
+		config.tls_peers_required(),
 	);
 
-	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
+	// If the peer db is stale or mostly defunct, include seeds as recovery candidates
+	// (bootstrap; seeds are tried even when TLS is required).
 	if !enough_outbound {
 		for addr in seed_addrs {
 			if !peers_deny.matches_addr(&addr) && !new_peers.contains(&addr) {
@@ -347,8 +360,13 @@ fn connect_to_seeds_and_peers(
 	}
 
 	// check if we have some peers in db
-	// look for peers that are able to give us other peers (via PEER_LIST capability)
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 128);
+	// look for peers that are able to give us other peers (via PEER_LIST capability),
+	// optionally also requiring the TLS capability when tls_required is set.
+	let peers = peers.find_peers(
+		p2p::State::Healthy,
+		config.peer_list_request_capabilities(),
+		128,
+	);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {
@@ -449,6 +467,7 @@ fn listen_for_addrs(
 
 		let peers_c = peers.clone();
 		let p2p_c = p2p.clone();
+		let peer_list_caps = p2p.config.peer_list_request_capabilities();
 		thread::Builder::new()
 			.name("peer_connect".to_string())
 			.spawn(move || match p2p_c.connect(addr) {
@@ -456,11 +475,10 @@ fn listen_for_addrs(
 					if peers_c.enough_outbound_peers() {
 						return;
 					}
-					// If peer advertizes PEER_LIST then ask it for more peers that support PEER_LIST.
-					// We want to build a local db of possible peers to connect to.
-					// We do not necessarily care (at this point in time) what other capabilities these peers support.
+					// If peer advertizes PEER_LIST then ask it for more peers.
+					// When tls_required, request PEER_LIST|TLS so we learn TLS-capable addresses.
 					if p.info.capabilities.contains(p2p::Capabilities::PEER_LIST) {
-						let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
+						let _ = p.send_peer_request(peer_list_caps);
 					}
 				}
 				Err(_) => {

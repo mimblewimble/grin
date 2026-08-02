@@ -40,7 +40,8 @@ fn open_port() -> u16 {
 // Setup test with AutomatedTesting chain_type;
 fn test_setup() {
 	// Set "global" chain type here as we spawn peer threads for read/write.
-	global::init_global_chain_type(global::ChainTypes::AutomatedTesting);
+	// Use set (override) so multiple tests in this binary can share init.
+	global::set_global_chain_type(global::ChainTypes::AutomatedTesting);
 	util::init_test_logger();
 }
 
@@ -53,6 +54,16 @@ fn p2p_server(
 	peers_allow: Vec<PeerAddr>,
 	peers_deny: Vec<PeerAddr>,
 	port: Option<u16>,
+) -> (SocketAddr, Arc<p2p::Server>) {
+	p2p_server_with_tls(dir, peers_allow, peers_deny, port, false)
+}
+
+fn p2p_server_with_tls(
+	dir: &str,
+	peers_allow: Vec<PeerAddr>,
+	peers_deny: Vec<PeerAddr>,
+	port: Option<u16>,
+	tls_enabled: bool,
 ) -> (SocketAddr, Arc<p2p::Server>) {
 	let p2p_config = p2p::P2PConfig {
 		host: "127.0.0.1".parse().unwrap(),
@@ -67,13 +78,20 @@ fn p2p_server(
 		} else {
 			Some(PeerAddrs { peers: peers_deny })
 		},
+		tls_enabled,
 		..p2p::P2PConfig::default()
+	};
+	// Mirror server.rs: advertise TLS capability when transport encryption is on.
+	let capabilities = if tls_enabled {
+		p2p::Capabilities::TLS
+	} else {
+		p2p::Capabilities::UNKNOWN
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
 		p2p::Server::new(
 			dir,
-			p2p::Capabilities::UNKNOWN,
+			capabilities,
 			p2p_config.clone(),
 			net_adapter.clone(),
 			Hash::from_vec(&vec![]),
@@ -187,4 +205,46 @@ fn peer_handshake() {
 		assert!(server.connect(PeerAddr(addr2)).is_err());
 		assert_eq!(server.peers.iter().connected().count(), 0);
 	}
+}
+
+#[test]
+fn peer_handshake_tls() {
+	test_setup();
+	let test_dir = "target/peer_handshake_tls";
+	clean_output_dir(test_dir);
+
+	// Both peers with TLS enabled should complete handshake and exchange ping/pong.
+	{
+		let dir_a = format!("{}/a", test_dir);
+		let dir_b = format!("{}/b", test_dir);
+		let (_, server) = p2p_server_with_tls(&dir_a, vec![], vec![], None, true);
+		let (peer_addr, _) = p2p_server_with_tls(&dir_b, vec![], vec![], None, true);
+
+		let peer = server.connect(PeerAddr(peer_addr)).unwrap();
+
+		let git_hash =
+			built_info::GIT_COMMIT_HASH_SHORT.map_or_else(|| "".to_owned(), |v| ".".to_owned() + v);
+		assert!(peer
+			.info
+			.user_agent
+			.ends_with(format!("{}{}", env!("CARGO_PKG_VERSION"), git_hash).as_str()));
+
+		// Remote peer advertised TLS capability during handshake.
+		assert!(peer.info.capabilities.contains(p2p::Capabilities::TLS));
+
+		thread::sleep(time::Duration::from_secs(1));
+
+		peer.send_ping(Difficulty::min_dma(), 0).unwrap();
+		thread::sleep(time::Duration::from_secs(1));
+
+		let server_peer = server
+			.peers
+			.get_connected_peer(PeerAddr(peer_addr))
+			.unwrap();
+		assert_eq!(server_peer.info.total_difficulty(), Difficulty::min_dma());
+		assert!(server_peer.info.capabilities.contains(p2p::Capabilities::TLS));
+		assert!(server.peers.iter().connected().count() > 0);
+	}
+
+	clean_output_dir(test_dir);
 }
