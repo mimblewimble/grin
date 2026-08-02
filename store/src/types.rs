@@ -160,6 +160,11 @@ where
 		self.file.write_tmp_pruned(prune_idx.as_slice())
 	}
 
+	/// Discard any temporary pruned file without applying it.
+	pub fn discard_tmp(&self) -> io::Result<()> {
+		self.file.discard_tmp()
+	}
+
 	/// Replace with file at tmp path.
 	/// Rebuild and initialize from new file.
 	pub fn replace_with_tmp(&mut self) -> io::Result<()> {
@@ -518,6 +523,15 @@ where
 			current_pos += 1;
 		}
 		buf_writer.flush()?;
+		Ok(())
+	}
+
+	/// Drop any `.tmp` companion file without replacing the live file.
+	pub fn discard_tmp(&self) -> io::Result<()> {
+		let tmp = self.tmp_path();
+		if tmp.exists() {
+			fs::remove_file(&tmp)?;
+		}
 		Ok(())
 	}
 

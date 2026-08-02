@@ -528,21 +528,57 @@ impl TxHashSet {
 		horizon_header: &BlockHeader,
 		batch: &Batch<'_>,
 	) -> Result<(), Error> {
+		self.compact_with_abort(horizon_header, batch, || false)
+	}
+
+	/// Compact MMR data files, honouring an abort callback so shutdown can
+	/// cancel before live files are replaced.
+	pub fn compact_with_abort<F>(
+		&mut self,
+		horizon_header: &BlockHeader,
+		batch: &Batch<'_>,
+		should_abort: F,
+	) -> Result<(), Error>
+	where
+		F: Fn() -> bool + Copy,
+	{
 		debug!("txhashset: starting compaction...");
+
+		if should_abort() {
+			info!("txhashset: compaction aborted (node stopping)");
+			return Ok(());
+		}
 
 		let head_header = batch.head_header()?;
 
 		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
-		self.output_pmmr_h
-			.backend
-			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
+		let output_done = self.output_pmmr_h.backend.check_compact_with_abort(
+			horizon_header.output_mmr_size,
+			&rewind_rm_pos,
+			should_abort,
+		)?;
+		if !output_done {
+			info!("txhashset: compaction aborted during output mmr compact");
+			return Ok(());
+		}
+
+		if should_abort() {
+			info!("txhashset: compaction aborted before rangeproof mmr compact");
+			return Ok(());
+		}
 
 		debug!("txhashset: check_compact rangeproof mmr backend...");
-		self.rproof_pmmr_h
-			.backend
-			.check_compact(horizon_header.output_mmr_size, &rewind_rm_pos)?;
+		let rproof_done = self.rproof_pmmr_h.backend.check_compact_with_abort(
+			horizon_header.output_mmr_size,
+			&rewind_rm_pos,
+			should_abort,
+		)?;
+		if !rproof_done {
+			info!("txhashset: compaction aborted during rangeproof mmr compact");
+			return Ok(());
+		}
 
 		debug!("txhashset: ... compaction finished");
 
