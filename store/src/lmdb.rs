@@ -49,6 +49,11 @@ pub enum Error {
 	/// Wraps an error originating from LMDB
 	#[error("LMDB error: {0}")]
 	LmdbErr(String),
+	/// Filesystem is out of space (ENOSPC / StorageFull)
+	#[error(
+		"Out of disk space: {0}. Free disk space and restart; do not wipe chain data unless recovery fails."
+	)]
+	DiskFull(String),
 	/// Wraps a serialization error for Writeable or Readable
 	#[error("Serialization Error: {0}")]
 	SerErr(ser::Error),
@@ -62,7 +67,29 @@ pub enum Error {
 
 impl From<heed::Error> for Error {
 	fn from(e: heed::Error) -> Error {
-		Error::LmdbErr(e.to_string())
+		let msg = e.to_string();
+		// heed/lmdb may surface ENOSPC as a map full / I/O error string.
+		let lower = msg.to_lowercase();
+		if lower.contains("map full")
+			|| lower.contains("mdb_map_full")
+			|| lower.contains("no space")
+			|| lower.contains("enospc")
+			|| lower.contains("disk full")
+		{
+			Error::DiskFull(msg)
+		} else {
+			Error::LmdbErr(msg)
+		}
+	}
+}
+
+impl From<std::io::Error> for Error {
+	fn from(e: std::io::Error) -> Error {
+		if crate::is_out_of_disk_space(&e) {
+			Error::DiskFull(e.to_string())
+		} else {
+			Error::FileErr(e.to_string())
+		}
 	}
 }
 

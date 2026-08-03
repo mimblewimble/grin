@@ -68,11 +68,46 @@ pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
 pub use crate::lmdb::*;
 
 use std::ffi::OsStr;
-use std::fs::{remove_file, rename, File};
+use std::fs::{remove_file, rename, File, OpenOptions};
 use std::path::Path;
+
+/// Returns true if the I/O error indicates the filesystem is out of space.
+///
+/// Covers `ErrorKind::StorageFull` and platform-specific `ENOSPC` (28 on most Unix).
+pub fn is_out_of_disk_space(err: &io::Error) -> bool {
+	if err.kind() == io::ErrorKind::StorageFull {
+		return true;
+	}
+	// ENOSPC on Unix; also match common string forms from lower layers.
+	if err.raw_os_error() == Some(28) {
+		return true;
+	}
+	let msg = err.to_string().to_lowercase();
+	msg.contains("no space left") || msg.contains("disk full") || msg.contains("not enough space")
+}
+
+/// Map an I/O error into a clear StorageFull error when out of disk space.
+pub fn map_io_err(err: io::Error) -> io::Error {
+	if is_out_of_disk_space(&err) {
+		io::Error::new(
+			io::ErrorKind::StorageFull,
+			format!(
+				"out of disk space: {}. Free disk space and restart; avoid wiping chain data unless recovery fails.",
+				err
+			),
+		)
+	} else {
+		err
+	}
+}
 
 /// Creates temporary file with name created by adding `temp_suffix` to `path`.
 /// Applies writer function to it and renames temporary file into original specified by `path`.
+///
+/// Durability notes (see also #3352 / #3425):
+/// - Writer errors leave the original file untouched (temp is removed).
+/// - Temp file is fsync'd before rename.
+/// - Parent directory is fsync'd after rename so the rename itself is durable.
 pub fn save_via_temp_file<F, P, E>(path: P, temp_suffix: E, mut writer: F) -> Result<(), io::Error>
 where
 	F: FnMut(&mut File) -> Result<(), io::Error>,
@@ -83,23 +118,40 @@ where
 	assert!(!temp_suffix.is_empty());
 
 	let original = path.as_ref();
-	let mut _original = original.as_os_str().to_os_string();
-	_original.push(temp_suffix);
-	// Write temporary file
-	let temp_path = Path::new(&_original);
+	let mut temp_os = original.as_os_str().to_os_string();
+	temp_os.push(temp_suffix);
+	let temp_path = Path::new(&temp_os);
+
 	if temp_path.exists() {
 		remove_file(&temp_path)?;
 	}
 
-	let mut temp_file = File::create(&temp_path)?;
+	let write_result = (|| {
+		let mut temp_file = File::create(&temp_path)?;
+		writer(&mut temp_file).map_err(map_io_err)?;
+		// force an fsync on the temp file to ensure bytes are on disk
+		temp_file.sync_all().map_err(map_io_err)?;
+		// drop file handle before rename (important on Windows)
+		drop(temp_file);
+		rename(&temp_path, &original).map_err(map_io_err)?;
 
-	// write the new data to the temp file
-	writer(&mut temp_file)?;
+		// Fsync the parent directory so the rename is durable.
+		if let Some(parent) = original.parent() {
+			// On some platforms (e.g. certain Windows configs) directory sync
+			// may not be supported; treat that as best-effort.
+			if let Ok(dir) = OpenOptions::new().read(true).open(parent) {
+				let _ = dir.sync_all();
+			}
+		}
+		Ok(())
+	})();
 
-	// force an fsync on the temp file to ensure bytes are on disk
-	temp_file.sync_all()?;
-
-	rename(&temp_path, &original)?;
+	if let Err(e) = write_result {
+		// Best-effort cleanup of the temp file so a failed write cannot
+		// leave a partial .tmp that confuses a later retry.
+		let _ = remove_file(&temp_path);
+		return Err(e);
+	}
 
 	Ok(())
 }

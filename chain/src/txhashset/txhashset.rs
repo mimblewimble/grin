@@ -901,10 +901,25 @@ where
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
 				trace!("Committing txhashset extension. sizes {:?}", sizes);
+				// Sync MMR backends *before* committing the DB batch (#3425).
+				// If disk is full, the batch stays uncommitted so chain head
+				// cannot point at incomplete on-disk MMR state.
+				if let Err(e) = (|| -> Result<(), std::io::Error> {
+					trees.output_pmmr_h.backend.sync()?;
+					trees.rproof_pmmr_h.backend.sync()?;
+					trees.kernel_pmmr_h.backend.sync()?;
+					Ok(())
+				})() {
+					error!(
+						"Failed to sync txhashset to disk (discarding extension): {}",
+						e
+					);
+					trees.output_pmmr_h.backend.discard();
+					trees.rproof_pmmr_h.backend.discard();
+					trees.kernel_pmmr_h.backend.discard();
+					return Err(e.into());
+				}
 				child_batch.commit()?;
-				trees.output_pmmr_h.backend.sync()?;
-				trees.rproof_pmmr_h.backend.sync()?;
-				trees.kernel_pmmr_h.backend.sync()?;
 				trees.output_pmmr_h.size = sizes.0;
 				trees.rproof_pmmr_h.size = sizes.1;
 				trees.kernel_pmmr_h.size = sizes.2;
@@ -994,8 +1009,16 @@ where
 			if rollback {
 				handle.backend.discard();
 			} else {
+				// Sync backend before committing DB batch (#3425).
+				if let Err(e) = handle.backend.sync() {
+					error!(
+						"Failed to sync header MMR to disk (discarding extension): {}",
+						e
+					);
+					handle.backend.discard();
+					return Err(e.into());
+				}
 				child_batch.commit()?;
-				handle.backend.sync()?;
 				handle.size = size;
 			}
 			Ok(r)
