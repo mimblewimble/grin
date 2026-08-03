@@ -858,25 +858,36 @@ impl Chain {
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
+	///
+	/// Write locks are only held while rewinding/snapshotting. Packaging the
+	/// multi-GB zip is done under *read* locks so the Node API and other
+	/// readers remain responsive while a peer is served a txhashset archive
+	/// (see #3550). Compaction and other writers wait until the zip finishes.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
-		// now we want to rewind the txhashset extension and
-		// sync a "rewound" copy of the leaf_set files to disk
-		// so we can send these across as part of the zip file.
-		// The fast sync client does *not* have the necessary data
-		// to rewind after receiving the txhashset zip.
+		// Rewind the txhashset extension and sync a "rewound" copy of the
+		// leaf_set files to disk so we can send these across as part of the zip.
+		// The fast sync client does *not* have the necessary data to rewind
+		// after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 
-		let mut header_pmmr = self.header_pmmr.write();
-		let mut txhashset = self.txhashset.write();
+		{
+			let mut header_pmmr = self.header_pmmr.write();
+			let mut txhashset = self.txhashset.write();
 
-		txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-			self.rewind_and_apply_fork(&header, ext, batch)?;
-			ext.extension.snapshot(batch)?;
+			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
+				self.rewind_and_apply_fork(&header, ext, batch)?;
+				ext.extension.snapshot(batch)?;
+				Ok(())
+			})?;
+		}
 
-			// prepare the zip
-			txhashset::zip_read(self.db_root.clone(), &header)
-				.map(|file| (header.output_mmr_size, header.kernel_mmr_size, file))
-		})
+		// Shared locks: allow concurrent chain reads (API, header queries) while
+		// still preventing compaction from rewriting backend files mid-zip.
+		let _header_pmmr = self.header_pmmr.read();
+		let _txhashset = self.txhashset.read();
+
+		let file = txhashset::zip_read(self.db_root.clone(), &header)?;
+		Ok((header.output_mmr_size, header.kernel_mmr_size, file))
 	}
 
 	/// The segmenter is responsible for generation PIBD segments.
