@@ -28,3 +28,7 @@ chrono = "0.4.11"
 rand = "0.6"
 filetime = "0.2"
 env_logger = "0.7"
+
+[[example]]
+name = "compact_crash_stress"
+path = "examples/compact_crash_stress.rs"

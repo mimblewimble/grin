@@ -129,6 +129,16 @@ impl PruneList {
 		Ok(())
 	}
 
+	/// Write the current prune bitmap to an arbitrary path (used for journaled compact).
+	pub fn write_to<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+		let mut bitmap = self.bitmap.clone();
+		bitmap.run_optimize();
+		let mut file = std::fs::File::create(path.as_ref())?;
+		file.write_all(&bitmap.serialize::<Portable>())?;
+		file.sync_all()?;
+		Ok(())
+	}
+
 	/// Discard in-memory changes and restore the last flushed prune_list state.
 	pub fn discard(&mut self) -> io::Result<()> {
 		let path = match self.path.clone() {

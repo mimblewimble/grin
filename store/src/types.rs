@@ -165,6 +165,16 @@ where
 	pub fn replace_with_tmp(&mut self) -> io::Result<()> {
 		self.file.replace_with_tmp()
 	}
+
+	/// Re-open from disk after an external file replace (journaled compact).
+	pub fn reinit_from_disk(&mut self) -> io::Result<()> {
+		self.file.reinit_from_disk()
+	}
+
+	/// Path of the pruned temporary file written by `write_tmp_pruned`.
+	pub fn tmp_path(&self) -> PathBuf {
+		self.file.tmp_path()
+	}
 }
 
 /// Wrapper for a file that can be read at any position (random read) but for
@@ -490,10 +500,6 @@ where
 		Ok(file)
 	}
 
-	fn tmp_path(&self) -> PathBuf {
-		self.path.with_extension("tmp")
-	}
-
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune positions. prune_pos must be ordered.
 	pub fn write_tmp_pruned(&self, prune_pos: &[u64]) -> io::Result<()> {
@@ -507,7 +513,9 @@ where
 		let mut current_pos = 0;
 		let mut prune_pos = prune_pos;
 		while let Ok(elmt) = T::read(&mut streaming_reader) {
-			if prune_pos.contains(&current_pos) {
+			// prune_pos is ordered so we only ever need to check the head,
+			// avoiding a scan of the remaining positions for every element.
+			if prune_pos.first() == Some(&current_pos) {
 				// Pruned pos, moving on.
 				prune_pos = &prune_pos[1..];
 			} else {
@@ -517,8 +525,15 @@ where
 			}
 			current_pos += 1;
 		}
-		buf_writer.flush()?;
+		// Flush and fsync so the temp is durable before a compact journal is written.
+		let file = buf_writer.into_inner()?;
+		file.sync_all()?;
 		Ok(())
+	}
+
+	/// Path of the pruned temporary file written by `write_tmp_pruned`.
+	pub fn tmp_path(&self) -> PathBuf {
+		self.path.with_extension("tmp")
 	}
 
 	/// Replace the underlying file with the file at tmp path.
@@ -537,6 +552,26 @@ where
 		// Now (re)init the file and associated size_file so everything is consistent.
 		self.init()?;
 
+		Ok(())
+	}
+
+	/// Re-open this file from disk after an external replace (e.g. journaled compact).
+	/// Rebuilds the associated size file if it is inconsistent with the data.
+	pub fn reinit_from_disk(&mut self) -> io::Result<()> {
+		self.buffer.clear();
+		self.buffer_start_pos_bak = 0;
+		self.release();
+		self.init()?;
+
+		// Same consistency repair as open(): size_file may lag the data file
+		// if we crashed between replacing data and rebuilding sizes.
+		let expected_size = self.size()?;
+		if let SizeInfo::VariableSize(ref mut size_file) = &mut self.size_info {
+			if size_file.sum_sizes()? != expected_size {
+				self.rebuild_size_file()?;
+				self.init()?;
+			}
+		}
 		Ok(())
 	}
 

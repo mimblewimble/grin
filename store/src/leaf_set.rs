@@ -181,6 +181,23 @@ impl LeafSet {
 		Ok(())
 	}
 
+	/// Write the current bitmap to an arbitrary path (used for journaled compact).
+	/// Does not update the in-memory backup; call `mark_flushed` after the write
+	/// is committed via rename.
+	pub fn write_to<P: AsRef<Path>>(&self, path: P) -> io::Result<()> {
+		let mut bitmap = self.bitmap.clone();
+		bitmap.run_optimize();
+		let mut file = File::create(path.as_ref())?;
+		file.write_all(&bitmap.serialize::<Portable>())?;
+		file.sync_all()?;
+		Ok(())
+	}
+
+	/// Mark the in-memory bitmap as matching what is on disk.
+	pub fn mark_flushed(&mut self) {
+		self.bitmap_bak = self.bitmap.clone();
+	}
+
 	/// Discard any pending changes.
 	pub fn discard(&mut self) {
 		self.bitmap = self.bitmap_bak.clone();

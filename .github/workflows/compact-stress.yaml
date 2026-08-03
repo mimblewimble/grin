@@ -1,0 +1,46 @@
+name: Compaction crash stress
+on:
+  workflow_dispatch:
+    inputs:
+      leaves:
+        description: "Number of MMR leaves"
+        required: false
+        default: "15000"
+      mode:
+        description: "native | weak | qemu-user"
+        required: false
+        default: "native"
+  # Optional nightly — keep off by default (long under QEMU).
+  # schedule:
+  #   - cron: "0 4 * * 1"
+
+jobs:
+  compact-stress:
+    name: Compact kill stress (${{ github.event.inputs.mode || 'native' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install qemu-user (qemu-user mode only)
+        if: ${{ github.event.inputs.mode == 'qemu-user' }}
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+      - name: Run stress harness
+        env:
+          LEAVES: ${{ github.event.inputs.leaves || '15000' }}
+        run: |
+          mode="${{ github.event.inputs.mode || 'native' }}"
+          case "$mode" in
+            native)
+              ./etc/qemu-compact-stress/run.sh --all-phases
+              ;;
+            qemu-user)
+              ./etc/qemu-compact-stress/run.sh --qemu-user --all-phases
+              ;;
+            weak)
+              ./etc/qemu-compact-stress/run.sh --weak --all-phases
+              ;;
+            *)
+              echo "unknown mode $mode" >&2
+              exit 2
+              ;;
+          esac

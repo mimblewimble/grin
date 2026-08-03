@@ -714,9 +714,29 @@ impl TxHashSet {
 		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
 
+		// outputs_pos is sorted by pos, so binary search for the first header
+		// that can contain the first missing output. This avoids walking the
+		// entire chain when only a few recent index entries are missing.
+		let first_pos = outputs_pos[0].1;
+		let mut start_height = 1;
+		let mut end_height = max_height;
+		while start_height < end_height {
+			let search_height = (start_height + end_height) / 2;
+			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
+			let h = batch.get_block_header(&hash)?;
+			if h.output_mmr_size < first_pos {
+				start_height = search_height + 1;
+			} else {
+				end_height = search_height;
+			}
+		}
+
 		let mut i = 0;
-		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
+		for search_height in start_height..=max_height {
+			if i >= total_outputs {
+				break;
+			}
+			let hash = header_pmmr.get_header_hash_by_height(search_height)?;
 			let h = batch.get_block_header(&hash)?;
 			while i < total_outputs {
 				let (commit, pos1) = outputs_pos[i];
