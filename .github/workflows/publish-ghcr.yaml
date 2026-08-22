@@ -1,11 +1,19 @@
 name: Build and Push to GHCR
 
 on:
-  push:
-    branches: [master, staging]
+  workflow_call:
+    outputs:
+      image_tag:
+        description: Published image tag
+        value: ${{ jobs.merge.outputs.image_tag }}
 
 env:
-  GHCR_IMAGE: ghcr.io/${{ secrets.GHCR_USERNAME }}/${{ github.event.repository.name }}
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+  DOCKER_BUILD_RECORD_UPLOAD: false
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build:
@@ -17,33 +25,33 @@ jobs:
             runner: ubuntu-latest
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ github.repository == 'wiesche89/grin' && matrix.platform == 'linux/amd64' && 'docker-x64' || matrix.runner }}
     name: Build Docker image for ${{ matrix.platform }}
     steps:
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
-          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.GHCR_IMAGE }}
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           build-args: |
             BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
@@ -53,6 +61,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
           tags: ${{ env.GHCR_IMAGE }}
+          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
@@ -74,6 +84,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+    outputs:
+      image_tag: ${{ steps.vars.outputs.tag || steps.vars.outputs.version }}
     steps:
       - name: Download digests
         uses: actions/download-artifact@v7
@@ -83,14 +95,14 @@ jobs:
           merge-multiple: true
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
-          username: ${{ secrets.GHCR_USERNAME }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -99,44 +111,41 @@ jobs:
         id: vars
         run: |
           version=$(awk -F'"' '/^version/{ print $2; exit; }' Cargo.toml)
-          if ${{ github.ref_name == 'master' }}; then
-            echo "version=$version" >> $GITHUB_OUTPUT
-            echo "tag=latest" >> $GITHUB_OUTPUT
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            if [[ "$GITHUB_REF_NAME" != *-* ]]; then
+              echo "tag=latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "tag=" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$GITHUB_REF_NAME" = master ]; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF_NAME" = staging ]; then
+            echo "version=${version}-staging" >> "$GITHUB_OUTPUT"
+            echo "tag=staging" >> "$GITHUB_OUTPUT"
           else
-            echo "version=${version}-staging" >> $GITHUB_OUTPUT
-            echo "tag=staging" >> $GITHUB_OUTPUT
+            tag=${GITHUB_REF_NAME//\//-}
+            echo "version=${version}-${tag}" >> "$GITHUB_OUTPUT"
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=${{ steps.vars.outputs.version }},enable=true
-            type=raw,value=${{ steps.vars.outputs.tag }},enable=true
+            type=raw,value=${{ steps.vars.outputs.tag }},enable=${{ steps.vars.outputs.tag != '' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
+          # shellcheck disable=SC2046
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
           $(printf '${{ env.GHCR_IMAGE }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.GHCR_IMAGE }}:${{ steps.meta.outputs.version }}
-
-  telegram-notify:
-    name: Telegram Notification
-    needs: [build, merge]
-    if: always()
-    uses: ./.github/workflows/telegram.yaml
-    secrets: inherit
-    with:
-      title: Grin Docker
-      status: ${{ contains(join(needs.*.result, ','), 'failure') && 'failed' || contains(join(needs.*.result, ','), 'cancelled') && 'cancelled' || 'success' }}
-      details: |
-        <b>Images:</b> ${{ needs.build.result }}
-        <b>Manifest:</b> ${{ needs.merge.result }}
-      image_tag: ${{ github.ref_name == 'master' && 'latest' || 'staging' }}
-      commit_message: ${{ github.event.head_commit.message }}

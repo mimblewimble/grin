@@ -184,11 +184,12 @@ impl Desegmenter {
 
 		let res = {
 			let header_pmmr = self.header_pmmr.read();
+			let batch = self.store.read_batch()?;
 			header_pmmr.get_first_header_with(
 				latest_output_size,
 				local_kernel_mmr_size,
 				self.latest_block_height,
-				self.store.clone(),
+				&batch,
 			)
 		};
 

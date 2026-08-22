@@ -53,3 +53,6 @@ built = { version = "0.8.0", features = ["git2"]}
 [dev-dependencies]
 grin_chain = { path = "./chain", version = "5.5.1-alpha.0" }
 grin_store = { path = "./store", version = "5.5.1-alpha.0" }
+
+[patch.crates-io]
+lmdb-master-sys = { git = "https://github.com/wiesche89/heed", rev = "4c7252128a58819406f2978adfc8d41365e7f77a" }

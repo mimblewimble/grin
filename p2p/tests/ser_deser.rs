@@ -14,7 +14,8 @@
 
 use grin_p2p as p2p;
 
-use grin_core::core::SegmentIdentifier;
+use grin_core::core::{BlockHeader, SegmentIdentifier};
+use grin_core::global;
 use grin_core::ser::{self, ProtocolVersion};
 use num::FromPrimitive;
 
@@ -94,4 +95,24 @@ fn test_header_segment_limit() {
 	);
 
 	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
+}
+
+#[test]
+fn bad_segment_pow() {
+	global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+	let segment = p2p::msg::HeaderSegment {
+		identifier: SegmentIdentifier {
+			height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
+			idx: 0,
+		},
+		headers: vec![BlockHeader::default()],
+	};
+	let bytes = ser::ser_vec(&segment, ProtocolVersion::local()).unwrap();
+	let result: Result<p2p::msg::HeaderSegment, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion::local(),
+		ser::DeserializationMode::default(),
+	);
+
+	assert_eq!(result.err(), Some(ser::Error::CorruptedData));
 }

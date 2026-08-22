@@ -281,3 +281,40 @@ fn decode_message(
 	};
 	Ok(c)
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::core::core::BlockHeader;
+	use crate::core::{global, ser};
+	use crate::msg::Headers;
+	use std::io::Write;
+	use std::net::TcpListener;
+
+	#[test]
+	fn bad_header_pow() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		let version = ProtocolVersion::local();
+		let body = ser::ser_vec(
+			&Headers {
+				headers: vec![BlockHeader::default()],
+			},
+			version,
+		)
+		.unwrap();
+		let mut bytes =
+			ser::ser_vec(&MsgHeader::new(Type::Headers, body.len() as u64), version).unwrap();
+		bytes.extend(body);
+
+		let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+		let mut sender = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+		let (receiver, _) = listener.accept().unwrap();
+		sender.write_all(&bytes).unwrap();
+
+		let (result, _) = Codec::new(version, receiver).read();
+		assert!(matches!(
+			result,
+			Err(Error::Serialization(ser::Error::CorruptedData))
+		));
+	}
+}

@@ -4,39 +4,117 @@ on: [push, pull_request]
 jobs:
   linux-tests:
     name: Linux Tests
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
+    runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'linux-gnu-x64' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v3
-      - name: Test ${{ matrix.job_args }}
-        working-directory: ${{ matrix.job_args }}
-        run: cargo test --release
+      - uses: actions/checkout@v6
+      - name: Tests
+        run: cargo test --release --all --locked
+
+  musl-tests:
+    name: Linux musl ${{ matrix.arch }} Tests
+    runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && matrix.arch == 'x86_64' && 'linux-musl-x64' || matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            image: messense/rust-musl-cross:x86_64-musl@sha256:ce75e9174325d4fbb3de85c309e2d7ca29f7500169bc4b5d2c611ff7e86d549a
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            image: messense/rust-musl-cross:aarch64-musl@sha256:ecae5dd62d1c938c14f8071d36c16fa699860aace03bfb5284fb1216474d2643
+    steps:
+      - uses: actions/checkout@v6
+      - name: Tests
+        run: cargo test --release --all --locked --target ${{ matrix.target }}
 
   macos-tests:
     name: macOS Tests
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Tests
-        run: cargo test --release --all
+        run: cargo test --release --all --locked
 
   windows-tests:
     name: Windows Tests
-    runs-on: windows-2022
+    runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'windows-x64' || 'windows-2022' }}
     env:
       ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Tests
-        run: cargo test --release --all
+        run: cargo test --release --all --locked
+
+  bsd-tests:
+    name: ${{ matrix.name }} Tests
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    concurrency:
+      group: bsd-${{ matrix.os }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        shell: cpa.sh {0} --sync-files runner-to-vm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: OpenBSD
+            os: openbsd
+            version: "7.9"
+            runner: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'openbsd-x64' || 'ubuntu-24.04' }}
+            memory: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && '12G' || '6G' }}
+            install: sudo pkg_add rust git cmake pkgconf gmake curl
+            host: 192.168.178.146
+            key: openbsd_ci
+            test: ulimit -n 1024 && cargo test --release --all --locked -- --test-threads=1
+          - name: FreeBSD
+            os: freebsd
+            version: "14.4"
+            runner: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'freebsd-x64' || 'ubuntu-24.04' }}
+            memory: 6G
+            install: sudo pkg install -y rust git cmake pkgconf gmake curl
+            host: 192.168.178.147
+            key: freebsd_ci
+            test: cargo test --release --all --locked
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Start ${{ matrix.name }}
+        if: github.repository != 'wiesche89/grin' || github.event_name != 'push'
+        uses: cross-platform-actions/action@v1.3.0
+        with:
+          operating_system: ${{ matrix.os }}
+          architecture: x86-64
+          version: ${{ matrix.version }}
+          cpu_count: 4
+          memory: ${{ matrix.memory }}
+
+      - name: Install dependencies
+        if: github.repository != 'wiesche89/grin' || github.event_name != 'push'
+        run: ${{ matrix.install }}
+
+      - name: Tests
+        if: github.repository != 'wiesche89/grin' || github.event_name != 'push'
+        run: cargo test --release --all --locked
+
+      - name: Tests on ${{ matrix.name }} VM
+        if: github.repository == 'wiesche89/grin' && github.event_name == 'push'
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/${{ matrix.key }} runner@${{ matrix.host }} \
+            "cd /home/runner/grin && git fetch --quiet origin $GITHUB_SHA && git checkout --quiet --force --detach $GITHUB_SHA && ${{ matrix.test }}"
 
   telegram-notify:
     name: Telegram Notification
-    needs: [linux-tests, macos-tests, windows-tests]
+    needs: [linux-tests, musl-tests, macos-tests, windows-tests, bsd-tests]
     if: always() && github.event_name == 'push'
     uses: ./.github/workflows/telegram.yaml
     secrets: inherit
@@ -45,6 +123,8 @@ jobs:
       status: ${{ contains(join(needs.*.result, ','), 'failure') && 'failed' || contains(join(needs.*.result, ','), 'cancelled') && 'cancelled' || 'success' }}
       details: |
         <b>Linux:</b> ${{ needs.linux-tests.result }}
+        <b>musl:</b> ${{ needs.musl-tests.result }}
         <b>macOS:</b> ${{ needs.macos-tests.result }}
         <b>Windows:</b> ${{ needs.windows-tests.result }}
+        <b>BSD:</b> ${{ needs.bsd-tests.result }}
       commit_message: ${{ github.event.head_commit.message }}

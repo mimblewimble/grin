@@ -198,6 +198,28 @@ impl ChainStore {
 			db: self.db.batch()?,
 		})
 	}
+
+	/// Builds a read-only batch to be used with this store.
+	pub fn read_batch(&self) -> Result<ReadBatch<'_>, Error> {
+		Ok(ReadBatch {
+			db: self.db.read_batch()?,
+		})
+	}
+}
+
+/// A read-only view of the chain store.
+pub struct ReadBatch<'a> {
+	db: store::ReadBatch<'a>,
+}
+
+impl ReadBatch<'_> {
+	/// Get block header.
+	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(Some(BLOCK_HEADER_PREFIX), h.as_ref(), None),
+			|| format!("BLOCK HEADER: {}", h),
+		)
+	}
 }
 
 /// An atomic batch in which all changes can be committed all at once or

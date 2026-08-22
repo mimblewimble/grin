@@ -641,6 +641,12 @@ impl Store {
 		Batch::new(self)
 	}
 
+	/// Builds a read-only batch to be used with this store.
+	pub fn read_batch(&self) -> Result<ReadBatch<'_>, Error> {
+		self.maybe_resize();
+		ReadBatch::new(self)
+	}
+
 	/// Increment the open-tx counter, blocking during resize unless this thread already holds a tx.
 	fn enter_tx(&self) -> TxCounter {
 		loop {
@@ -691,6 +697,42 @@ impl Drop for TxCounter {
 		env_state
 			.open_txs_count
 			.store(open_txs_count - 1, Ordering::Relaxed);
+	}
+}
+
+/// A read-only batch backed by a single transaction.
+pub struct ReadBatch<'a> {
+	store: &'a Store,
+	read: RoTxn<'a, WithoutTls>,
+	#[allow(dead_code)]
+	tx_counter: TxCounter,
+}
+
+impl<'a> ReadBatch<'a> {
+	fn new(store: &'a Store) -> Result<ReadBatch<'a>, Error> {
+		let tx_counter = store.enter_tx();
+		let read = store.env.read_txn()?;
+		Ok(ReadBatch {
+			store,
+			read,
+			tx_counter,
+		})
+	}
+
+	/// Gets and deserializes a value from the database.
+	pub fn get_ser<T: ser::Readable>(
+		&self,
+		db_key: Option<u8>,
+		key: &[u8],
+		deser_mode: Option<DeserializationMode>,
+	) -> Result<Option<T>, Error> {
+		let d = match deser_mode {
+			Some(d) => d,
+			_ => DeserializationMode::default(),
+		};
+		self.store.get_with(db_key, key, &self.read, |_, mut data| {
+			ser::deserialize(&mut data, self.store.protocol_version(), d).map_err(From::from)
+		})
 	}
 }
 
@@ -765,16 +807,14 @@ impl<'a> Batch<'a> {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let read = self.write.nested_read_txn()?;
-		self.store.get_with(db_key, key, &read, deserialize)
+		self.store.get_with(db_key, key, &self.write, deserialize)
 	}
 
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, db_key: Option<u8>, key: &[u8]) -> Result<bool, Error> {
-		let read = self.write.nested_read_txn()?;
 		let db = self.store.get_db(db_key)?;
-		let res = db.get(&read, key)?;
+		let res = db.get(&self.write, key)?;
 		Ok(res.is_some())
 	}
 

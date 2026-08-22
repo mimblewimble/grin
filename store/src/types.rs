@@ -354,6 +354,12 @@ where
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
 	/// written data accessible.
 	pub fn flush(&mut self) -> io::Result<()> {
+		#[cfg(target_os = "openbsd")]
+		{
+			// OpenBSD may keep reading from the old mapping after a write
+			self.mmap = None;
+		}
+
 		if let SizeInfo::VariableSize(ref mut size_file) = &mut self.size_info {
 			// Flush the associated size_file if we have one.
 			size_file.flush()?
@@ -614,5 +620,33 @@ where
 	/// Path of the underlying file
 	pub fn path(&self) -> &Path {
 		&self.path
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn flush_map() {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("data");
+		let mut file = AppendOnlyFile::<SizeEntry>::open(
+			path,
+			SizeInfo::FixedSize(SizeEntry::LEN),
+			ProtocolVersion(1),
+		)
+		.unwrap();
+
+		for value in 0..3 {
+			file.append_elmt(&SizeEntry {
+				offset: value,
+				size: value as u16,
+			})
+			.unwrap();
+			file.flush().unwrap();
+			let entry = file.read_as_elmt(value).unwrap();
+			assert_eq!((entry.offset, entry.size), (value, value as u16));
+		}
 	}
 }

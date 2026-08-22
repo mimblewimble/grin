@@ -29,7 +29,7 @@ use crate::core::global;
 use crate::core::ser::{PMMRable, ProtocolVersion};
 use crate::error::Error;
 use crate::linked_list::{ListIndex, PruneableListIndex, RewindableListIndex};
-use crate::store::{self, Batch, ChainStore};
+use crate::store::{self, Batch, ChainStore, ReadBatch};
 use crate::txhashset::bitmap_accumulator::{BitmapAccumulator, BitmapChunk};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteStatus};
@@ -212,9 +212,9 @@ impl PMMRHandle<BlockHeader> {
 		output_pos: u64,
 		kernel_pos: u64,
 		from_height: u64,
-		store: Arc<store::ChainStore>,
+		store: &ReadBatch<'_>,
 	) -> Option<BlockHeader> {
-		let mut cur_height = pmmr::round_up_to_leaf_pos(from_height);
+		let mut cur_height = pmmr::insertion_to_pmmr_index(from_height);
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
 		let mut candidate: Option<BlockHeader> = None;
 		while let Some(header_entry) = header_pmmr.get_data(cur_height) {
@@ -2305,6 +2305,57 @@ mod tests {
 		assert_eq!(handle.size, committed_size);
 		assert_eq!(handle.head_hash().unwrap(), genesis.hash());
 
+		fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn resume_header() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+
+		let dir = test_dir("resume_header");
+		let store = ChainStore::new(dir.join("db").to_str().unwrap(), None).unwrap();
+		let mut handle =
+			PMMRHandle::<BlockHeader>::new(dir.join("pmmr"), false, ProtocolVersion(1), None)
+				.unwrap();
+		let mut headers = vec![global::get_genesis_block().header];
+
+		for height in 1..=5 {
+			// Make an early scan return the wrong header
+			let output_mmr_size = if height == 3 || height == 5 {
+				5
+			} else {
+				height
+			};
+			let mut header = BlockHeader {
+				height,
+				prev_hash: headers.last().unwrap().hash(),
+				output_mmr_size,
+				kernel_mmr_size: output_mmr_size,
+				..Default::default()
+			};
+			*header.pow.proof.nonces.last_mut().unwrap() = height;
+			headers.push(header);
+		}
+
+		let mut batch = store.batch().unwrap();
+		{
+			let mut pmmr = PMMR::at(&mut handle.backend, handle.size);
+			for header in &headers {
+				pmmr.push(header).unwrap();
+				batch.save_block_header(header).unwrap();
+			}
+			handle.size = pmmr.unpruned_size();
+		}
+		handle.backend.sync().unwrap();
+		batch.commit().unwrap();
+
+		let batch = store.read_batch().unwrap();
+		let header = handle.get_first_header_with(4, 4, 4, &batch).unwrap();
+		assert_eq!(header.height, 4);
+
+		drop(batch);
+		drop(store);
+		drop(handle);
 		fs::remove_dir_all(dir).unwrap();
 	}
 }
