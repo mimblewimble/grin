@@ -28,13 +28,14 @@ use croaring::Bitmap;
 
 mod chain_test_helper;
 
-fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
-	global::set_local_chain_type(global::ChainTypes::Mainnet);
-	let mut genesis = genesis::genesis_main();
+fn test_pibd_chain_validation_impl(is_fixture: bool, src_root_dir: &str) {
+	global::set_local_chain_type(global::ChainTypes::Testnet);
+	global::set_local_nrd_enabled(true);
+	let mut genesis = genesis::genesis_test();
 	// Height at which to read kernel segments (lower than thresholds defined in spec - for testing)
 	let mut target_segment_height = 11;
 
-	if is_test_chain {
+	if is_fixture {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		genesis = pow::mine_genesis_block().unwrap();
 		target_segment_height = 3;
@@ -212,15 +213,9 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 }
 
 #[test]
-// TODO: Fix before merge into master
-#[ignore]
 fn test_pibd_chain_validation_sample() {
 	util::init_test_logger();
-	// Note there is now a 'test' in grin_wallet_controller/build_chain
-	// that can be manually tweaked to create a
-	// small test chain with actual transaction data
-
-	// Test on uncompacted and non-compacted chains
+	// Generate and validate PIBD segments from both fixtures
 	let src_root_dir = format!("./tests/test_data/chain_raw");
 	test_pibd_chain_validation_impl(true, &src_root_dir);
 	let src_root_dir = format!("./tests/test_data/chain_compacted");
@@ -229,10 +224,9 @@ fn test_pibd_chain_validation_sample() {
 
 #[test]
 #[ignore]
-// As above, but run on a real instance of a chain pointed where you like
+// Run with --ignored and set GRIN_CHAIN_DATA to a synced testnet chain_data directory
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
-	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
+	let src_root_dir = std::env::var("GRIN_CHAIN_DATA").expect("GRIN_CHAIN_DATA must be set");
 	test_pibd_chain_validation_impl(false, &src_root_dir);
 }
