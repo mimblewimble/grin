@@ -1657,17 +1657,13 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
-		let positive_key = vec![mk_tx.offset]
-			.into_iter()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
+		let positive_keys = to_secrets(vec![mk_tx.offset], &secp);
 		let negative_keys = to_secrets(kernel_offsets, &secp);
 
-		if positive_key.is_empty() && negative_keys.is_empty() {
+		if positive_keys.is_empty() && negative_keys.is_empty() {
 			BlindingFactor::zero()
 		} else {
-			let sum = secp.blind_sum(positive_key, negative_keys)?;
+			let sum = secp.blind_sum(positive_keys, negative_keys)?;
 			BlindingFactor::from_secret_key(sum)
 		}
 	};
