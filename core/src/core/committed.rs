@@ -170,7 +170,8 @@ pub fn sum_kernel_offsets(
 	}
 }
 
-fn to_secrets(bf: Vec<BlindingFactor>, secp: &secp::Secp256k1) -> Vec<SecretKey> {
+/// Convert blinding factors to private keys.
+pub fn to_secrets(bf: Vec<BlindingFactor>, secp: &secp::Secp256k1) -> Vec<SecretKey> {
 	bf.into_iter()
 		.filter(|x| *x != BlindingFactor::zero())
 		.filter_map(|x| x.secret_key(&secp).ok())
