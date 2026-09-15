@@ -135,9 +135,9 @@ impl From<FeeFields> for u64 {
 
 impl FeeFields {
 	/// Fees are limited to 40 bits
-	const FEE_BITS: u32 = 40;
+	pub const FEE_BITS: u32 = 40;
 	/// Used to extract fee field
-	const FEE_MASK: u64 = (1u64 << FeeFields::FEE_BITS) - 1;
+	pub const FEE_MASK: u64 = (1u64 << FeeFields::FEE_BITS) - 1;
 
 	/// Fee shifts are limited to 4 bits
 	pub const FEE_SHIFT_BITS: u32 = 4;
@@ -246,7 +246,8 @@ impl From<NRDRelativeHeight> for u64 {
 }
 
 impl NRDRelativeHeight {
-	const MAX: u64 = consensus::WEEK_HEIGHT;
+	/// Maximum height value.
+	pub const MAX: u64 = consensus::WEEK_HEIGHT;
 
 	/// Create a new NRDRelativeHeight from the provided height.
 	/// Checks height is valid (between 1 and WEEK_HEIGHT inclusive).
@@ -285,10 +286,14 @@ pub enum KernelFeatures {
 }
 
 impl KernelFeatures {
-	const PLAIN_U8: u8 = 0;
-	const COINBASE_U8: u8 = 1;
-	const HEIGHT_LOCKED_U8: u8 = 2;
-	const NO_RECENT_DUPLICATE_U8: u8 = 3;
+	/// Plain kernel value.
+	pub const PLAIN_U8: u8 = 0;
+	/// Coinbase kernel value.
+	pub const COINBASE_U8: u8 = 1;
+	/// A kernel with an explicit lock height value.
+	pub const HEIGHT_LOCKED_U8: u8 = 2;
+	/// "No Recent Duplicate" (NRD) kernel value.
+	pub const NO_RECENT_DUPLICATE_U8: u8 = 3;
 
 	/// Underlying (u8) value representing this kernel variant.
 	/// This is the first byte when we serialize/deserialize the kernel features.
@@ -560,7 +565,7 @@ impl error::Error for Error {
 	}
 }
 
-impl fmt::Display for Error {
+impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			_ => write!(f, "some kind of keychain error"),
@@ -602,7 +607,7 @@ pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
 	/// Remainder of the sum of all transaction commitments. If the transaction
-	/// is well formed, amounts components should sum to zero and the excess
+	/// is well-formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key (sum of the commitment public keys).
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
@@ -1483,7 +1488,7 @@ impl Transaction {
 /// Returns new slices with cut-through elements removed.
 /// Also returns slices of the cut-through elements themselves.
 /// Note: Takes slices of _anything_ that is AsRef<Commitment> for greater flexibility.
-/// So we can cut_through inputs and outputs but we can also cut_through inputs and output identifiers.
+/// So we can cut_through inputs and outputs, but we can also cut_through inputs and output identifiers.
 /// Or we can get crazy and cut_through inputs with other inputs to identify intersection and difference etc.
 ///
 /// Example:
