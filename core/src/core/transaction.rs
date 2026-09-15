@@ -2292,7 +2292,11 @@ mod test {
 		assert_eq!(kernel2.excess_sig, sig.clone());
 	}
 
-	fn test_protocol_version(kernel: &TxKernel, commit: Commitment, sig: secp::Signature) {
+	fn assert_kernel_protocol_versions(
+		kernel: &TxKernel,
+		commit: Commitment,
+		sig: secp::Signature,
+	) {
 		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, kernel).expect("serialized failed");
@@ -2327,7 +2331,7 @@ mod test {
 		};
 
 		// Test explicit protocol version.
-		test_protocol_version(&kernel, commit, sig);
+		assert_kernel_protocol_versions(&kernel, commit, sig);
 
 		// Test with "default" protocol version.
 		let mut vec = vec![];
@@ -2362,7 +2366,7 @@ mod test {
 		};
 
 		// Test explicit protocol version.
-		test_protocol_version(&kernel, commit, sig);
+		assert_kernel_protocol_versions(&kernel, commit, sig);
 
 		// Test with "default" protocol version.
 		let mut vec = vec![];
