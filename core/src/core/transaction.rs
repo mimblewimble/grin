@@ -31,8 +31,6 @@ use std::cmp::Ordering;
 use std::cmp::{max, min};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
-use std::iter::FilterMap;
-use std::slice::Iter;
 use std::{error, fmt};
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -1030,9 +1028,7 @@ impl TransactionBody {
 	}
 
 	/// Map kernels to features fees.
-	fn map_kernels_fees(
-		&self,
-	) -> FilterMap<Iter<'_, TxKernel>, fn(&'_ TxKernel) -> Option<FeeFields>> {
+	fn map_kernels_fees(&self) -> impl Iterator<Item = FeeFields> + '_ {
 		self.kernels.iter().filter_map(|k| match k.features {
 			KernelFeatures::Coinbase => None,
 			KernelFeatures::Plain { fee } => Some(fee),
