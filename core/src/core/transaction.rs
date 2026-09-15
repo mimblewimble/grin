@@ -14,6 +14,7 @@
 
 //! Transactions
 
+use crate::core::committed::to_secrets;
 use crate::core::hash::{DefaultHashable, Hashed};
 use crate::core::{committed, Committed};
 use crate::libtx::{aggsig, secp_ser};
@@ -83,21 +84,19 @@ impl<'de> Deserialize<'de> for FeeFields {
 				formatter.write_str("an 64-bit integer")
 			}
 
-			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-			where
-				E: de::Error,
-			{
-				let value = value
-					.parse()
-					.map_err(|_| E::custom(format!("invalid fee field")))?;
-				self.visit_u64(value)
-			}
-
 			fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
 			where
 				E: de::Error,
 			{
 				Ok(FeeFields(value))
+			}
+
+			fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+			where
+				E: de::Error,
+			{
+				let value = value.parse().map_err(|_| E::custom("invalid fee field"))?;
+				self.visit_u64(value)
 			}
 		}
 
@@ -135,9 +134,9 @@ impl From<FeeFields> for u64 {
 
 impl FeeFields {
 	/// Fees are limited to 40 bits
-	const FEE_BITS: u32 = 40;
+	pub const FEE_BITS: u32 = 40;
 	/// Used to extract fee field
-	const FEE_MASK: u64 = (1u64 << FeeFields::FEE_BITS) - 1;
+	pub const FEE_MASK: u64 = (1u64 << FeeFields::FEE_BITS) - 1;
 
 	/// Fee shifts are limited to 4 bits
 	pub const FEE_SHIFT_BITS: u32 = 4;
@@ -212,7 +211,7 @@ impl Readable for NRDRelativeHeight {
 	}
 }
 
-/// Conversion from a u16 to a valid NRDRelativeHeight.
+/// Conversion from an u16 to a valid NRDRelativeHeight.
 /// Valid height is between 1 and WEEK_HEIGHT inclusive.
 impl TryFrom<u16> for NRDRelativeHeight {
 	type Error = Error;
@@ -246,7 +245,8 @@ impl From<NRDRelativeHeight> for u64 {
 }
 
 impl NRDRelativeHeight {
-	const MAX: u64 = consensus::WEEK_HEIGHT;
+	/// Maximum height value.
+	pub const MAX: u64 = consensus::WEEK_HEIGHT;
 
 	/// Create a new NRDRelativeHeight from the provided height.
 	/// Checks height is valid (between 1 and WEEK_HEIGHT inclusive).
@@ -285,10 +285,14 @@ pub enum KernelFeatures {
 }
 
 impl KernelFeatures {
-	const PLAIN_U8: u8 = 0;
-	const COINBASE_U8: u8 = 1;
-	const HEIGHT_LOCKED_U8: u8 = 2;
-	const NO_RECENT_DUPLICATE_U8: u8 = 3;
+	/// Plain kernel value.
+	pub const PLAIN_U8: u8 = 0;
+	/// Coinbase kernel value.
+	pub const COINBASE_U8: u8 = 1;
+	/// A kernel with an explicit lock height value.
+	pub const HEIGHT_LOCKED_U8: u8 = 2;
+	/// "No Recent Duplicate" (NRD) kernel value.
+	pub const NO_RECENT_DUPLICATE_U8: u8 = 3;
 
 	/// Underlying (u8) value representing this kernel variant.
 	/// This is the first byte when we serialize/deserialize the kernel features.
@@ -400,7 +404,7 @@ impl KernelFeatures {
 
 	// Always read feature byte, 8 bytes for fee_fields and 8 bytes for additional data
 	// representing lock height or relative height.
-	// Fee and additional data may be unused for some kernel variants but we need
+	// Fee and additional data may be unused for some kernel variants, but we need
 	// to read these bytes and verify they are 0 if unused.
 	fn read_v1<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let feature_byte = reader.read_u8()?;
@@ -449,7 +453,7 @@ impl KernelFeatures {
 	}
 
 	// V2 kernels only expect bytes specific to each variant.
-	// Coinbase kernels have no associated fee and we do not serialize a fee for these.
+	// Coinbase kernels have no associated fee, and we do not serialize a fee for these.
 	fn read_v2<R: Reader>(reader: &mut R) -> Result<KernelFeatures, ser::Error> {
 		let features = match reader.read_u8()? {
 			KernelFeatures::PLAIN_U8 => {
@@ -528,8 +532,8 @@ pub enum Error {
 	RangeProof,
 	/// Error originating from an invalid Merkle proof
 	MerkleProof,
-	/// Returns if the value hidden within the a RangeProof message isn't
-	/// repeated 3 times, indicating it's incorrect
+	/// Returns if the value hidden within the RangeProof message isn't
+	/// repeated 3 times, indicating if it's incorrect
 	InvalidProofMessage,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
@@ -560,7 +564,7 @@ impl error::Error for Error {
 	}
 }
 
-impl fmt::Display for Error {
+impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			_ => write!(f, "some kind of keychain error"),
@@ -602,7 +606,7 @@ pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
 	/// Remainder of the sum of all transaction commitments. If the transaction
-	/// is well formed, amounts components should sum to zero and the excess
+	/// is well-formed, amounts components should sum to zero and the excess
 	/// is hence a valid public key (sum of the commitment public keys).
 	#[serde(
 		serialize_with = "secp_ser::as_hex",
@@ -620,11 +624,11 @@ hashable_ord!(TxKernel);
 
 /// We want to be able to put kernels in a hashset in the pool.
 /// So we need to be able to hash them.
-impl ::std::hash::Hash for TxKernel {
-	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
+impl std::hash::Hash for TxKernel {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
 		ser::serialize_default(&mut vec, &self).expect("serialization failed");
-		::std::hash::Hash::hash(&vec, state);
+		std::hash::Hash::hash(&vec, state);
 	}
 }
 
@@ -860,7 +864,7 @@ impl Readable for TransactionBody {
 				let inputs: Vec<Input> = read_multi(reader, num_inputs)?;
 				Inputs::from(inputs.as_slice())
 			}
-			3..=ser::ProtocolVersion::MAX => {
+			3..=ProtocolVersion::MAX => {
 				let inputs: Vec<CommitWrapper> = read_multi(reader, num_inputs)?;
 				Inputs::from(inputs.as_slice())
 			}
@@ -1021,29 +1025,25 @@ impl TransactionBody {
 		self
 	}
 
+	/// Map kernels to features fees.
+	fn map_kernels_fees(&self) -> impl Iterator<Item = FeeFields> + '_ {
+		self.kernels.iter().filter_map(|k| match k.features {
+			KernelFeatures::Coinbase => None,
+			KernelFeatures::Plain { fee } => Some(fee),
+			KernelFeatures::HeightLocked { fee, .. } => Some(fee),
+			KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
+		})
+	}
+
 	/// Total fee for a TransactionBody is the sum of fees of all fee carrying kernels.
 	pub fn fee(&self) -> u64 {
-		self.kernels
-			.iter()
-			.filter_map(|k| match k.features {
-				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } => Some(fee),
-				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
-				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
-			})
+		self.map_kernels_fees()
 			.fold(0, |acc, fee_fields| acc.saturating_add(fee_fields.fee()))
 	}
 
 	/// fee_shift for a TransactionBody is the maximum of fee_shifts of all fee carrying kernels.
 	pub fn fee_shift(&self) -> u8 {
-		self.kernels
-			.iter()
-			.filter_map(|k| match k.features {
-				KernelFeatures::Coinbase => None,
-				KernelFeatures::Plain { fee } => Some(fee),
-				KernelFeatures::HeightLocked { fee, .. } => Some(fee),
-				KernelFeatures::NoRecentDuplicate { fee, .. } => Some(fee),
-			})
+		self.map_kernels_fees()
 			.fold(0, |acc, fee_fields| max(acc, fee_fields.fee_shift()))
 	}
 
@@ -1450,7 +1450,7 @@ impl Transaction {
 	/// Can be used to compare txs by their fee/weight ratio, aka feerate.
 	/// Don't use these values for anything else though due to precision multiplier.
 	pub fn fee_rate(&self) -> u64 {
-		self.fee() / self.weight() as u64
+		self.fee() / self.weight()
 	}
 
 	/// Calculate transaction weight
@@ -1483,7 +1483,7 @@ impl Transaction {
 /// Returns new slices with cut-through elements removed.
 /// Also returns slices of the cut-through elements themselves.
 /// Note: Takes slices of _anything_ that is AsRef<Commitment> for greater flexibility.
-/// So we can cut_through inputs and outputs but we can also cut_through inputs and output identifiers.
+/// So we can cut_through inputs and outputs, but we can also cut_through inputs and output identifiers.
 /// Or we can get crazy and cut_through inputs with other inputs to identify intersection and difference etc.
 ///
 /// Example:
@@ -1651,21 +1651,13 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
-		let positive_key = vec![mk_tx.offset]
-			.into_iter()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-		let negative_keys = kernel_offsets
-			.into_iter()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
+		let positive_keys = to_secrets(vec![mk_tx.offset], &secp);
+		let negative_keys = to_secrets(kernel_offsets, &secp);
 
-		if positive_key.is_empty() && negative_keys.is_empty() {
+		if positive_keys.is_empty() && negative_keys.is_empty() {
 			BlindingFactor::zero()
 		} else {
-			let sum = secp.blind_sum(positive_key, negative_keys)?;
+			let sum = secp.blind_sum(positive_keys, negative_keys)?;
 			BlindingFactor::from_secret_key(sum)
 		}
 	};
@@ -2298,6 +2290,23 @@ mod test {
 		assert_eq!(kernel2.excess_sig, sig.clone());
 	}
 
+	fn assert_kernel_protocol_versions(
+		kernel: &TxKernel,
+		commit: Commitment,
+		sig: secp::Signature,
+	) {
+		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+			let mut vec = vec![];
+			ser::serialize(&mut vec, version, kernel).expect("serialized failed");
+			let kernel2: TxKernel =
+				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
+					.unwrap();
+			assert_eq!(kernel.features, kernel2.features);
+			assert_eq!(kernel2.excess, commit);
+			assert_eq!(kernel2.excess_sig, sig.clone());
+		}
+	}
+
 	#[test]
 	fn test_height_locked_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed(false).unwrap();
@@ -2320,16 +2329,7 @@ mod test {
 		};
 
 		// Test explicit protocol version.
-		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
-			let mut vec = vec![];
-			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
-			let kernel2: TxKernel =
-				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
-					.unwrap();
-			assert_eq!(kernel.features, kernel2.features);
-			assert_eq!(kernel2.excess, commit);
-			assert_eq!(kernel2.excess_sig, sig.clone());
-		}
+		assert_kernel_protocol_versions(&kernel, commit, sig);
 
 		// Test with "default" protocol version.
 		let mut vec = vec![];
@@ -2364,16 +2364,7 @@ mod test {
 		};
 
 		// Test explicit protocol version.
-		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
-			let mut vec = vec![];
-			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
-			let kernel2: TxKernel =
-				ser::deserialize(&mut &vec[..], version, ser::DeserializationMode::default())
-					.unwrap();
-			assert_eq!(kernel.features, kernel2.features);
-			assert_eq!(kernel2.excess, commit);
-			assert_eq!(kernel2.excess_sig, sig.clone());
-		}
+		assert_kernel_protocol_versions(&kernel, commit, sig);
 
 		// Test with "default" protocol version.
 		let mut vec = vec![];
@@ -2454,7 +2445,7 @@ mod test {
 			.commit(1003, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
 
-		assert!(commit == commit_2);
+		assert_eq!(commit, commit_2);
 	}
 
 	#[test]
