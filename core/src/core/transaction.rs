@@ -95,9 +95,7 @@ impl<'de> Deserialize<'de> for FeeFields {
 			where
 				E: de::Error,
 			{
-				let value = value
-					.parse()
-					.map_err(|_| E::custom("invalid fee field".to_string()))?;
+				let value = value.parse().map_err(|_| E::custom("invalid fee field"))?;
 				self.visit_u64(value)
 			}
 		}
