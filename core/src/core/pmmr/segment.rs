@@ -19,6 +19,7 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
+use std::fmt;
 use std::fmt::Debug;
 
 const MAX_SEGMENT_READ_ITEMS: u64 = 1_000_000;
@@ -65,6 +66,17 @@ pub enum SegmentType {
 	RangeProof,
 	/// Kernel
 	Kernel,
+}
+
+impl fmt::Display for SegmentType {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match *self {
+			SegmentType::Bitmap => f.write_str("bitmap"),
+			SegmentType::Output => f.write_str("output"),
+			SegmentType::RangeProof => f.write_str("range proof"),
+			SegmentType::Kernel => f.write_str("kernel"),
+		}
+	}
 }
 
 /// Lumps possible types with segment ids to enable a unique identifier
