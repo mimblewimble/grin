@@ -87,6 +87,7 @@ fn open_port(host: &str) -> u16 {
 
 #[test]
 fn test_start_api() {
+	let _ = rustls::crypto::ring::default_provider().install_default();
 	util::init_test_logger();
 	let mut server = ApiServer::new();
 	let mut router = build_router();
@@ -132,6 +133,7 @@ fn test_start_api_address_in_use() {
 #[ignore]
 #[test]
 fn test_start_api_tls() {
+	let _ = rustls::crypto::ring::default_provider().install_default();
 	util::init_test_logger();
 	let tls_conf = TLSConfig::new(
 		"tests/fullchain.pem".to_string(),
