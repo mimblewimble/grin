@@ -20,7 +20,7 @@ use rand::{thread_rng, Rng};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::api;
 use crate::chain;
@@ -30,7 +30,10 @@ use crate::core::libtx::secp_ser;
 use crate::core::libtx::ProofBuilder;
 use crate::core::{consensus, core, global};
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
+use crate::util::StopState;
 use crate::ServerTxPool;
+
+const STOP_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Fees in block to use for coinbase amount calculation
 /// (Duplicated from Grin wallet project)
@@ -73,10 +76,45 @@ pub fn get_block(
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
+	get_block_internal(chain, tx_pool, key_id, wallet_listener_url, || false).unwrap()
+}
+
+/// Build a block unless shutdown is requested while retrying.
+pub(crate) fn get_block_with_stop(
+	chain: &Arc<chain::Chain>,
+	tx_pool: &ServerTxPool,
+	key_id: Option<Identifier>,
+	wallet_listener_url: Option<String>,
+	stop_state: &StopState,
+) -> Option<(core::Block, BlockFees)> {
+	get_block_internal(chain, tx_pool, key_id, wallet_listener_url, || {
+		stop_state.is_stopped()
+	})
+}
+
+fn get_block_internal(
+	chain: &Arc<chain::Chain>,
+	tx_pool: &ServerTxPool,
+	key_id: Option<Identifier>,
+	wallet_listener_url: Option<String>,
+	should_stop: impl Fn() -> bool,
+) -> Option<(core::Block, BlockFees)> {
 	let wallet_retry_interval = 5;
+	if should_stop() {
+		return None;
+	}
 	// get the latest chain state and build a block on top of it
-	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
+	let mut result = build_block(
+		chain,
+		tx_pool,
+		key_id.clone(),
+		wallet_listener_url.clone(),
+		&should_stop,
+	);
 	while let Err(e) = result {
+		if should_stop() {
+			return None;
+		}
 		let mut new_key_id = key_id.to_owned();
 		match e {
 			self::Error::Chain(c) => match c {
@@ -96,7 +134,9 @@ pub fn get_block(
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
-				thread::sleep(Duration::from_secs(wallet_retry_interval));
+				if sleep_or_stop(Duration::from_secs(wallet_retry_interval), &should_stop) {
+					return None;
+				}
 			}
 			ae => {
 				warn!("Error building new block: {:?}. Retrying.", ae);
@@ -105,13 +145,35 @@ pub fn get_block(
 
 		// only wait if we are still using the same key: a different coinbase commitment is unlikely
 		// to have duplication
-		if new_key_id.is_some() {
-			thread::sleep(Duration::from_millis(100));
+		if new_key_id.is_some() && sleep_or_stop(Duration::from_millis(100), &should_stop) {
+			return None;
 		}
 
-		result = build_block(chain, tx_pool, new_key_id, wallet_listener_url.clone());
+		result = build_block(
+			chain,
+			tx_pool,
+			new_key_id,
+			wallet_listener_url.clone(),
+			&should_stop,
+		);
 	}
-	return result.unwrap();
+	if should_stop() {
+		None
+	} else {
+		result.ok()
+	}
+}
+
+fn sleep_or_stop(duration: Duration, should_stop: &impl Fn() -> bool) -> bool {
+	let deadline = Instant::now() + duration;
+	while !should_stop() {
+		let remaining = deadline.saturating_duration_since(Instant::now());
+		if remaining.is_zero() {
+			return false;
+		}
+		thread::sleep(remaining.min(STOP_POLL_INTERVAL));
+	}
+	true
 }
 
 /// Builds a new block with the chain head as previous and eligible
@@ -121,6 +183,7 @@ fn build_block(
 	tx_pool: &ServerTxPool,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
+	should_stop: &impl Fn() -> bool,
 ) -> Result<(core::Block, BlockFees), Error> {
 	let head = chain.head_header()?;
 
@@ -160,7 +223,7 @@ fn build_block(
 		height,
 	};
 
-	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
+	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees, should_stop)?;
 	let mut b = core::Block::from_reward(&head, &txs, output, kernel, difficulty.difficulty)?;
 
 	// making sure we're not spending time mining a useless block
@@ -227,6 +290,7 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 fn get_coinbase(
 	wallet_listener_url: Option<String>,
 	block_fees: BlockFees,
+	should_stop: &impl Fn() -> bool,
 ) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 	match wallet_listener_url {
 		None => {
@@ -234,7 +298,7 @@ fn get_coinbase(
 			return burn_reward(block_fees);
 		}
 		Some(wallet_listener_url) => {
-			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
+			let res = create_coinbase(&wallet_listener_url, &block_fees, should_stop)?;
 			let output = res.output;
 			let kernel = res.kernel;
 			let key_id = res.key_id;
@@ -251,7 +315,11 @@ fn get_coinbase(
 
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
-fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+fn create_coinbase(
+	dest: &str,
+	block_fees: &BlockFees,
+	should_stop: &impl Fn() -> bool,
+) -> Result<CbData, Error> {
 	let url = format!("{}/v2/foreign", dest);
 	let req_body = json!({
 		"jsonrpc": "2.0",
@@ -263,18 +331,28 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	});
 
 	trace!("Sending build_coinbase request: {}", req_body);
-	let req = api::client::create_post_request(url.as_str(), None, &req_body)?;
-	let timeout = api::client::TimeOut::default();
-	let res: String = api::client::send_request(req, timeout).map_err(|e| {
-		let report = format!(
-			"Failed to get coinbase from {}. Is the wallet listening? {}",
-			dest, e
-		);
-		error!("{}", report);
-		Error::WalletComm(report)
-	})?;
+	let runtime = tokio::runtime::Builder::new_current_thread()
+		.enable_all()
+		.build()
+		.map_err(|e| Error::WalletComm(format!("Failed to start wallet request: {}", e)))?;
+	let res = runtime.block_on(async {
+		tokio::select! {
+			res = api::client::post_async::<_, Value>(url.as_str(), &req_body, None) => Some(res),
+			_ = wait_for_stop(should_stop) => None,
+		}
+	});
+	let res = match res {
+		Some(res) => res.map_err(|e| {
+			let report = format!(
+				"Failed to get coinbase from {}. Is the wallet listening? {}",
+				dest, e
+			);
+			error!("{}", report);
+			Error::WalletComm(report)
+		})?,
+		None => return Err(Error::General("Block building stopped".into())),
+	};
 
-	let res: Value = serde_json::from_str(&res).unwrap();
 	trace!("Response: {}", res);
 	if res["error"] != json!(null) {
 		let report = format!(
@@ -297,4 +375,10 @@ fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> 
 	};
 
 	Ok(ret_val)
+}
+
+async fn wait_for_stop(should_stop: &impl Fn() -> bool) {
+	while !should_stop() {
+		tokio::time::sleep(STOP_POLL_INTERVAL).await;
+	}
 }
