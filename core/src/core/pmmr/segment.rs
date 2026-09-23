@@ -73,7 +73,7 @@ impl fmt::Display for SegmentType {
 		match *self {
 			SegmentType::Bitmap => f.write_str("bitmap"),
 			SegmentType::Output => f.write_str("output"),
-			SegmentType::RangeProof => f.write_str("range proof"),
+			SegmentType::RangeProof => f.write_str("rangeproof"),
 			SegmentType::Kernel => f.write_str("kernel"),
 		}
 	}

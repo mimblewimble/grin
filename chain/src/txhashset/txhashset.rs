@@ -1434,11 +1434,11 @@ impl<'a> Extension<'a> {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.output_pmmr.size {
-						if self.output_pmmr.size == 1 {
-							// All initial outputs are spent up to this hash,
-							// Roll back the genesis output
+						let subtree_start = pmmr::bintree_leftmost(pos0);
+						if subtree_start < self.output_pmmr.size {
+							// Replace any local prefix of this pruned subtree, including genesis.
 							self.output_pmmr
-								.rewind(0, &Bitmap::new())
+								.rewind(subtree_start, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
 						}
 						self.output_pmmr
@@ -1478,11 +1478,11 @@ impl<'a> Extension<'a> {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.rproof_pmmr.size {
-						if self.rproof_pmmr.size == 1 {
-							// All initial outputs are spent up to this hash,
-							// Roll back the genesis output
+						let subtree_start = pmmr::bintree_leftmost(pos0);
+						if subtree_start < self.rproof_pmmr.size {
+							// Replace any local prefix of this pruned subtree, including genesis.
 							self.rproof_pmmr
-								.rewind(0, &Bitmap::new())
+								.rewind(subtree_start, &Bitmap::new())
 								.map_err(&Error::TxHashSetErr)?;
 						}
 						self.rproof_pmmr
