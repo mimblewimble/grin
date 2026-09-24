@@ -1737,7 +1737,7 @@ fn setup_head(
 				let mut pibd_in_progress = false;
 				let header = {
 					let head = batch.get_block_header(&head.last_block_h)?;
-					let pibd_tip = store.pibd_head()?;
+					let pibd_tip = store.pibd_head(&genesis.header)?;
 					let pibd_head = batch.get_block_header(&pibd_tip.last_block_h)?;
 					let pibd_mmr_in_progress = !resetting_pibd
 						&& pibd_head.height >= head.height

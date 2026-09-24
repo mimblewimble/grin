@@ -1430,7 +1430,8 @@ impl<'a> Extension<'a> {
 		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
 
 		// insert either leaves or pruned subtrees as we go
-		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
+		let skip_genesis = (self.output_pmmr.size == 1).then_some(0);
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, skip_genesis) {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.output_pmmr.size {
@@ -1468,13 +1469,14 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a rangeproof segment to the rangeproof PMMR. must be called in order
-	/// Sort and apply hashes and leaves within a segment to rangeproof pmmr, skipping over
-	/// genesis position.
+	/// Sort and apply hashes and leaves within a segment to rangeproof pmmr, skipping an
+	/// existing genesis position
 	pub fn apply_rangeproof_segment(&mut self, segment: Segment<RangeProof>) -> Result<(), Error> {
 		let (_sid, hash_pos, hashes, leaf_pos, leaf_data, _proof) = segment.parts();
 
 		// insert either leaves or pruned subtrees as we go
-		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, Some(0)) {
+		let skip_genesis = (self.rproof_pmmr.size == 1).then_some(0);
+		for insert in self.sort_pmmr_hashes_and_leaves(hash_pos, leaf_pos, skip_genesis) {
 			match insert {
 				OrderedHashLeafNode::Hash(idx, pos0) => {
 					if pos0 >= self.rproof_pmmr.size {
@@ -1533,8 +1535,9 @@ impl<'a> Extension<'a> {
 	/// Apply a kernel segment to the output PMMR. must be called in order
 	pub fn apply_kernel_segment(&mut self, segment: Segment<TxKernel>) -> Result<(), Error> {
 		let (_sid, _hash_pos, _hashes, leaf_pos, leaf_data, _proof) = segment.parts();
-		// Non prunable - insert only leaves (with genesis kernel removedj)
-		for insert in self.sort_pmmr_hashes_and_leaves(vec![], leaf_pos, Some(0)) {
+		// Non prunable - insert only leaves
+		let skip_genesis = (self.kernel_pmmr.size == 1).then_some(0);
+		for insert in self.sort_pmmr_hashes_and_leaves(vec![], leaf_pos, skip_genesis) {
 			match insert {
 				OrderedHashLeafNode::Hash(_, _) => {
 					return Err(Error::InvalidSegment(
