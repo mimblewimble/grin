@@ -52,6 +52,8 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
 
+const COMPACTION_INTERVAL_BLOCKS: u64 = 60;
+
 #[derive(Debug, Clone)]
 struct Orphan {
 	block: Block,
@@ -1329,20 +1331,20 @@ impl Chain {
 	/// * removes historical blocks and associated data from the db (unless archive mode)
 	///
 	pub fn compact(&self) -> Result<(), Error> {
-		// A node may be restarted multiple times in a short period of time.
-		// We compact at most once per 60 blocks in this situation by comparing
-		// current "head" and "tail" height to our cut-through horizon and
-		// allowing an additional 60 blocks in height before allowing a further compaction.
-		if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
-			let horizon = global::cut_through_horizon() as u64;
-			let threshold = horizon.saturating_add(60);
-			let next_compact = tail.height.saturating_add(threshold);
-			if next_compact > head.height {
-				debug!(
-					"compact: skipping startup compaction (next at {})",
-					next_compact
-				);
-				return Ok(());
+		// Avoid repeated compaction across frequent restarts
+		// Wait until head reaches tail + cut-through horizon + COMPACTION_INTERVAL_BLOCKS
+		if !self.archive_mode() {
+			if let (Ok(tail), Ok(head)) = (self.tail(), self.head()) {
+				let horizon = global::cut_through_horizon() as u64;
+				let threshold = horizon.saturating_add(COMPACTION_INTERVAL_BLOCKS);
+				let next_compact = tail.height.saturating_add(threshold);
+				if next_compact > head.height {
+					debug!(
+						"compact: skipping startup compaction (next at {})",
+						next_compact
+					);
+					return Ok(());
+				}
 			}
 		}
 
@@ -1355,12 +1357,28 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 
+		let head = batch.head()?;
+		// Archive compaction does not advance the body tail
+		// Check the marker under the write lock to serialize compaction attempts
+		if self.archive_mode() {
+			if let Some(last_compact) = batch.compaction_head()?.map(|x| x.height) {
+				let next_compact = last_compact.saturating_add(COMPACTION_INTERVAL_BLOCKS);
+				if last_compact <= head.height && next_compact > head.height {
+					debug!(
+						"compact: skipping archive compaction (next at {})",
+						next_compact
+					);
+					return Ok(());
+				}
+			}
+		}
+		let now = Instant::now();
+		info!("compact: starting at height {}", head.height);
 		// Compact the txhashset itself (rewriting the pruned backend files).
 		{
-			let head_header = batch.head_header()?;
-			let current_height = head_header.height;
-			let horizon_height =
-				current_height.saturating_sub(global::cut_through_horizon().into());
+			let horizon_height = head
+				.height
+				.saturating_sub(global::cut_through_horizon().into());
 			let horizon_hash = header_pmmr.get_header_hash_by_height(horizon_height)?;
 			let horizon_header = batch.get_block_header(&horizon_hash)?;
 
@@ -1379,8 +1397,12 @@ impl Chain {
 		// Rebuild our NRD kernel_pos index based on recent kernel history.
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 
+		if self.archive_mode() {
+			batch.save_compaction_head(&head)?;
+		}
 		// Commit all the above db changes.
 		batch.commit()?;
+		info!("compact: finished in {}ms", now.elapsed().as_millis());
 
 		Ok(())
 	}

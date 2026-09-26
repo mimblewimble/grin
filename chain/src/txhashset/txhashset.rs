@@ -52,6 +52,33 @@ const KERNEL_SUBDIR: &str = "kernel";
 
 const TXHASHSET_ZIP: &str = "txhashset_snapshot";
 
+fn first_header_with_output<F, E>(
+	pos: u64,
+	min_height: u64,
+	max_height: u64,
+	mut output_mmr_size: F,
+) -> Result<Option<u64>, E>
+where
+	F: FnMut(u64) -> Result<u64, E>,
+{
+	if min_height > max_height {
+		return Ok(None);
+	}
+
+	let mut low = min_height;
+	let mut high = max_height;
+	while low < high {
+		let mid = low + (high - low) / 2;
+		if output_mmr_size(mid)? < pos {
+			low = mid + 1;
+		} else {
+			high = mid;
+		}
+	}
+
+	Ok((output_mmr_size(low)? >= pos).then_some(low))
+}
+
 /// Convenience enum to keep track of hash and leaf insertions when rebuilding an mmr
 /// from segments
 #[derive(Eq)]
@@ -663,14 +690,8 @@ impl TxHashSet {
 			if let Ok((key, pos1)) = kp {
 				let pos0 = pos1.pos - 1;
 				if let Some(out) = output_pmmr.get_data(pos0) {
-					if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
-						// If the pos matches and the index key matches the commitment
-						// then keep the entry, other we want to clean it up.
-						if pos0 == pos0_via_mmr
-							&& batch.is_match_output_pos_key(&key, &out.commitment())
-						{
-							continue;
-						}
+					if batch.is_match_output_pos_key(&key, &out.commitment()) {
+						continue;
 					}
 				}
 				pos_to_delete.push(key);
@@ -702,40 +723,60 @@ impl TxHashSet {
 				.unwrap_or(true)
 		});
 
-		debug!(
-			"init_output_pos_index: {} utxos with missing index entries",
-			outputs_pos.len()
-		);
-
 		if outputs_pos.is_empty() {
+			debug!("init_output_pos_index: 0 utxos with missing index entries");
 			return Ok(());
 		}
 
+		info!(
+			"init_output_pos_index: repairing {} missing entries",
+			outputs_pos.len()
+		);
 		let total_outputs = outputs_pos.len();
 		let max_height = batch.head()?.height;
+		let mut header_reads = 0;
 
-		let mut i = 0;
-		for search_height in 0..max_height {
-			let hash = header_pmmr.get_header_hash_by_height(search_height + 1)?;
-			let h = batch.get_block_header(&hash)?;
-			while i < total_outputs {
-				let (commit, pos1) = outputs_pos[i];
-				if pos1 > h.output_mmr_size {
+		// Includes the final header check after the binary search
+		let max_reads_per_search = u64::BITS - max_height.leading_zeros() + 1;
+		if (total_outputs as u64).saturating_mul(u64::from(max_reads_per_search)) >= max_height {
+			// Walk once if searching could cost as many reads as a full scan
+			let mut outputs = outputs_pos.into_iter().peekable();
+			for height in 1..=max_height {
+				if outputs.peek().is_none() {
 					break;
 				}
-				batch.save_output_pos_height(
-					&commit,
-					CommitPos {
-						pos: pos1,
-						height: h.height,
-					},
-				)?;
-				i += 1;
+				header_reads += 1;
+				let hash = header_pmmr.get_header_hash_by_height(height)?;
+				let header = batch.get_block_header(&hash)?;
+				while let Some(&(commit, pos)) = outputs.peek() {
+					if pos > header.output_mmr_size {
+						break;
+					}
+					batch.save_output_pos_height(&commit, CommitPos { pos, height })?;
+					outputs.next();
+				}
+			}
+		} else {
+			// Output positions are sorted
+			let mut min_height = 1;
+			for (commit, pos1) in outputs_pos {
+				let height = first_header_with_output(pos1, min_height, max_height, |height| {
+					header_reads += 1;
+					let hash = header_pmmr.get_header_hash_by_height(height)?;
+					Ok::<u64, Error>(batch.get_block_header(&hash)?.output_mmr_size)
+				})?;
+				let Some(height) = height else {
+					break;
+				};
+
+				batch.save_output_pos_height(&commit, CommitPos { pos: pos1, height })?;
+				min_height = height;
 			}
 		}
-		debug!(
-			"init_output_pos_index: added entries for {} utxos, took {}s",
+		info!(
+			"init_output_pos_index: added entries for {} utxos using {} header reads, took {}s",
 			total_outputs,
+			header_reads,
 			now.elapsed().as_secs(),
 		);
 		Ok(())
@@ -2306,5 +2347,23 @@ mod tests {
 		assert_eq!(handle.head_hash().unwrap(), genesis.hash());
 
 		fs::remove_dir_all(dir).unwrap();
+	}
+
+	#[test]
+	fn finds_first_header_containing_output() {
+		let sizes = [0, 2, 2, 5, 9];
+		let find = |pos, min_height| {
+			first_header_with_output(pos, min_height, sizes.len() as u64, |height| {
+				Ok::<u64, ()>(sizes[height as usize - 1])
+			})
+			.unwrap()
+		};
+
+		assert_eq!(find(1, 1), Some(2));
+		assert_eq!(find(2, 1), Some(2));
+		assert_eq!(find(3, 2), Some(4));
+		assert_eq!(find(5, 4), Some(4));
+		assert_eq!(find(6, 4), Some(5));
+		assert_eq!(find(10, 5), None);
 	}
 }

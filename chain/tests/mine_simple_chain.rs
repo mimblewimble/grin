@@ -92,6 +92,87 @@ fn mine_short_chain() {
 	clean_output_dir(chain_dir);
 }
 
+#[test]
+fn archive_compaction() {
+	let chain_dir = ".grin.archive_compaction";
+	clean_output_dir(chain_dir);
+	global::set_local_chain_type(ChainTypes::AutomatedTesting);
+	let genesis = global::get_genesis_block();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+
+	let chain = Chain::init(
+		chain_dir.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis.clone(),
+		pow::verify_size,
+		true,
+		None,
+	)
+	.unwrap();
+	let block = prepare_block(&keychain, &chain.head_header().unwrap(), &chain, 1);
+	process_block(&chain, &block);
+	chain.compact().unwrap();
+	let compacted = chain.store().compaction_head().unwrap().unwrap();
+	drop(chain);
+
+	let chain = Chain::init(
+		chain_dir.to_string(),
+		Arc::new(NoopAdapter {}),
+		genesis,
+		pow::verify_size,
+		true,
+		None,
+	)
+	.unwrap();
+	let block = prepare_block(&keychain, &chain.head_header().unwrap(), &chain, 2);
+	process_block(&chain, &block);
+	chain.compact().unwrap();
+	assert_eq!(chain.store().compaction_head().unwrap(), Some(compacted));
+
+	let mut outputs = vec![];
+	for height in 3..=61 {
+		let block = prepare_block(&keychain, &chain.head_header().unwrap(), &chain, height);
+		outputs.push((block.outputs()[0].commitment(), height));
+		process_block(&chain, &block);
+		if height == 60 {
+			chain.compact().unwrap();
+			assert_eq!(chain.store().compaction_head().unwrap(), Some(compacted));
+		}
+	}
+	chain.compact().unwrap();
+	assert_eq!(
+		chain.store().compaction_head().unwrap(),
+		Some(chain.head().unwrap())
+	);
+
+	// Exercise both repair paths
+	for count in [1, outputs.len()] {
+		let store = chain.store();
+		let mut batch = store.batch().unwrap();
+		for (commit, _) in outputs.iter().take(count) {
+			batch.delete_output_pos_height(commit).unwrap();
+		}
+		// A marker ahead of the head must not suppress compaction
+		let mut marker = chain.head().unwrap();
+		marker.height += 1;
+		batch.save_compaction_head(&marker).unwrap();
+		batch.commit().unwrap();
+		chain.compact().unwrap();
+		assert_eq!(
+			store.compaction_head().unwrap(),
+			Some(chain.head().unwrap())
+		);
+		for (commit, height) in &outputs {
+			assert_eq!(
+				chain.get_header_for_output(*commit).unwrap().height,
+				*height
+			);
+		}
+	}
+
+	clean_output_dir(chain_dir);
+}
+
 // Convenience wrapper for processing a full block on the test chain.
 fn process_header(chain: &Chain, header: &BlockHeader) {
 	chain
