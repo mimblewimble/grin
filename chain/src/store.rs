@@ -36,6 +36,7 @@ const BLOCK_HEADER_PREFIX: u8 = b'h';
 const BLOCK_PREFIX: u8 = b'b';
 const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
+const COMPACTION_HEAD_PREFIX: u8 = b'C';
 const PIBD_HEAD_PREFIX: u8 = b'I';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 /// Prefix for output pos index.
@@ -101,6 +102,11 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(None, &[TAIL_PREFIX], None), || {
 			"TAIL".to_owned()
 		})
+	}
+
+	/// Last successful compaction head
+	pub fn compaction_head(&self) -> Result<Option<Tip>, Error> {
+		self.db.get_ser(None, &[COMPACTION_HEAD_PREFIX], None)
 	}
 
 	/// The current PIBD head (will differ from the other heads. Return genesis block if PIBD head doesn't exist).
@@ -222,6 +228,11 @@ impl<'a> Batch<'a> {
 		})
 	}
 
+	/// Last successful compaction head
+	pub fn compaction_head(&self) -> Result<Option<Tip>, Error> {
+		self.db.get_ser(None, &[COMPACTION_HEAD_PREFIX], None)
+	}
+
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(None, &[HEADER_HEAD_PREFIX], None), || {
@@ -242,6 +253,11 @@ impl<'a> Batch<'a> {
 	/// Save body "tail" to db.
 	pub fn save_body_tail(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(None, &[TAIL_PREFIX], t)
+	}
+
+	/// Save the compaction head
+	pub fn save_compaction_head(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[COMPACTION_HEAD_PREFIX], t)
 	}
 
 	/// Save header head to db.
