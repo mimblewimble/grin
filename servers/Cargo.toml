@@ -21,7 +21,6 @@ serde_json = "1"
 chrono = "0.4.11"
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["codec"] }
-async-stream = "0.3"
 walkdir = "2.3.1"
 hyper-util = { version = "0.1.20", features = ["client-legacy"] }
 http-body-util = "0.1.3"
