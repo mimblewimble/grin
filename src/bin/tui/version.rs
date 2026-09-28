@@ -14,27 +14,20 @@
 
 //! Version and build info
 
-use cursive::direction::Orientation;
-use cursive::traits::Nameable;
-use cursive::view::View;
-use cursive::views::{LinearLayout, ResizedView, TextView};
-
-use crate::tui::constants::VIEW_VERSION;
+use ratatui::layout::Rect;
+use ratatui::text::Line;
+use ratatui::widgets::Paragraph;
+use ratatui::Frame;
 
 use crate::info_strings;
 
-pub struct TUIVersionView;
-
-impl TUIVersionView {
-	/// Create basic status view
-	pub fn create() -> Box<dyn View> {
-		let (basic_info, detailed_info) = info_strings();
-		let basic_status_view = ResizedView::with_full_screen(
-			LinearLayout::new(Orientation::Vertical)
-				.child(TextView::new(basic_info))
-				.child(TextView::new(" "))
-				.child(TextView::new(detailed_info)),
-		);
-		Box::new(basic_status_view.with_name(VIEW_VERSION))
-	}
+/// Draw basic version/build info
+pub fn draw(f: &mut Frame, area: Rect) {
+	let (basic_info, detailed_info) = info_strings();
+	let lines = vec![
+		Line::from(basic_info),
+		Line::from(""),
+		Line::from(detailed_info),
+	];
+	f.render_widget(Paragraph::new(lines), area);
 }

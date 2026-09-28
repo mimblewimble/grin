@@ -12,93 +12,65 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use cursive::theme::{BaseColor, Color, ColorStyle};
-use cursive::traits::Nameable;
-use cursive::view::View;
-use cursive::views::ResizedView;
-use cursive::{Cursive, Printer};
+//! TUI log display: newest entries anchored to the bottom of the pane,
+//! matching the behavior of the previous cursive-based log view.
 
-use crate::tui::constants::VIEW_LOGS;
-use cursive::utils::lines::spans::{LinesIterator, Row};
-use cursive::utils::markup::StyledString;
-use grin_util::logger::LogEntry;
+use ratatui::layout::Rect;
+use ratatui::style::Color;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Wrap};
+use ratatui::Frame;
+
+use crate::tui::app::App;
 use log::Level;
-use std::collections::VecDeque;
 
-pub struct TUILogsView;
-
-impl TUILogsView {
-	pub fn create() -> impl View {
-		let logs_view = ResizedView::with_full_screen(LogBufferView::new(200).with_name("logs"));
-		logs_view.with_name(VIEW_LOGS)
-	}
-
-	pub fn update(c: &mut Cursive, entry: LogEntry) {
-		c.call_on_name("logs", |t: &mut LogBufferView| {
-			t.update(entry);
-		});
+fn color(level: Level) -> Color {
+	match level {
+		Level::Info => Color::Green,
+		Level::Warn => Color::Yellow,
+		Level::Error => Color::Red,
+		_ => Color::White,
 	}
 }
 
-struct LogBufferView {
-	buffer: VecDeque<LogEntry>,
-}
-
-impl LogBufferView {
-	fn new(size: usize) -> Self {
-		let mut buffer = VecDeque::new();
-		buffer.resize(
-			size,
-			LogEntry {
-				log: String::new(),
-				level: Level::Info,
-			},
-		);
-
-		LogBufferView { buffer }
+/// Draw the logs view, bottom-anchoring the newest log lines.
+///
+/// Uses ratatui's wrapping so display width and whitespace match the terminal.
+/// When content is shorter than the pane, it is shifted down so the newest
+/// lines still sit on the bottom edge (the old cursive view behaved this way).
+pub fn draw(f: &mut Frame, area: Rect, app: &App) {
+	if area.width == 0 || area.height == 0 {
+		return;
 	}
 
-	fn update(&mut self, entry: LogEntry) {
-		self.buffer.push_front(entry);
-		self.buffer.pop_back();
-	}
-
-	fn color(level: Level) -> ColorStyle {
-		match level {
-			Level::Info => ColorStyle::new(
-				Color::Light(BaseColor::Green),
-				Color::Dark(BaseColor::Black),
-			),
-			Level::Warn => ColorStyle::new(
-				Color::Light(BaseColor::Yellow),
-				Color::Dark(BaseColor::Black),
-			),
-			Level::Error => {
-				ColorStyle::new(Color::Light(BaseColor::Red), Color::Dark(BaseColor::Black))
-			}
-			_ => ColorStyle::new(
-				Color::Light(BaseColor::White),
-				Color::Dark(BaseColor::Black),
-			),
+	// logs ring buffer is newest-first; reverse so oldest is at the top.
+	let mut lines: Vec<Line> = Vec::new();
+	for entry in app.logs.iter().rev() {
+		for row in entry.log.trim_end_matches('\n').split('\n') {
+			lines.push(Line::from(Span::styled(
+				row.to_string(),
+				color(entry.level),
+			)));
 		}
 	}
-}
 
-impl View for LogBufferView {
-	fn draw(&self, printer: &Printer) {
-		let mut i = 0;
-		for entry in self.buffer.iter().take(printer.size.y) {
-			printer.with_color(LogBufferView::color(entry.level), |p| {
-				let log_message = StyledString::plain(entry.log.as_str());
-				let mut rows: Vec<Row> = LinesIterator::new(&log_message, printer.size.x).collect();
-				rows.reverse(); // So stack traces are in the right order.
-				for row in rows {
-					for span in row.resolve(&log_message) {
-						p.print((0, p.size.y.saturating_sub(i + 1)), span.content);
-						i += 1;
-					}
-				}
-			});
-		}
+	let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+	let total = paragraph.line_count(area.width);
+	let height = area.height as usize;
+
+	if total > height {
+		// Scroll so the newest (wrapped) lines fill the pane.
+		let scroll = (total - height) as u16;
+		f.render_widget(paragraph.scroll((scroll, 0)), area);
+	} else {
+		// Bottom-align short content by rendering into a sub-area at the bottom.
+		let y_offset = (height - total) as u16;
+		let content_area = Rect {
+			x: area.x,
+			y: area.y + y_offset,
+			width: area.width,
+			height: total as u16,
+		};
+		f.render_widget(paragraph, content_area);
 	}
 }
