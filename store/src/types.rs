@@ -353,10 +353,14 @@ where
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
 	/// written data accessible.
+	///
+	/// On failure (including out-of-disk-space), the in-memory buffer and rewind
+	/// backup are preserved so the caller can `discard()` the extension rather
+	/// than treating a half-written file as committed. See #3425.
 	pub fn flush(&mut self) -> io::Result<()> {
 		if let SizeInfo::VariableSize(ref mut size_file) = &mut self.size_info {
 			// Flush the associated size_file if we have one.
-			size_file.flush()?
+			size_file.flush().map_err(crate::map_io_err)?
 		}
 
 		if self.buffer_start_pos_bak > 0 {
@@ -369,14 +373,16 @@ where
 					.read(true)
 					.create(true)
 					.write(true)
-					.open(&self.path)?;
+					.open(&self.path)
+					.map_err(crate::map_io_err)?;
 
 				// Set length of the file to truncate it as necessary.
 				if self.buffer_start_pos == 0 {
-					file.set_len(0)?;
+					file.set_len(0).map_err(crate::map_io_err)?;
 				} else {
 					let (offset, size) = self.offset_and_size(self.buffer_start_pos - 1)?;
-					file.set_len(offset + size as u64)?;
+					file.set_len(offset + size as u64)
+						.map_err(crate::map_io_err)?;
 				};
 			}
 		}
@@ -386,14 +392,39 @@ where
 				.read(true)
 				.create(true)
 				.append(true)
-				.open(&self.path)?;
+				.open(&self.path)
+				.map_err(crate::map_io_err)?;
 			self.file = Some(file);
-			self.buffer_start_pos_bak = 0;
+			// Intentionally do *not* clear buffer_start_pos_bak until write+sync
+			// succeed, so discard()/retry still know we were in a rewound state.
 		}
 
-		self.file.as_mut().unwrap().write_all(&self.buffer[..])?;
-		self.file.as_mut().unwrap().sync_all()?;
+		let file = self
+			.file
+			.as_mut()
+			.ok_or_else(|| io::Error::new(io::ErrorKind::Other, "append-only file not open"))?;
 
+		if let Err(e) = file.write_all(&self.buffer[..]).and_then(|_| file.sync_all()) {
+			let e = crate::map_io_err(e);
+			if crate::is_out_of_disk_space(&e) {
+				error!(
+					"Out of disk space writing {}: free space and restart. \
+					 In-memory changes were not committed.",
+					self.path.display()
+				);
+			} else {
+				error!(
+					"Failed writing append-only file {}: {}. In-memory changes were not committed.",
+					self.path.display(),
+					e
+				);
+			}
+			// Keep buffer + buffer_start_pos_bak so discard() can roll back cleanly.
+			return Err(e);
+		}
+
+		// Write durable — only now clear rewind backup and buffer.
+		self.buffer_start_pos_bak = 0;
 		self.buffer.clear();
 		self.buffer_start_pos = self.size_in_elmts()?;
 

@@ -118,6 +118,11 @@ pub enum Error {
 	/// Internal issue when trying to save or load data from append only files
 	#[error("File Read Error: {0}")]
 	FileReadErr(String),
+	/// Filesystem is out of space while writing chain data
+	#[error(
+		"Out of disk space: {0}. Free disk space and restart the node; avoid `grin --clean` unless recovery fails."
+	)]
+	DiskFull(String),
 	/// Error serializing or deserializing a type
 	#[error("Serialization Error")]
 	SerErr {
@@ -202,6 +207,7 @@ impl Error {
 			| Error::StoreErr(_, _)
 			| Error::SerErr { .. }
 			| Error::TxHashSetErr(_)
+			| Error::DiskFull(_)
 			| Error::GenesisBlockRequired
 			| Error::Other(_) => false,
 			_ => true,
@@ -211,12 +217,19 @@ impl Error {
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
-		Error::StoreErr(error.clone(), format!("{:?}", error))
+		match &error {
+			store::Error::DiskFull(msg) => Error::DiskFull(msg.clone()),
+			_ => Error::StoreErr(error.clone(), format!("{:?}", error)),
+		}
 	}
 }
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
-		Error::TxHashSetErr(e.to_string())
+		if store::is_out_of_disk_space(&e) {
+			Error::DiskFull(e.to_string())
+		} else {
+			Error::TxHashSetErr(e.to_string())
+		}
 	}
 }
