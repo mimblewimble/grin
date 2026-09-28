@@ -187,6 +187,16 @@ impl Msg {
 	pub fn add_attachment(&mut self, attachment: File) {
 		self.attachment = Some(attachment)
 	}
+
+	/// Message type of this outbound message (for logging / diagnostics).
+	pub fn msg_type(&self) -> Type {
+		self.header.msg_type
+	}
+
+	/// Serialized body length in bytes.
+	pub fn body_len(&self) -> usize {
+		self.body.len()
+	}
 }
 
 /// Read a header from the provided stream without blocking if the
