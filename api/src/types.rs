@@ -607,7 +607,7 @@ impl BlockHeaderPrintable {
 			kernel_mmr_size: header.kernel_mmr_size,
 			nonce: header.pow.nonce,
 			edge_bits: header.pow.edge_bits(),
-			cuckoo_solution: header.pow.proof.nonces.clone(),
+			cuckoo_solution: header.pow.proof.nonces().to_vec(),
 			total_difficulty: header.pow.total_difficulty.to_num(),
 			secondary_scaling: header.pow.secondary_scaling,
 			total_kernel_offset: header.total_kernel_offset.to_hex(),

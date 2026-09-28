@@ -137,7 +137,10 @@ fn main() {
 	}
 
 	// Set the PoW solution and make sure the block is mostly valid
-	gen.header.pow.proof.nonces = solver_sols.sols[0].to_u64s();
+	gen.header
+		.pow
+		.proof
+		.set_nonces(solver_sols.sols[0].to_u64s());
 	assert!(gen.header.pow.is_secondary(), "Not a secondary header");
 	println!("Built genesis:\n{:?}", gen);
 	core::pow::verify_size(&gen.header).unwrap();
@@ -210,7 +213,7 @@ fn update_genesis_rs(gen: &core::core::Block) {
 	replacements.push(("nonce".to_string(), format!("{}", gen.header.pow.nonce)));
 	replacements.push((
 		"nonces".to_string(),
-		format!("vec!{:?}", gen.header.pow.proof.nonces),
+		format!("vec!{:?}", gen.header.pow.proof.nonces()),
 	));
 	replacements.push((
 		"excess".to_string(),

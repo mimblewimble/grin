@@ -59,7 +59,7 @@ impl PoWContext for CuckaroomContext {
 		if size != global::proofsize() {
 			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
-		let nonces = &proof.nonces;
+		let nonces = proof.nonces();
 		let mut from = vec![0u64; size];
 		let mut to = vec![0u64; size];
 		let mut xor_from: u64 = 0;

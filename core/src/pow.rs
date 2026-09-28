@@ -63,7 +63,7 @@ pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 	let mut ctx = global::create_pow_context::<u64>(
 		bh.height,
 		bh.pow.edge_bits(),
-		bh.pow.proof.nonces.len(),
+		bh.pow.proof.proof_size(),
 		MAX_SOLS,
 	)?;
 	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
@@ -137,7 +137,7 @@ mod test {
 
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 28106;
-		b.header.pow.proof.edge_bits = global::min_edge_bits();
+		b.header.pow.proof.set_edge_bits(global::min_edge_bits());
 		println!("proof {}", global::proofsize());
 		pow_size(
 			&mut b.header,
