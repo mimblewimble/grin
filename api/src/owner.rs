@@ -23,6 +23,7 @@ use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
 use crate::rest::*;
 use crate::types::Status;
+use crate::util::StopState;
 use std::net::SocketAddr;
 use std::sync::Weak;
 
@@ -37,6 +38,7 @@ pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
+	pub stop_state: Weak<StopState>,
 }
 
 impl Owner {
@@ -48,16 +50,23 @@ impl Owner {
 	/// * `tx_pool` - A non-owning reference of the transaction pool.
 	/// * `peers` - A non-owning reference of the peers.
 	/// * `sync_state` - A non-owning reference of the `sync_state`.
+	/// * `stop_state` - A non-owning reference of the node stop flag (for cancellable compact).
 	///
 	/// # Returns
 	/// * An instance of the Node holding references to the current chain, transaction pool, peers and sync_state.
 	///
 
-	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+	pub fn new(
+		chain: Weak<Chain>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+		stop_state: Weak<StopState>,
+	) -> Self {
 		Owner {
 			chain,
 			peers,
 			sync_state,
+			stop_state,
 		}
 	}
 
@@ -107,6 +116,7 @@ impl Owner {
 	pub fn compact_chain(&self) -> Result<(), Error> {
 		let chain_compact_handler = ChainCompactHandler {
 			chain: self.chain.clone(),
+			stop_state: self.stop_state.clone(),
 		};
 		chain_compact_handler.compact_chain()
 	}

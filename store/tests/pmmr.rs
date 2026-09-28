@@ -214,6 +214,59 @@ fn pmmr_compact_leaf_sibling() {
 	teardown(data_dir);
 }
 
+/// Abort after tmp write must discard tmp files and leave live roots intact.
+#[test]
+fn pmmr_compact_abort_before_replace() {
+	use std::sync::atomic::{AtomicUsize, Ordering};
+
+	let (data_dir, elems) = setup("compact_abort");
+	{
+		let mut backend =
+			store::pmmr::PMMRBackend::new(data_dir.to_string(), true, ProtocolVersion(1), None)
+				.unwrap();
+		let mmr_size = load(0, &elems[..], &mut backend);
+		backend.sync().unwrap();
+		let root_before = {
+			let pmmr = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+
+		// First should_abort is before tmp write (allow it); second is after
+		// tmp write and before replace (abort so discard_tmp runs).
+		let calls = AtomicUsize::new(0);
+		let done = backend
+			.check_compact_with_abort(2, &Bitmap::new(), || {
+				calls.fetch_add(1, Ordering::SeqCst) >= 1
+			})
+			.unwrap();
+		assert!(!done);
+		assert!(
+			calls.load(Ordering::SeqCst) >= 2,
+			"expected abort check after tmp write"
+		);
+
+		let root_after = {
+			let pmmr = PMMR::at(&mut backend, mmr_size);
+			pmmr.root().unwrap()
+		};
+		assert_eq!(root_before, root_after);
+
+		// No leftover .tmp companions under the data dir.
+		let tmp_left: Vec<_> = fs::read_dir(&data_dir)
+			.unwrap()
+			.filter_map(|e| e.ok())
+			.map(|e| e.path())
+			.filter(|p| p.extension().and_then(|s| s.to_str()) == Some("tmp"))
+			.collect();
+		assert!(
+			tmp_left.is_empty(),
+			"tmp files should be discarded on abort: {:?}",
+			tmp_left
+		);
+	}
+	teardown(data_dir);
+}
+
 #[test]
 fn pmmr_prune_compact() {
 	let (data_dir, elems) = setup("prune_compact");

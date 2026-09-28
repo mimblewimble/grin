@@ -85,6 +85,7 @@ where
 		Arc::downgrade(&chain),
 		Arc::downgrade(&peers),
 		Arc::downgrade(&sync_state),
+		Arc::downgrade(&stop_state),
 	);
 	router.add_route("/v2/owner", Arc::new(api_handler))?;
 
@@ -142,15 +143,22 @@ pub struct OwnerAPIHandlerV2 {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
+	pub stop_state: Weak<StopState>,
 }
 
 impl OwnerAPIHandlerV2 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+	pub fn new(
+		chain: Weak<Chain>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+		stop_state: Weak<StopState>,
+	) -> Self {
 		OwnerAPIHandlerV2 {
 			chain,
 			peers,
 			sync_state,
+			stop_state,
 		}
 	}
 }
@@ -161,6 +169,7 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 			self.chain.clone(),
 			self.peers.clone(),
 			self.sync_state.clone(),
+			self.stop_state.clone(),
 		);
 
 		Box::pin(async move {

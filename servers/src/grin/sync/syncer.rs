@@ -174,7 +174,9 @@ impl SyncRunner {
 					// This triggers a chain compaction to keep out local node tidy.
 					// Note: Chain compaction runs with an internal threshold
 					// so can be safely run even if the node is restarted frequently.
-					unwrap_or_restart_loop!(self.chain.compact());
+					unwrap_or_restart_loop!(self
+						.chain
+						.compact_with_stop(Some(self.stop_state.clone())));
 				}
 
 				// sleep for 10 secs but check stop signal every second
