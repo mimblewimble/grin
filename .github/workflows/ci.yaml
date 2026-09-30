@@ -45,7 +45,7 @@ jobs:
 
   telegram-notify:
     name: Telegram Notification
-    needs: [linux-tests, macos-tests, windows-tests]
+    needs: [clippy, linux-tests, macos-tests, windows-tests]
     if: always() && github.event_name == 'push'
     uses: ./.github/workflows/telegram.yaml
     secrets: inherit
