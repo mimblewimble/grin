@@ -375,7 +375,7 @@ impl Proof {
 
 	/// Number of bytes required store a proof of given edge bits
 	pub fn pack_len(bit_width: u8) -> usize {
-		(bit_width as usize * global::proofsize() + 7) / 8
+		(bit_width as usize * global::proofsize()).div_ceil(8)
 	}
 
 	/// Builds a proof with random POW data,
@@ -525,7 +525,7 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		writer.write_fixed_bytes(&self.pack_nonces())
+		writer.write_fixed_bytes(self.pack_nonces())
 	}
 }
 

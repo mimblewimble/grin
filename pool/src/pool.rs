@@ -522,7 +522,7 @@ impl Bucket {
 		agg_tx.validate(weighting)?;
 		Ok(Bucket {
 			fee_rate: agg_tx.fee_rate(),
-			raw_txs: raw_txs,
+			raw_txs,
 			age_idx: self.age_idx,
 		})
 	}

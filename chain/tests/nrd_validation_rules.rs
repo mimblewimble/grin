@@ -108,12 +108,12 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -125,7 +125,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -137,7 +137,7 @@ fn process_block_nrd_validation() -> Result<(), Error> {
 			build::input(consensus::REWARD - 20000, key_id2.clone()),
 			build::output(consensus::REWARD - 40000, key_id3.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -224,12 +224,12 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -241,7 +241,7 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -253,7 +253,7 @@ fn process_block_nrd_validation_relative_height_1() -> Result<(), Error> {
 			build::input(consensus::REWARD - 20000, key_id2.clone()),
 			build::output(consensus::REWARD - 40000, key_id3.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -323,12 +323,12 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// // Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
@@ -340,7 +340,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 			build::coinbase_input(consensus::REWARD, key_id1.clone()),
 			build::output(consensus::REWARD - 20000, key_id2.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -352,7 +352,7 @@ fn process_block_nrd_validation_fork() -> Result<(), Error> {
 			build::input(consensus::REWARD - 20000, key_id2.clone()),
 			build::output(consensus::REWARD - 40000, key_id3.clone()),
 		],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,

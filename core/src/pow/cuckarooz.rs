@@ -178,13 +178,13 @@ mod test {
 	fn cuckarooz19_29_vectors() {
 		global::set_local_chain_type(global::ChainTypes::Mainnet);
 		let mut ctx19 = new_impl(19, 42);
-		ctx19.params.siphash_keys = V1_19_HASH.clone();
+		ctx19.params.siphash_keys = V1_19_HASH;
 		assert!(ctx19
 			.verify(&Proof::new(V1_19_SOL.to_vec().clone()))
 			.is_ok());
 		assert!(ctx19.verify(&Proof::zero(42)).is_err());
 		let mut ctx29 = new_impl(29, 42);
-		ctx29.params.siphash_keys = V2_29_HASH.clone();
+		ctx29.params.siphash_keys = V2_29_HASH;
 		assert!(ctx29
 			.verify(&Proof::new(V2_29_SOL.to_vec().clone()))
 			.is_ok());

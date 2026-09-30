@@ -56,10 +56,7 @@ enum State {
 
 impl State {
 	fn is_none(&self) -> bool {
-		match self {
-			State::None => true,
-			_ => false,
-		}
+		matches!(self, State::None)
 	}
 }
 

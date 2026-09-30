@@ -141,7 +141,7 @@ impl Readable for Hash {
 
 impl Writeable for Hash {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_fixed_bytes(&self.0)
+		writer.write_fixed_bytes(self.0)
 	}
 }
 

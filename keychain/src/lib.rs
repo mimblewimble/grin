@@ -14,6 +14,9 @@
 
 //! Library module for the key holder functionalities provided by Grin.
 
+#![allow(deprecated)]
+#![allow(unexpected_cfgs)]
+
 use blake2_rfc as blake2;
 
 #[macro_use]

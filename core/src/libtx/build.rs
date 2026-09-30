@@ -213,11 +213,11 @@ where
 	let msg = kernel.msg_to_sign()?;
 
 	// Generate kernel public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp())?;
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp())?;
 	kernel.excess = keychain.secp().commit(0, skey)?;
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp())?;
-	kernel.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey))?;
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp())?;
+	kernel.excess_sig = aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey))?;
 	kernel.verify()?;
 	transaction_with_kernel(elems, kernel, excess, keychain, builder)
 }
@@ -246,7 +246,7 @@ where
 
 	// Update tx with new kernel and offset.
 	let mut tx = tx.replace_kernel(kernel);
-	tx.offset = blind_sum.split(&excess, &keychain.secp())?;
+	tx.offset = blind_sum.split(&excess, keychain.secp())?;
 	Ok(tx)
 }
 

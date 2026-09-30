@@ -44,11 +44,9 @@ impl TUIStatusView {
 				highest_height,
 				..
 			} => {
-				let percent = if highest_height == 0 {
-					0
-				} else {
-					sync_head.height * 100 / highest_height
-				};
+				let percent = (sync_head.height * 100)
+					.checked_div(highest_height)
+					.unwrap_or(0);
 				let sync_mode = match sync_mode {
 					HeaderSyncMode::Legacy => "Legacy",
 					HeaderSyncMode::Pihd => "PIHD",
@@ -66,11 +64,9 @@ impl TUIStatusView {
 				completed_to_height: _,
 				required_height: _,
 			} => {
-				let percent = if completed_leaves == 0 {
-					0
-				} else {
-					completed_leaves * 100 / leaves_required
-				};
+				let percent = (completed_leaves * 100)
+					.checked_div(leaves_required)
+					.unwrap_or(0);
 				Cow::Owned(format!(
 					"Sync step 2/7: Downloading Tx state (PIBD) - {} / {} entries - {}%",
 					completed_leaves, leaves_required, percent
@@ -78,7 +74,9 @@ impl TUIStatusView {
 			}
 			SyncStatus::TxHashsetDownload(stat) => {
 				if stat.total_size > 0 {
-					let percent = stat.downloaded_size * 100 / stat.total_size;
+					let percent = (stat.downloaded_size * 100)
+						.checked_div(stat.total_size)
+						.unwrap_or(0);
 					let start = stat
 						.prev_update_time
 						.timestamp_nanos_opt()
@@ -89,7 +87,7 @@ impl TUIStatusView {
 					Cow::Owned(format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
 							stat.total_size / 1_000_000,
 							percent,
-							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
+							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms } else { 0f64 },
 					))
 				} else {
 					let start = stat.start_time.timestamp_millis();
@@ -107,9 +105,7 @@ impl TUIStatusView {
 				kernel_pos,
 				kernel_pos_total,
 			} => {
-				if headers.is_some() && headers_total.is_some() {
-					let h = headers.unwrap();
-					let ht = headers_total.unwrap();
+				if let (Some(h), Some(ht)) = (headers, headers_total) {
 					let percent = h * 100 / ht;
 					Cow::Owned(format!(
 						"Sync step 3/7: Preparing for validation (kernel history) - {}/{} - {}%",
@@ -131,11 +127,7 @@ impl TUIStatusView {
 				rproofs,
 				rproofs_total,
 			} => {
-				let r_percent = if rproofs_total > 0 {
-					(rproofs * 100) / rproofs_total
-				} else {
-					0
-				};
+				let r_percent = (rproofs * 100).checked_div(rproofs_total).unwrap_or(0);
 				Cow::Owned(format!(
 					"Sync step 4/7: Validating chain state - range proofs: {}%",
 					r_percent
@@ -145,11 +137,7 @@ impl TUIStatusView {
 				kernels,
 				kernels_total,
 			} => {
-				let k_percent = if kernels_total > 0 {
-					(kernels * 100) / kernels_total
-				} else {
-					0
-				};
+				let k_percent = (kernels * 100).checked_div(kernels_total).unwrap_or(0);
 				Cow::Owned(format!(
 					"Sync step 5/7: Validating chain state - kernels: {}%",
 					k_percent
@@ -165,11 +153,9 @@ impl TUIStatusView {
 				current_height,
 				highest_height,
 			} => {
-				let percent = if highest_height == 0 {
-					0
-				} else {
-					current_height * 100 / highest_height
-				};
+				let percent = (current_height * 100)
+					.checked_div(highest_height)
+					.unwrap_or(0);
 				Cow::Owned(format!("Sync step 7/7: Downloading blocks: {}%", percent))
 			}
 			SyncStatus::Shutdown => Cow::Borrowed("Shutting down, closing connections"),

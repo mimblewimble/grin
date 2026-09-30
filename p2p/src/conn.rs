@@ -117,9 +117,9 @@ impl ConnHandle {
 	/// Two possible failure cases -
 	/// * Disconnected: Propagate this up to the caller so the peer connection can be closed.
 	/// * Full: Our internal msg buffer is full. This is not a problem with the peer connection
-	/// and we do not want to close the connection. We drop the msg rather than blocking here.
-	/// If the buffer is full because there is an underlying issue with the peer
-	/// and potentially the peer connection. We assume this will be handled at the peer level.
+	///   and we do not want to close the connection. We drop the msg rather than blocking here.
+	///   If the buffer is full because there is an underlying issue with the peer
+	///   and potentially the peer connection. We assume this will be handled at the peer level.
 	pub fn send(&self, msg: Msg) -> Result<(), Error> {
 		match self.send_channel.try_send(msg) {
 			Ok(()) => Ok(()),

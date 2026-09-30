@@ -41,7 +41,7 @@ fn sha256d_hash(data: &[u8]) -> [u8; 32] {
 	sha2.update(data);
 	ret.copy_from_slice(sha2.finalize().as_slice());
 	sha2 = Sha256::new();
-	sha2.update(&ret);
+	sha2.update(ret);
 	ret.copy_from_slice(sha2.finalize().as_slice());
 	ret
 }
@@ -358,14 +358,14 @@ pub fn _encode_slice(data: &[u8]) -> String {
 /// Obtain a string with the base58check encoding of a slice
 /// (Tack the first 4 256-digits of the object's Bitcoin hash onto the end.)
 pub fn check_encode_slice(data: &[u8]) -> String {
-	let checksum = sha256d_hash(&data);
+	let checksum = sha256d_hash(data);
 	encode_iter(data.iter().cloned().chain(checksum[0..4].iter().cloned()))
 }
 
 /// Obtain a string with the base58check encoding of a slice
 /// (Tack the first 4 256-digits of the object's Bitcoin hash onto the end.)
 pub fn _check_encode_slice_to_fmt(fmt: &mut fmt::Formatter<'_>, data: &[u8]) -> fmt::Result {
-	let checksum = sha256d_hash(&data);
+	let checksum = sha256d_hash(data);
 	let iter = data.iter().cloned().chain(checksum[0..4].iter().cloned());
 	_encode_iter_to_fmt(fmt, iter)
 }

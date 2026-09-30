@@ -230,7 +230,7 @@ impl Desegmenter {
 		txhashset::extending(&mut header_pmmr, &mut txhashset, &mut _batch, |ext, _| {
 			let extension = &mut ext.extension;
 			if let Some(b) = &self.bitmap_cache {
-				extension.update_leaf_sets(&b)?;
+				extension.update_leaf_sets(b)?;
 			}
 			Ok(())
 		})?;
@@ -266,7 +266,7 @@ impl Desegmenter {
 					view.validate_root()?;
 					current = batch.get_previous_header(&current)?;
 					count += 1;
-					if current.height % 100000 == 0 || current.height == total {
+					if current.height.is_multiple_of(100000) || current.height == total {
 						status.on_setup(Some(total - current.height), Some(total), None, None);
 					}
 					if stop_state.is_stopped() {
@@ -316,9 +316,9 @@ impl Desegmenter {
 				&mut header_pmmr,
 				&mut txhashset,
 				&mut batch,
-				|ext, mut batch| {
+				|ext, batch| {
 					let extension = &mut ext.extension;
-					extension.rewind(&self.archive_header, &mut batch)?;
+					extension.rewind(&self.archive_header, batch)?;
 
 					// Validate the extension, generating the utxo_sum and kernel_sum.
 					// Full validation, including rangeproofs and kernel signature verification.
@@ -403,7 +403,7 @@ impl Desegmenter {
 			}
 		} else {
 			// Check if we need to finalize bitmap
-			if self.bitmap_cache == None {
+			if self.bitmap_cache.is_none() {
 				// Should have all the pieces now, finalize the bitmap cache
 				self.finalize_bitmap()?;
 			}
@@ -490,18 +490,18 @@ impl Desegmenter {
 			// Get current size of bitmap MMR
 			let local_pmmr_size = self.bitmap_accumulator.readonly_pmmr().unpruned_size();
 			// Get iterator over expected bitmap elements
-			let mut identifier_iter = SegmentIdentifier::traversal_iter(
+			let identifier_iter = SegmentIdentifier::traversal_iter(
 				self.bitmap_mmr_size,
 				self.default_bitmap_segment_height,
 			);
 			// Advance iterator to next expected segment
-			while let Some(id) = identifier_iter.next() {
-				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size {
-					if !self.has_bitmap_segment_with_id(id) {
-						return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
-						if return_vec.len() >= max_elements {
-							return return_vec;
-						}
+			for id in identifier_iter {
+				if id.segment_pos_range(self.bitmap_mmr_size).1 > local_pmmr_size
+					&& !self.has_bitmap_segment_with_id(id)
+				{
+					return_vec.push(SegmentTypeIdentifier::new(SegmentType::Bitmap, id));
+					if return_vec.len() >= max_elements {
+						return return_vec;
 					}
 				}
 			}
@@ -679,23 +679,22 @@ impl Desegmenter {
 	fn calc_bitmap_mmr_sizes(&mut self) {
 		// Number of leaves (BitmapChunks)
 		self.bitmap_mmr_leaf_count =
-			(pmmr::n_leaves(self.archive_header.output_mmr_size) + 1023) / 1024;
+			pmmr::n_leaves(self.archive_header.output_mmr_size).div_ceil(1024);
 		trace!(
 			"pibd_desegmenter - expected number of leaves in bitmap MMR: {}",
 			self.bitmap_mmr_leaf_count
 		);
 		// Total size of Bitmap PMMR
 		self.bitmap_mmr_size =
-			1 + pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
+			1 + *pmmr::peaks(pmmr::insertion_to_pmmr_index(self.bitmap_mmr_leaf_count))
 				.last()
 				.unwrap_or(
-					&(pmmr::peaks(pmmr::insertion_to_pmmr_index(
+					pmmr::peaks(pmmr::insertion_to_pmmr_index(
 						self.bitmap_mmr_leaf_count - 1,
 					))
 					.last()
-					.unwrap()),
-				)
-				.clone();
+					.unwrap(),
+				);
 
 		trace!(
 			"pibd_desegmenter - expected size of bitmap MMR: {}",

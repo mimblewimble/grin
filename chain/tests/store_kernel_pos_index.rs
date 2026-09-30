@@ -23,7 +23,7 @@ use grin_store;
 use grin_util as util;
 mod chain_test_helper;
 use self::chain_test_helper::clean_output_dir;
-use crate::grin_store::Error;
+use grin_store::Error;
 
 fn setup_test() {
 	util::init_test_logger();

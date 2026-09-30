@@ -148,10 +148,7 @@ impl StateSync {
 				current_height: 0,
 				highest_height: 0,
 			},
-			|s| match s {
-				SyncStatus::TxHashsetDone => true,
-				_ => false,
-			},
+			|s| matches!(s, SyncStatus::TxHashsetDone),
 		);
 
 		if sync_need_restart || done {
@@ -242,7 +239,7 @@ impl StateSync {
 
 				if go {
 					self.state_sync_peer = None;
-					match self.request_state(&header_head) {
+					match self.request_state(header_head) {
 						Ok(peer) => {
 							self.state_sync_peer = Some(peer);
 						}
@@ -470,7 +467,7 @@ impl StateSync {
 			// Waiting a minute helps ensures that the cancellation isn't simply due to a single non-PIBD enabled
 			// peer having the max difficulty
 			if available_pibd_peers().with_filter(peer_usable).count() == 0 {
-				if let None = self.earliest_zero_pibd_peer_time {
+				if self.earliest_zero_pibd_peer_time.is_none() {
 					self.set_earliest_zero_pibd_peer_time(Some(Utc::now()));
 				}
 				if self.earliest_zero_pibd_peer_time.unwrap()
@@ -513,22 +510,18 @@ impl StateSync {
 				self.sync_state
 					.add_pibd_segment(seg_id, p.info.addr.0, archive_header.hash());
 				let res = match seg_id.segment_type {
-					SegmentType::Bitmap => p.send_bitmap_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::Output => p.send_output_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::RangeProof => p.send_rangeproof_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
-					SegmentType::Kernel => p.send_kernel_segment_request(
-						archive_header.hash(),
-						seg_id.identifier.clone(),
-					),
+					SegmentType::Bitmap => {
+						p.send_bitmap_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::Output => {
+						p.send_output_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::RangeProof => {
+						p.send_rangeproof_segment_request(archive_header.hash(), seg_id.identifier)
+					}
+					SegmentType::Kernel => {
+						p.send_kernel_segment_request(archive_header.hash(), seg_id.identifier)
+					}
 				};
 				if let Err(e) = res {
 					info!(
@@ -591,7 +584,7 @@ impl StateSync {
 				.map_err(|e| {
 					error!(
 						"chain error during getting a block header {}: {:?}",
-						&header_head.prev_block_h, e
+						header_head.prev_block_h, e
 					);
 					p2p::Error::Internal
 				})?;

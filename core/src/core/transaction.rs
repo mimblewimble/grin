@@ -128,7 +128,7 @@ impl From<u32> for FeeFields {
 
 impl From<FeeFields> for u64 {
 	fn from(fee_fields: FeeFields) -> Self {
-		fee_fields.0 as u64
+		fee_fields.0
 	}
 }
 
@@ -331,7 +331,7 @@ impl KernelFeatures {
 			} => (x, fee, relative_height).hash(),
 		};
 
-		let msg = secp::Message::from_slice(&hash.as_bytes())?;
+		let msg = secp::Message::from_slice(hash.as_bytes())?;
 		Ok(msg)
 	}
 
@@ -558,17 +558,13 @@ pub enum Error {
 
 impl error::Error for Error {
 	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of keychain error",
-		}
+		"some kind of keychain error"
 	}
 }
 
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of keychain error"),
-		}
+		write!(f, "some kind of keychain error")
 	}
 }
 
@@ -657,7 +653,7 @@ impl PMMRable for TxKernel {
 	type E = Self;
 
 	fn as_elmt(&self) -> Self::E {
-		self.clone()
+		*self
 	}
 
 	fn elmt_size() -> Option<u16> {
@@ -668,34 +664,22 @@ impl PMMRable for TxKernel {
 impl KernelFeatures {
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
-		match self {
-			KernelFeatures::Coinbase => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::Coinbase)
 	}
 
 	/// Is this a plain kernel?
 	pub fn is_plain(&self) -> bool {
-		match self {
-			KernelFeatures::Plain { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::Plain { .. })
 	}
 
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
-		match self {
-			KernelFeatures::HeightLocked { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::HeightLocked { .. })
 	}
 
 	/// Is this an NRD kernel?
 	pub fn is_nrd(&self) -> bool {
-		match self {
-			KernelFeatures::NoRecentDuplicate { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::NoRecentDuplicate { .. })
 	}
 }
 
@@ -743,11 +727,11 @@ impl TxKernel {
 		let pubkey = &self.excess.to_pubkey(&secp)?;
 		if !aggsig::verify_single(
 			&secp,
-			&sig,
+			sig,
 			&self.msg_to_sign()?,
 			None,
-			&pubkey,
-			Some(&pubkey),
+			pubkey,
+			Some(pubkey),
 			false,
 		) {
 			return Err(Error::IncorrectSignature);
@@ -1077,9 +1061,9 @@ impl TransactionBody {
 	/// details. Consensus critical and uses consensus weight values.
 	pub fn weight_by_iok(num_inputs: u64, num_outputs: u64, num_kernels: u64) -> u64 {
 		num_inputs
-			.saturating_mul(consensus::INPUT_WEIGHT as u64)
-			.saturating_add(num_outputs.saturating_mul(consensus::OUTPUT_WEIGHT as u64))
-			.saturating_add(num_kernels.saturating_mul(consensus::KERNEL_WEIGHT as u64))
+			.saturating_mul(consensus::INPUT_WEIGHT)
+			.saturating_add(num_outputs.saturating_mul(consensus::OUTPUT_WEIGHT))
+			.saturating_add(num_kernels.saturating_mul(consensus::KERNEL_WEIGHT))
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -1138,10 +1122,7 @@ impl TransactionBody {
 		let mut nrd_excess: Vec<Commitment> = self
 			.kernels
 			.iter()
-			.filter(|x| match x.features {
-				KernelFeatures::NoRecentDuplicate { .. } => true,
-				_ => false,
-			})
+			.filter(|x| matches!(x.features, KernelFeatures::NoRecentDuplicate { .. }))
 			.map(|x| x.excess())
 			.collect();
 
@@ -1393,12 +1374,12 @@ impl Transaction {
 
 	/// Get outputs
 	pub fn outputs(&self) -> &[Output] {
-		&self.body.outputs()
+		self.body.outputs()
 	}
 
 	/// Get kernels
 	pub fn kernels(&self) -> &[TxKernel] {
-		&self.body.kernels()
+		self.body.kernels()
 	}
 
 	/// Total fee for a transaction is the sum of fees of all kernels.
@@ -1508,7 +1489,7 @@ where
 	while inputs_idx < inputs.len() && outputs_idx < outputs.len() {
 		match inputs[inputs_idx]
 			.as_ref()
-			.cmp(&outputs[outputs_idx].as_ref())
+			.cmp(outputs[outputs_idx].as_ref())
 		{
 			Ordering::Less => {
 				inputs.swap(inputs_idx - ncut, inputs_idx);
@@ -1635,12 +1616,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: &[Transaction]) -> Result<Transactio
 		}
 	}
 	for mk_output in mk_tx.outputs() {
-		if !tx.outputs().contains(&mk_output) && !outputs.contains(mk_output) {
+		if !tx.outputs().contains(mk_output) && !outputs.contains(mk_output) {
 			outputs.push(*mk_output);
 		}
 	}
 	for mk_kernel in mk_tx.kernels() {
-		if !tx.kernels().contains(&mk_kernel) && !kernels.contains(mk_kernel) {
+		if !tx.kernels().contains(mk_kernel) && !kernels.contains(mk_kernel) {
 			kernels.push(*mk_kernel);
 		}
 	}
@@ -2266,11 +2247,11 @@ mod test {
 		let kernel = TxKernel {
 			features: KernelFeatures::Plain { fee: 10.into() },
 			excess: commit,
-			excess_sig: sig.clone(),
+			excess_sig: sig,
 		};
 
 		// Test explicit protocol version.
-		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+		for version in [ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, &kernel).expect("serialized failed");
 			let kernel2: TxKernel =
@@ -2295,7 +2276,7 @@ mod test {
 		commit: Commitment,
 		sig: secp::Signature,
 	) {
-		for version in vec![ProtocolVersion(1), ProtocolVersion(2)] {
+		for version in [ProtocolVersion(1), ProtocolVersion(2)] {
 			let mut vec = vec![];
 			ser::serialize(&mut vec, version, kernel).expect("serialized failed");
 			let kernel2: TxKernel =
@@ -2325,7 +2306,7 @@ mod test {
 				lock_height: 100,
 			},
 			excess: commit,
-			excess_sig: sig.clone(),
+			excess_sig: sig,
 		};
 
 		// Test explicit protocol version.
@@ -2360,7 +2341,7 @@ mod test {
 				relative_height: NRDRelativeHeight(100),
 			},
 			excess: commit,
-			excess_sig: sig.clone(),
+			excess_sig: sig,
 		};
 
 		// Test explicit protocol version.
@@ -2394,10 +2375,10 @@ mod test {
 		let skey = keychain
 			.derive_key(0, &key_id, SwitchCommitmentType::Regular)
 			.unwrap();
-		let pubkey = excess.to_pubkey(&keychain.secp()).unwrap();
+		let pubkey = excess.to_pubkey(keychain.secp()).unwrap();
 
 		let excess_sig =
-			aggsig::sign_single(&keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
+			aggsig::sign_single(keychain.secp(), &msg, &skey, None, Some(&pubkey)).unwrap();
 
 		kernel.excess = excess;
 		kernel.excess_sig = excess_sig;

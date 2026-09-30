@@ -62,7 +62,7 @@ impl PoWContext for CuckaroodContext {
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
-		let mut ndir = vec![0usize; 2];
+		let mut ndir = [0usize; 2];
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
 		let mask = u64::MAX >> (size as u64).leading_zeros(); // round size up to 2-power - 1
@@ -114,7 +114,7 @@ impl PoWContext for CuckaroodContext {
 			let mut k = if i & 1 == 0 {
 				headu[((uvs[i] << 1 | 1) & mask) as usize]
 			} else {
-				headv[((uvs[i] << 1 | 0) & mask) as usize]
+				headv[((uvs[i] << 1) & mask) as usize]
 			};
 			while k != 2 * size {
 				if uvs[k] == uvs[i] {

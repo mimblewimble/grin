@@ -91,9 +91,7 @@ impl OrphanBlockPool {
 		let mut orphans = self.orphans.write();
 		let mut height_idx = self.height_idx.write();
 		{
-			let height_hashes = height_idx
-				.entry(orphan.block.header.height)
-				.or_insert_with(|| vec![]);
+			let height_hashes = height_idx.entry(orphan.block.header.height).or_default();
 			height_hashes.push(orphan.block.hash());
 			orphans.insert(orphan.block.hash(), orphan);
 		}
@@ -119,7 +117,7 @@ impl OrphanBlockPool {
 				}
 			}
 			// cleanup index
-			height_idx.retain(|_, ref mut xs| xs.iter().any(|x| orphans.contains_key(&x)));
+			height_idx.retain(|_, ref mut xs| xs.iter().any(|x| orphans.contains_key(x)));
 
 			self.evicted
 				.fetch_add(old_len - orphans.len(), Ordering::Relaxed);
@@ -208,7 +206,7 @@ impl Chain {
 			pow_verifier,
 			denylist: Arc::new(RwLock::new(vec![])),
 			archive_mode,
-			genesis: genesis,
+			genesis,
 		};
 
 		chain.log_heads()?;
@@ -406,10 +404,8 @@ impl Chain {
 		if head.hash() == header.hash() {
 			return Err(Error::Unfit("duplicate block".into()));
 		}
-		if header.total_difficulty() <= head.total_difficulty {
-			if self.block_exists(header.hash())? {
-				return Err(Error::Unfit("duplicate block".into()));
-			}
+		if header.total_difficulty() <= head.total_difficulty && self.block_exists(header.hash())? {
+			return Err(Error::Unfit("duplicate block".into()));
 		}
 		Ok(())
 	}
@@ -644,10 +640,10 @@ impl Chain {
 	/// The extension and the db batch are discarded.
 	/// The batch ensures duplicate NRD kernels within the tx are handled correctly.
 	fn validate_tx_kernels(&self, tx: &Transaction) -> Result<(), Error> {
-		let has_nrd_kernel = tx.kernels().iter().any(|k| match k.features {
-			KernelFeatures::NoRecentDuplicate { .. } => true,
-			_ => false,
-		});
+		let has_nrd_kernel = tx
+			.kernels()
+			.iter()
+			.any(|k| matches!(k.features, KernelFeatures::NoRecentDuplicate { .. }));
 		if !has_nrd_kernel {
 			return Ok(());
 		}
@@ -813,7 +809,7 @@ impl Chain {
 		let mut txhashset = self.txhashset.write();
 		let merkle_proof =
 			txhashset::extending_readonly(&mut header_pmmr, &mut txhashset, |ext, batch| {
-				self.rewind_and_apply_fork(&header, ext, batch)?;
+				self.rewind_and_apply_fork(header, ext, batch)?;
 				ext.extension.merkle_proof(out_id, batch)
 			})?;
 
@@ -891,7 +887,7 @@ impl Chain {
 	///
 	pub fn segmenter(&self) -> Result<Segmenter, Error> {
 		// The archive header corresponds to the data we will segment.
-		let ref archive_header = self.txhashset_archive_header()?;
+		let archive_header = &self.txhashset_archive_header()?;
 
 		// Use our cached segmenter if we have one and the associated header matches.
 		if let Some(x) = self.pibd_segmenter.read().as_ref() {
@@ -906,7 +902,7 @@ impl Chain {
 		let mut cache = self.pibd_segmenter.write();
 		*cache = Some(segmenter.clone());
 
-		return Ok(segmenter);
+		Ok(segmenter)
 	}
 
 	/// This is an expensive rewind to recreate bitmap state but we only need to do this once.
@@ -1022,7 +1018,7 @@ impl Chain {
 
 		let mut count = 0;
 		let mut current = header.clone();
-		txhashset::rewindable_kernel_view(&txhashset, |view, batch| {
+		txhashset::rewindable_kernel_view(txhashset, |view, batch| {
 			while current.height > 0 {
 				view.rewind(&current)?;
 				view.validate_root()?;
@@ -1300,11 +1296,9 @@ impl Chain {
 		// Remove old blocks (including short-lived fork blocks) which height < tail.height
 		let mut blocks_to_delete = vec![];
 		let iter = batch.blocks_iter()?;
-		for block in iter {
-			if let Ok(block) = block {
-				if block.header.height < tail.height {
-					blocks_to_delete.push(block.hash());
-				}
+		for block in iter.flatten() {
+			if block.header.height < tail.height {
+				blocks_to_delete.push(block.hash());
 			}
 		}
 		let mut count = 0;
@@ -1402,7 +1396,7 @@ impl Chain {
 
 	/// Return Commit's MMR position
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
-		Ok(self.txhashset.read().get_output_pos(commit)?)
+		self.txhashset.read().get_output_pos(commit)
 	}
 
 	/// outputs by insertion index
@@ -1426,7 +1420,7 @@ impl Chain {
 			)));
 		}
 		let mut output_vec: Vec<Output> = vec![];
-		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
+		for (x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
 			output_vec.push(Output::new(x.features, x.commitment(), y));
 		}
 		Ok((outputs.0, last_index, output_vec))
@@ -1544,7 +1538,7 @@ impl Chain {
 			None => return Err(Error::OutputNotFound),
 		};
 		let hash = header_pmmr.get_header_hash_by_height(pos.height)?;
-		Ok(self.get_block_header(&hash)?)
+		self.get_block_header(&hash)
 	}
 
 	/// Gets the kernel with a given excess and the block height it is included in.
@@ -1590,7 +1584,7 @@ impl Chain {
 		let (kernel, mmr_index) = match self
 			.txhashset
 			.read()
-			.find_kernel(&excess, min_index, max_index)
+			.find_kernel(excess, min_index, max_index)
 		{
 			Some(k) => k,
 			None => return Ok(None),
@@ -1833,8 +1827,8 @@ fn setup_head(
 
 			// Save the genesis header with a "zero" header_root.
 			// We will update this later once we have the correct header_root.
-			batch.save_block(&genesis)?;
-			batch.save_spent_index(&genesis.hash(), &vec![])?;
+			batch.save_block(genesis)?;
+			batch.save_spent_index(&genesis.hash(), &[])?;
 			batch.save_body_head(&Tip::from_header(&genesis.header))?;
 
 			if !genesis.kernels().is_empty() {
@@ -1849,7 +1843,7 @@ fn setup_head(
 			}
 			txhashset::extending(header_pmmr, txhashset, &mut batch, |ext, batch| {
 				ext.extension
-					.apply_block(&genesis, ext.header_extension, batch)
+					.apply_block(genesis, ext.header_extension, batch)
 			})?;
 
 			// Save the block_sums to the db for use later.
