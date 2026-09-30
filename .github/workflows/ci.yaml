@@ -2,9 +2,16 @@ name: Continuous Integration
 on: [push, pull_request]
 
 jobs:
+  clippy:
+    name: Cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: cargo clippy
   linux-tests:
     name: Linux Tests
     runs-on: ubuntu-latest
+    needs: clippy
     strategy:
       matrix:
         job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
@@ -17,6 +24,7 @@ jobs:
   macos-tests:
     name: macOS Tests
     runs-on: macos-latest
+    needs: clippy
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -26,6 +34,7 @@ jobs:
   windows-tests:
     name: Windows Tests
     runs-on: windows-2022
+    needs: clippy
     env:
       ROARING_ARCH: x86-64-v2
     steps:
