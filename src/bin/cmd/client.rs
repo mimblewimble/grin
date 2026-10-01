@@ -86,10 +86,10 @@ impl HTTPNodeClient {
 		}
 		let mut t = term::stdout().unwrap();
 		let mut e = term::stdout().unwrap();
-		t.fg(term::color::MAGENTA).unwrap();
+		let _ = t.fg(term::color::MAGENTA);
 		writeln!(t, "{}", title).unwrap();
 		writeln!(t, "--------------------------").unwrap();
-		t.reset().unwrap();
+		let _ = t.reset();
 		match self.send_json_request::<Status>("get_status", &serde_json::Value::Null) {
 			Ok(status) => {
 				writeln!(e, "Chain type: {}", status.chain).unwrap();
@@ -111,7 +111,7 @@ impl HTTPNodeClient {
 			)
 			.unwrap(),
 		};
-		e.reset().unwrap();
+		let _ = e.reset();
 		println!()
 	}
 
