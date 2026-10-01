@@ -19,7 +19,6 @@ use crate::core::global;
 use crate::util::secp::pedersen::Commitment;
 use grin_chain as chain;
 use grin_core as core;
-use grin_store;
 use grin_util as util;
 mod chain_test_helper;
 use self::chain_test_helper::clean_output_dir;
@@ -233,12 +232,12 @@ fn test_store_kernel_idx_pop_back() {
 	);
 
 	assert_eq!(
-		index.peek_pos(&mut batch, commit),
+		index.peek_pos(&batch, commit),
 		Ok(Some(CommitPos { pos: 3, height: 3 })),
 	);
 
 	assert_eq!(
-		index.get_list(&mut batch, commit),
+		index.get_list(&batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 3, tail: 1 })),
 	);
 
@@ -375,13 +374,13 @@ fn test_store_kernel_idx_rewind() {
 	);
 
 	assert_eq!(
-		index.get_list(&mut batch, commit),
+		index.get_list(&batch, commit),
 		Ok(Some(ListWrapper::Multi { head: 3, tail: 2 })),
 	);
 
 	assert_eq!(index.rewind(&mut batch, commit, 1), Ok(()),);
 
-	assert_eq!(index.get_list(&mut batch, commit), Ok(None),);
+	assert_eq!(index.get_list(&batch, commit), Ok(None),);
 
 	clean_output_dir(chain_dir);
 }

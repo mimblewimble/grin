@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings -A clippy::arc_with_non_send_sync -A clippy::double_parens -A clippy::explicit_counter_loop -A clippy::large_enum_variant -A clippy::legacy_numeric_constants -A clippy::manual_flatten -A clippy::manual_try_fold -A clippy::module_inception -A clippy::new_without_default -A clippy::non_canonical_partial_ord_impl -A clippy::redundant_pattern_matching -A clippy::same_item_push -A clippy::should_implement_trait -A clippy::single_component_path_imports -A clippy::single_range_in_vec_init -A clippy::suspicious_open_options -A clippy::too_many_arguments -A clippy::type_complexity -A clippy::unnecessary_mut_passed -A clippy::unnecessary_unwrap -A clippy::useless_conversion -A clippy::vec_init_then_push -A clippy::while_let_loop
+        run: cargo clippy --all --all-targets -- -D warnings
 
   macos-tests:
     name: macOS Tests

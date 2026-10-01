@@ -1,3 +1,23 @@
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::legacy_numeric_constants)]
+#![allow(clippy::module_inception)]
+#![allow(clippy::manual_flatten)]
+#![allow(clippy::non_canonical_partial_ord_impl)]
+#![allow(clippy::manual_try_fold)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::explicit_counter_loop)]
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::suspicious_open_options)]
+#![allow(clippy::unnecessary_unwrap)]
+#![allow(clippy::while_let_loop)]
+#![allow(clippy::arc_with_non_send_sync)]
+#![allow(clippy::redundant_pattern_matching)]
+#![allow(clippy::single_range_in_vec_init)]
+#![allow(clippy::vec_init_then_push)]
+
 // Copyright 2021 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

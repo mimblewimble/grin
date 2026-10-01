@@ -323,9 +323,7 @@ where
 	}
 
 	// ... then reverse it and convert to chars
-	for _ in 0..leading_zero_count {
-		ret.push(0);
-	}
+	ret.resize(ret.len() + leading_zero_count, 0);
 	ret.reverse();
 	for ch in ret.iter_mut() {
 		*ch = BASE58_CHARS[*ch as usize];
