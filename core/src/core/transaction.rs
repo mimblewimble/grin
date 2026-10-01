@@ -664,34 +664,22 @@ impl PMMRable for TxKernel {
 impl KernelFeatures {
 	/// Is this a coinbase kernel?
 	pub fn is_coinbase(&self) -> bool {
-		match self {
-			KernelFeatures::Coinbase => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::Coinbase)
 	}
 
 	/// Is this a plain kernel?
 	pub fn is_plain(&self) -> bool {
-		match self {
-			KernelFeatures::Plain { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::Plain { .. })
 	}
 
 	/// Is this a height locked kernel?
 	pub fn is_height_locked(&self) -> bool {
-		match self {
-			KernelFeatures::HeightLocked { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::HeightLocked { .. })
 	}
 
 	/// Is this an NRD kernel?
 	pub fn is_nrd(&self) -> bool {
-		match self {
-			KernelFeatures::NoRecentDuplicate { .. } => true,
-			_ => false,
-		}
+		matches!(self, KernelFeatures::NoRecentDuplicate { .. })
 	}
 }
 
@@ -1134,10 +1122,7 @@ impl TransactionBody {
 		let mut nrd_excess: Vec<Commitment> = self
 			.kernels
 			.iter()
-			.filter(|x| match x.features {
-				KernelFeatures::NoRecentDuplicate { .. } => true,
-				_ => false,
-			})
+			.filter(|x| matches!(x.features, KernelFeatures::NoRecentDuplicate { .. }))
 			.map(|x| x.excess())
 			.collect();
 
@@ -1486,6 +1471,8 @@ impl Transaction {
 /// Inputs: [A, B, C]
 /// Outputs: [C, D, E]
 /// Returns: ([A, B], [D, E], [C], [C]) # element C is cut-through
+// Keep the existing cut-through return type
+#[allow(clippy::type_complexity)]
 pub fn cut_through<'a, 'b, T, U>(
 	inputs: &'a mut [T],
 	outputs: &'b mut [U],

@@ -148,10 +148,7 @@ impl StateSync {
 				current_height: 0,
 				highest_height: 0,
 			},
-			|s| match s {
-				SyncStatus::TxHashsetDone => true,
-				_ => false,
-			},
+			|s| matches!(s, SyncStatus::TxHashsetDone),
 		);
 
 		if sync_need_restart || done {

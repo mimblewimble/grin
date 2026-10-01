@@ -176,6 +176,8 @@ where
 /// Example:
 /// let (tx, sum) = build::transaction(tx, vec![input_rand(4), output_rand(1))], keychain)?;
 ///
+// Keep calling Append callbacks after errors
+#[allow(clippy::manual_try_fold)]
 pub fn partial_transaction<K, B>(
 	tx: Transaction,
 	elems: &[Box<Append<K, B>>],
@@ -225,6 +227,8 @@ where
 /// Build a complete transaction with the provided kernel and corresponding private excess.
 /// NOTE: Only used in tests (for convenience).
 /// Cannot recommend passing private excess around like this in the real world.
+// Keep calling Append callbacks after errors
+#[allow(clippy::manual_try_fold)]
 pub fn transaction_with_kernel<K, B>(
 	elems: &[Box<Append<K, B>>],
 	kernel: TxKernel,

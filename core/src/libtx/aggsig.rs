@@ -41,7 +41,6 @@ use util::secp::{self, aggsig, Message, Secp256k1, Signature};
 /// # Remarks
 ///
 /// The resulting SecretKey is guaranteed to have Jacobi symbol 1.
-
 pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 	let nonce = aggsig::export_secnonce_single(secp)?;
 	Ok(nonce)
@@ -55,11 +54,11 @@ pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 /// * `secp` - A Secp256k1 Context initialized for Signing
 /// * `sec_key` - The signer's secret key
 /// * `sec_nonce` - The signer's secret nonce (the public version of which
-/// was added to the `nonce_sum` total)
+///   was added to the `nonce_sum` total)
 /// * `nonce_sum` - The sum of the public nonces of all signers participating
-/// in the full signature. This value is encoded in e.
+///   in the full signature. This value is encoded in e.
 /// * `pubkey_sum` - (Optional) The sum of the public keys of all signers participating
-/// in the full signature. If included, this value is encoded in e.
+///   in the full signature. If included, this value is encoded in e.
 /// * `msg` - The message to sign.
 ///
 /// # Example
@@ -91,7 +90,6 @@ pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 ///     &message,
 ///).unwrap();
 /// ```
-
 pub fn calculate_partial_sig(
 	secp: &Secp256k1,
 	sec_key: &SecretKey,
@@ -124,12 +122,12 @@ pub fn calculate_partial_sig(
 ///
 /// * `secp` - A Secp256k1 Context initialized for Validation
 /// * `sig` - The signature to validate, created via a call to
-/// [`calculate_partial_sig`](fn.calculate_partial_sig.html)
+///   [`calculate_partial_sig`](fn.calculate_partial_sig.html)
 /// * `pub_nonce_sum` - The sum of the public nonces of all signers participating
-/// in the full signature. This value is encoded in e.
+///   in the full signature. This value is encoded in e.
 /// * `pubkey` - Corresponding Public Key of the private key used to sign the message.
 /// * `pubkey_sum` - (Optional) The sum of the public keys of all signers participating
-/// in the full signature. If included, this value is encoded in e.
+///   in the full signature. If included, this value is encoded in e.
 /// * `msg` - The message to verify.
 ///
 /// # Example
@@ -174,7 +172,6 @@ pub fn calculate_partial_sig(
 ///     &message,
 ///);
 /// ```
-
 pub fn verify_partial_sig(
 	secp: &Secp256k1,
 	sig: &Signature,
@@ -209,10 +206,10 @@ pub fn verify_partial_sig(
 /// * `k` - The Keychain implementation being used
 /// * `msg` - The message to sign (fee|lockheight).
 /// * `key_id` - The keychain key id corresponding to the private key
-/// with which to sign the message
+///   with which to sign the message
 /// * `blind_sum` - (Optional) The sum of all blinding factors in the transaction
-/// in the case of a coinbase transaction this will simply be the corresponding
-/// public key.
+///   in the case of a coinbase transaction this will simply be the corresponding
+///   public key.
 ///
 /// # Example
 ///
@@ -246,7 +243,6 @@ pub fn verify_partial_sig(
 /// let pubkey = excess.to_pubkey(&secp).unwrap();
 /// let sig = aggsig::sign_from_key_id(&secp, &keychain, &msg, value, &key_id, None, Some(&pubkey)).unwrap();
 /// ```
-
 pub fn sign_from_key_id<K>(
 	secp: &Secp256k1,
 	k: &K,
@@ -275,7 +271,7 @@ where
 /// * `sig` - The Signature to verify
 /// * `msg` - The message to sign (fee|lockheight).
 /// * `commit` - The commitment to verify. The actual public key used
-/// during verification is derived from this commit.
+///   during verification is derived from this commit.
 ///
 /// # Example
 ///
@@ -315,7 +311,6 @@ where
 ///     aggsig::verify_single_from_commit(&keychain.secp(), &sig, &msg, &excess);
 /// assert!(!sig_verifies.is_err());
 /// ```
-
 pub fn verify_single_from_commit(
 	secp: &Secp256k1,
 	sig: &Signature,
@@ -341,8 +336,8 @@ pub fn verify_single_from_commit(
 /// * `sig` - The Signature to verify
 /// * `pubkey` - Corresponding Public Key of the private key used to sign the message.
 /// * `pubkey_sum` - (Optional) The sum of the public keys of all signers participating
-/// in the full signature. If included, this value is encoded in e. Must be the same
-/// value as when the signature was created to verify correctly.
+///   in the full signature. If included, this value is encoded in e. Must be the same
+///   value as when the signature was created to verify correctly.
 /// * `msg` - The message to verify (fee|lockheight).
 ///
 /// # Example
@@ -383,7 +378,6 @@ pub fn verify_single_from_commit(
 ///     );
 /// assert!(!sig_verifies.is_err());
 /// ```
-
 pub fn verify_completed_sig(
 	secp: &Secp256k1,
 	sig: &Signature,

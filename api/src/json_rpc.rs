@@ -142,7 +142,7 @@ impl fmt::Display for Error {
 				write!(f, "duplicate RPC batch response ID: {}", v)
 			}
 			Error::_WrongBatchResponseId(ref v) => write!(f, "wrong RPC batch response ID: {}", v),
-			_ => write!(f, "{}", self),
+			_ => write!(f, "{:?}", self),
 		}
 	}
 }
@@ -271,5 +271,22 @@ pub fn _result_to_response(
 			id,
 			jsonrpc: Some(String::from("2.0")),
 		},
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::Error;
+
+	#[test]
+	fn display() {
+		for (error, expected) in [
+			(Error::_NonceMismatch, "_NonceMismatch"),
+			(Error::_VersionMismatch, "_VersionMismatch"),
+			(Error::_EmptyBatch, "_EmptyBatch"),
+			(Error::_WrongBatchResponseSize, "_WrongBatchResponseSize"),
+		] {
+			assert_eq!(error.to_string(), expected);
+		}
 	}
 }

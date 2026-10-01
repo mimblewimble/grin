@@ -193,7 +193,7 @@ impl State {
 		State {
 			current_block_versions: blocks,
 			current_key_id: None,
-			current_difficulty: <u64>::max_value(),
+			current_difficulty: u64::MAX,
 			minimum_share_difficulty,
 		}
 	}
@@ -714,10 +714,12 @@ impl WorkersList {
 		let mut workers_list = self.workers_list.write();
 		workers_list.insert(worker_id, worker);
 
-		let mut worker_stats = WorkerStats::default();
-		worker_stats.is_connected = true;
-		worker_stats.id = worker_id.to_string();
-		worker_stats.pow_difficulty = stratum_stats.minimum_share_difficulty;
+		let worker_stats = WorkerStats {
+			is_connected: true,
+			id: worker_id.to_string(),
+			pow_difficulty: stratum_stats.minimum_share_difficulty,
+			..WorkerStats::default()
+		};
 		stratum_stats.worker_stats.push(worker_stats);
 		stratum_stats.num_workers = workers_list.len();
 		worker_id

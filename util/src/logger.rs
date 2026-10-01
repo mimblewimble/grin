@@ -262,9 +262,11 @@ pub fn init_test_logger() {
 	if *was_init_ref.deref() {
 		return;
 	}
-	let mut logger = LoggingConfig::default();
-	logger.log_to_file = false;
-	logger.stdout_log_level = Level::Debug;
+	let logger = LoggingConfig {
+		log_to_file: false,
+		stdout_log_level: Level::Debug,
+		..LoggingConfig::default()
+	};
 
 	// Save current logging configuration
 	let mut config_ref = LOGGING_CONFIG.lock();

@@ -148,6 +148,8 @@ where
 	.unwrap()
 }
 
+// Used by only some integration tests
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
 

@@ -142,10 +142,7 @@ pub enum SerializationMode {
 impl SerializationMode {
 	/// Hash mode?
 	pub fn is_hash_mode(&self) -> bool {
-		match self {
-			SerializationMode::Hash => true,
-			_ => false,
-		}
+		matches!(self, SerializationMode::Hash)
 	}
 }
 
@@ -217,19 +214,13 @@ pub trait Writer {
 const MAX_READ_SIZE: usize = 100_000;
 
 /// Signal to a deserializable object how much of its data should be deserialized
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub enum DeserializationMode {
 	/// Deserialize everything sufficiently to fully reconstruct the object
+	#[default]
 	Full,
 	/// For Block Headers, skip reading proof
 	SkipPow,
-}
-
-impl DeserializationMode {
-	/// Default deserialization mode
-	pub fn default() -> Self {
-		DeserializationMode::Full
-	}
 }
 
 /// Implementations defined how different numbers and binary structures are
@@ -352,7 +343,7 @@ pub struct ProtocolVersion(pub u32);
 
 impl ProtocolVersion {
 	/// The max protocol version supported.
-	pub const MAX: u32 = std::u32::MAX;
+	pub const MAX: u32 = u32::MAX;
 
 	/// Protocol version as u32 to allow for convenient exhaustive matching on values.
 	pub fn value(self) -> u32 {

@@ -128,6 +128,7 @@ impl Server {
 			.read(true)
 			.write(true)
 			.create(true)
+			.truncate(false)
 			.open(&path)?;
 		lock_file.try_lock_exclusive().inspect_err(|_e| {
 			let mut stderr = std::io::stderr();
@@ -159,11 +160,7 @@ impl Server {
 		// This translates to false here.
 		let archive_mode = config.archive_mode.unwrap_or(false);
 
-		let stop_state = if stop_state.is_some() {
-			stop_state.unwrap()
-		} else {
-			Arc::new(StopState::new())
-		};
+		let stop_state = stop_state.unwrap_or_else(|| Arc::new(StopState::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
@@ -196,15 +193,12 @@ impl Server {
 		let (db_migration_prog_tx, db_migration_prog_rx) = std::sync::mpsc::channel::<i8>();
 		if let Some(ref server_tx) = server_tx {
 			let server_tx = server_tx.clone();
-			thread::spawn(move || loop {
-				match db_migration_prog_rx.recv() {
-					Ok(p) => {
-						if p == 100 {
-							break;
-						}
-						let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
+			thread::spawn(move || {
+				while let Ok(p) = db_migration_prog_rx.recv() {
+					if p == 100 {
+						break;
 					}
-					Err(_) => break,
+					let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
 				}
 			});
 		}

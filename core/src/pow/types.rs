@@ -23,7 +23,6 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// proof of work within a block header.
 use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
-use std::u64;
 use std::{fmt, iter};
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
@@ -416,7 +415,7 @@ impl Proof {
 	/// Difficulty achieved by this proof with given scaling factor
 	fn scaled_difficulty(&self, scale: u64) -> u64 {
 		let diff = ((scale as u128) << 64) / (max(1, self.hash().to_u64()) as u128);
-		min(diff, <u64>::max_value() as u128) as u64
+		min(diff, u64::MAX as u128) as u64
 	}
 }
 
@@ -567,7 +566,7 @@ mod tests {
 			v.push(rng.gen_range(
 				u64::pow(2, bits - 1),
 				if bits == 64 {
-					std::u64::MAX
+					u64::MAX
 				} else {
 					u64::pow(2, bits)
 				},

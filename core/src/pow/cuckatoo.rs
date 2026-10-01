@@ -30,11 +30,11 @@ struct Graph {
 	links: Vec<Link>,
 	/// Index into links array
 	adj_list: Vec<u64>,
-	///
+	/// Visited nodes
 	visited: Bitmap,
 	/// Maximum solutions
 	max_sols: u32,
-	///
+	/// Cycle proofs found
 	pub solutions: Vec<Proof>,
 	/// proof size
 	proof_size: usize,
@@ -45,7 +45,7 @@ struct Graph {
 impl Graph {
 	/// Create a new graph with given parameters
 	pub fn new(max_edges: u64, max_sols: u32, proof_size: usize) -> Result<Graph, Error> {
-		if max_edges >= u64::max_value() / 2 {
+		if max_edges >= u64::MAX / 2 {
 			return Err(Error::Verification("graph is to big to build".to_string()));
 		}
 		let max_nodes = 2 * max_edges;
@@ -58,14 +58,14 @@ impl Graph {
 			adj_list: vec![],
 			visited: Bitmap::new(),
 			solutions: vec![],
-			nil: u64::max_value(),
+			nil: u64::MAX,
 		})
 	}
 
 	pub fn reset(&mut self) -> Result<(), Error> {
 		//TODO: Can be optimised
 		self.links = Vec::with_capacity(2 * self.max_nodes as usize);
-		self.adj_list = vec![u64::max_value(); 2 * self.max_nodes as usize];
+		self.adj_list = vec![u64::MAX; 2 * self.max_nodes as usize];
 		self.solutions = vec![Proof::zero(self.proof_size); 1];
 		self.visited = Bitmap::new();
 		Ok(())

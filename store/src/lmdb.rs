@@ -559,10 +559,7 @@ impl Store {
 		let _tx_counter = self.enter_tx();
 
 		let res = {
-			let d = match deser_mode {
-				Some(d) => d,
-				_ => DeserializationMode::default(),
-			};
+			let d = deser_mode.unwrap_or_default();
 			match self.env.read_txn() {
 				Ok(read) => self.get_with(db_key, key, &read, |_, mut data| {
 					ser::deserialize(&mut data, self.protocol_version(), d).map_err(From::from)
@@ -803,10 +800,7 @@ impl<'a> Batch<'a> {
 		key: &[u8],
 		deser_mode: Option<DeserializationMode>,
 	) -> Result<Option<T>, Error> {
-		let d = match deser_mode {
-			Some(d) => d,
-			_ => DeserializationMode::default(),
-		};
+		let d = deser_mode.unwrap_or_default();
 		self.get_with(db_key, key, |_, mut data| {
 			match ser::deserialize(&mut data, self.protocol_version(), d) {
 				Ok(res) => Ok(res),
@@ -908,6 +902,8 @@ where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
 	/// Initialize a new prefix iterator.
+	// Keep shared transaction ownership without requiring Sync
+	#[allow(clippy::arc_with_non_send_sync)]
 	pub fn new(
 		db: Arc<Database<Bytes, Bytes>>,
 		tx_counter: Option<TxCounter>,

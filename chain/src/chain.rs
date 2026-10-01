@@ -640,10 +640,10 @@ impl Chain {
 	/// The extension and the db batch are discarded.
 	/// The batch ensures duplicate NRD kernels within the tx are handled correctly.
 	fn validate_tx_kernels(&self, tx: &Transaction) -> Result<(), Error> {
-		let has_nrd_kernel = tx.kernels().iter().any(|k| match k.features {
-			KernelFeatures::NoRecentDuplicate { .. } => true,
-			_ => false,
-		});
+		let has_nrd_kernel = tx
+			.kernels()
+			.iter()
+			.any(|k| matches!(k.features, KernelFeatures::NoRecentDuplicate { .. }));
 		if !has_nrd_kernel {
 			return Ok(());
 		}
@@ -1043,7 +1043,7 @@ impl Chain {
 	pub fn fork_point(&self) -> Result<BlockHeader, Error> {
 		let body_head = self.head()?;
 		let mut current = self.get_block_header(&body_head.hash())?;
-		while !self.is_on_current_chain(&current, body_head).is_ok() {
+		while self.is_on_current_chain(&current, body_head).is_err() {
 			current = self.get_previous_header(&current)?;
 		}
 		Ok(current)

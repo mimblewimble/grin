@@ -92,15 +92,7 @@ impl Ord for OrderedHashLeafNode {
 
 impl PartialOrd for OrderedHashLeafNode {
 	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		let a_val = match self {
-			OrderedHashLeafNode::Hash(_, pos0) => pos0,
-			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
-		};
-		let b_val = match other {
-			OrderedHashLeafNode::Hash(_, pos0) => pos0,
-			OrderedHashLeafNode::Leaf(_, pos0) => pos0,
-		};
-		Some(a_val.cmp(b_val))
+		Some(self.cmp(other))
 	}
 }
 
@@ -656,22 +648,20 @@ impl TxHashSet {
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
 		let mut pos_to_delete = vec![];
-		for kp in batch.output_pos_iter()? {
-			if let Ok((key, pos1)) = kp {
-				let pos0 = pos1.pos - 1;
-				if let Some(out) = output_pmmr.get_data(pos0) {
-					if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
-						// If the pos matches and the index key matches the commitment
-						// then keep the entry, other we want to clean it up.
-						if pos0 == pos0_via_mmr
-							&& batch.is_match_output_pos_key(&key, &out.commitment())
-						{
-							continue;
-						}
+		for (key, pos1) in batch.output_pos_iter()?.flatten() {
+			let pos0 = pos1.pos - 1;
+			if let Some(out) = output_pmmr.get_data(pos0) {
+				if let Ok(pos0_via_mmr) = batch.get_output_pos(&out.commitment()) {
+					// If the pos matches and the index key matches the commitment
+					// then keep the entry, other we want to clean it up.
+					if pos0 == pos0_via_mmr
+						&& batch.is_match_output_pos_key(&key, &out.commitment())
+					{
+						continue;
 					}
 				}
-				pos_to_delete.push(key);
 			}
+			pos_to_delete.push(key);
 		}
 		let mut removed_count = 0;
 		for p in pos_to_delete {
@@ -1416,7 +1406,6 @@ impl<'a> Extension<'a> {
 	/// genesis position.
 	/// NB: Would like to make this more generic but the hard casting of pmmrs
 	/// held by this struct makes it awkward to do so
-
 	pub fn apply_output_segment(
 		&mut self,
 		segment: Segment<OutputIdentifier>,
@@ -1816,6 +1805,8 @@ impl<'a> Extension<'a> {
 
 	/// Validate the txhashset state against the provided block header.
 	/// A "fast validation" will skip rangeproof verification and kernel signature verification.
+	// Keep the existing validation API
+	#[allow(clippy::too_many_arguments)]
 	pub fn validate(
 		&self,
 		genesis: &BlockHeader,
@@ -2178,8 +2169,8 @@ pub fn txhashset_replace(from: PathBuf, to: PathBuf) -> Result<(), Error> {
 }
 
 /// Clean the txhashset folder
-pub fn clean_txhashset_folder(root_dir: &PathBuf) {
-	let txhashset_path = root_dir.clone().join(TXHASHSET_SUBDIR);
+pub fn clean_txhashset_folder(root_dir: &Path) {
+	let txhashset_path = root_dir.join(TXHASHSET_SUBDIR);
 	if txhashset_path.exists() {
 		if let Err(e) = fs::remove_dir_all(txhashset_path.clone()) {
 			warn!(

@@ -801,6 +801,8 @@ impl SegmentProof {
 
 	/// Check validity of the proof by equating the reconstructed root with the actual root
 	/// This function assumes a final hashing step together with `other_root`
+	// Keep the existing validation API
+	#[allow(clippy::too_many_arguments)]
 	pub fn validate_with(
 		&self,
 		last_pos: u64,

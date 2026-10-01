@@ -121,8 +121,10 @@ pub fn check_seeds(is_testnet: bool, seed: Option<&str>) -> Vec<SeedCheckResult>
 	for s in seeds.iter() {
 		info!("Checking seed health for {}", s);
 		eprintln!("Checking seed {}", s);
-		let mut seed_result = SeedCheckResult::default();
-		seed_result.url = s.to_string();
+		let mut seed_result = SeedCheckResult {
+			url: s.to_string(),
+			..SeedCheckResult::default()
+		};
 		let resolved_dns_entries = resolve_dns_to_addrs(&config, &vec![format!("{}:{}", s, port)]);
 		if resolved_dns_entries.is_empty() {
 			info!("FAIL - No dns entries found for {}", s);

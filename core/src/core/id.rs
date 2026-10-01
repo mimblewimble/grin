@@ -35,7 +35,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 	/// Generate a short_id via the following -
 	///
 	/// * extract k0/k1 from block_hash hashed with the nonce (first two u64
-	/// values)   * initialize a siphasher24 with k0/k1
+	///   values)   * initialize a siphasher24 with k0/k1
 	///   * self.hash() passing in the siphasher24 instance
 	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
 	///

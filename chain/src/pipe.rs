@@ -35,6 +35,8 @@ pub struct BlockContext<'a> {
 	/// The pow verifier to use when processing a block.
 	pub pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	/// Custom fn allowing arbitrary header validation rules (denylist) to be applied.
+	// Keep the existing callback type
+	#[allow(clippy::type_complexity)]
 	pub header_allowed: Box<dyn Fn(&BlockHeader) -> Result<(), Error>>,
 	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,

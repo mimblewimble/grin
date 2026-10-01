@@ -403,6 +403,8 @@ impl DandelionEpoch {
 }
 
 /// Server initialization status.
+// Keep the existing initialization message API
+#[allow(clippy::large_enum_variant)]
 pub enum ServerInitStatus {
 	/// Database loading.
 	LoadDatabase,

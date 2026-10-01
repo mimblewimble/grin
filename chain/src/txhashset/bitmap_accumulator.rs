@@ -49,6 +49,12 @@ pub struct BitmapAccumulator {
 	backend: VecBackend<BitmapChunk>,
 }
 
+impl Default for BitmapAccumulator {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl BitmapAccumulator {
 	const NBITS: u64 = BitmapChunk::LEN_BITS as u64;
 
@@ -209,6 +215,12 @@ impl BitmapAccumulator {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitmapChunk(BitVec);
 
+impl Default for BitmapChunk {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl BitmapChunk {
 	const LEN_BITS: usize = 1024;
 	const LEN_BYTES: usize = Self::LEN_BITS / 8;
@@ -272,7 +284,7 @@ impl Readable for BitmapChunk {
 	}
 }
 
-///
+/// Bitmap blocks with their segment proof
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitmapSegment {
 	identifier: SegmentIdentifier,

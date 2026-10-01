@@ -126,6 +126,12 @@ pub struct ApiServer {
 	shutdown_sender: Option<mpsc::Sender<()>>,
 }
 
+impl Default for ApiServer {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.

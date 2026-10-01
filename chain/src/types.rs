@@ -317,6 +317,12 @@ pub struct SyncState {
 	pihd_header_cache_generation: AtomicU64,
 }
 
+impl Default for SyncState {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl SyncState {
 	/// Return a new SyncState initialize to NoSync
 	pub fn new() -> SyncState {
@@ -1133,18 +1139,12 @@ pub enum BlockStatus {
 impl BlockStatus {
 	/// Is this the "next" block?
 	pub fn is_next(&self) -> bool {
-		match *self {
-			BlockStatus::Next { .. } => true,
-			_ => false,
-		}
+		matches!(*self, BlockStatus::Next { .. })
 	}
 
 	/// Is this block a "reorg"?
 	pub fn is_reorg(&self) -> bool {
-		match *self {
-			BlockStatus::Reorg { .. } => true,
-			_ => false,
-		}
+		matches!(*self, BlockStatus::Reorg { .. })
 	}
 }
 

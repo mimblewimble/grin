@@ -76,8 +76,8 @@ fn first_100_mmr_heights() {
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
 	let first_100 = first_100_str.split(' ').map(|n| n.parse::<u64>().unwrap());
-	let mut count = 0;
-	for n in first_100 {
+	for (count, n) in first_100.enumerate() {
+		let count = count as u64;
 		assert_eq!(
 			n,
 			pmmr::bintree_postorder_height(count),
@@ -85,7 +85,6 @@ fn first_100_mmr_heights() {
 			n,
 			pmmr::bintree_postorder_height(count)
 		);
-		count += 1;
 	}
 }
 

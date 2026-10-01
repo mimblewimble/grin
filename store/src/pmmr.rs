@@ -46,13 +46,13 @@ pub const PMMR_FILES: [&str; 4] = [
 /// handle writing, reading and pruning.
 ///
 /// * A main storage file appends Hash instances as they come.
-/// This AppendOnlyFile is also backed by a mmap for reads.
+///   This AppendOnlyFile is also backed by a mmap for reads.
 /// * An in-memory backend buffers the latest batch of writes to ensure the
-/// PMMR can always read recent values even if they haven't been flushed to
-/// disk yet.
+///   PMMR can always read recent values even if they haven't been flushed to
+///   disk yet.
 /// * A leaf_set tracks unpruned (unremoved) leaf positions in the MMR..
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
-/// MMR.
+///   MMR.
 pub struct PMMRBackend<T: PMMRable> {
 	data_dir: PathBuf,
 	prunable: bool,
@@ -556,7 +556,6 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 /// This function will return an error whenever the call to `std;:fs::read_dir`
 /// fails on the given path for any reason.
 ///
-
 pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	path: P,
 	prefix_to_delete: &str,

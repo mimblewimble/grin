@@ -476,10 +476,10 @@ where
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
-		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload { .. } => true,
-			_ => false,
-		}
+		matches!(
+			self.sync_state.status(),
+			SyncStatus::TxHashsetDownload { .. }
+		)
 	}
 
 	fn txhashset_download_update(
@@ -1506,6 +1506,12 @@ impl PoolToNetAdapter {
 #[derive(Clone)]
 pub struct PoolToChainAdapter {
 	chain: OneTime<Weak<chain::Chain>>,
+}
+
+impl Default for PoolToChainAdapter {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl PoolToChainAdapter {

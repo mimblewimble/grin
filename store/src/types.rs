@@ -367,6 +367,7 @@ where
 				let file = OpenOptions::new()
 					.read(true)
 					.create(true)
+					.truncate(false)
 					.write(true)
 					.open(&self.path)?;
 
@@ -554,6 +555,8 @@ where
 				let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 				let mut current_offset = 0;
+				// Preserve drop order for decoded values
+				#[allow(clippy::redundant_pattern_matching)]
 				while let Ok(_) = T::read(&mut streaming_reader) {
 					let size = streaming_reader
 						.total_bytes_read()

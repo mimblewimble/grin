@@ -577,7 +577,7 @@ mod tests {
 		let id = ExtKeychain::derive_key_id(
 			3,
 			rng.gen::<u16>() as u32,
-			u32::max_value() - 2,
+			u32::MAX - 2,
 			rng.gen::<u16>() as u32,
 			0,
 		);

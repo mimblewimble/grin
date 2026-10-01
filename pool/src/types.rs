@@ -196,10 +196,7 @@ pub enum TxSource {
 impl TxSource {
 	/// Convenience fn for checking if this tx was sourced via the push api.
 	pub fn is_pushed(&self) -> bool {
-		match self {
-			TxSource::PushApi => true,
-			_ => false,
-		}
+		matches!(self, TxSource::PushApi)
 	}
 }
 

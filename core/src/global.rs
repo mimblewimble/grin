@@ -32,13 +32,6 @@ use crate::ser::ProtocolVersion;
 use std::cell::Cell;
 use util::OneTime;
 
-/// An enum collecting sets of parameters used throughout the
-/// code wherever mining is needed. This should allow for
-/// different sets of parameters for different purposes,
-/// e.g. CI, User testing, production values
-/// Define these here, as they should be developer-set, not really tweakable
-/// by users
-
 /// The default "local" protocol version for this node.
 /// We negotiate compatible versions with each peer via Hand/Shake.
 /// Note: We also use a specific (possible different) protocol version
@@ -110,6 +103,13 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
+///
+/// An enum collecting sets of parameters used throughout the
+/// code wherever mining is needed. This should allow for
+/// different sets of parameters for different purposes,
+/// e.g. CI, User testing, production values
+/// Define these here, as they should be developer-set, not really tweakable
+/// by users
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum ChainTypes {
 	/// For CI testing
@@ -453,11 +453,7 @@ pub fn txhashset_archive_interval() -> u64 {
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
-	match get_chain_type() {
-		ChainTypes::Testnet => true,
-		ChainTypes::Mainnet => true,
-		_ => false,
-	}
+	matches!(get_chain_type(), ChainTypes::Testnet | ChainTypes::Mainnet)
 }
 
 /// Are we in testnet?
@@ -465,16 +461,12 @@ pub fn is_production_mode() -> bool {
 /// as possible to "mainnet" configuration as possible.
 /// We want to avoid missing any mainnet only code paths.
 pub fn is_testnet() -> bool {
-	match get_chain_type() {
-		ChainTypes::Testnet => true,
-		_ => false,
-	}
+	matches!(get_chain_type(), ChainTypes::Testnet)
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
-
 pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderDifficultyInfo>
 where
 	T: IntoIterator<Item = HeaderDifficultyInfo>,

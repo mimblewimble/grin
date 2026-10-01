@@ -20,7 +20,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use p2p::types::{TESTNET_PEER_PORT, USERNET_PEER_PORT};
 
@@ -137,12 +137,12 @@ fn check_api_secret_file(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 	}
 }
 
-fn resolve_api_secret_path(path: &str, grin_path: &PathBuf) -> PathBuf {
+fn resolve_api_secret_path(path: &str, grin_path: &Path) -> PathBuf {
 	let path = PathBuf::from(path);
 	if path.is_absolute() {
 		path
 	} else {
-		let mut resolved = grin_path.clone();
+		let mut resolved = grin_path.to_path_buf();
 		resolved.push(path);
 		resolved
 	}
@@ -280,8 +280,10 @@ impl GlobalConfig {
 
 	/// Requires the path to a config file
 	pub fn new(file_path: &str) -> Result<GlobalConfig, ConfigError> {
-		let mut return_value = GlobalConfig::default();
-		return_value.config_file_path = Some(PathBuf::from(&file_path));
+		let return_value = GlobalConfig {
+			config_file_path: Some(PathBuf::from(file_path)),
+			..GlobalConfig::default()
+		};
 
 		// Config file path is given but not valid
 		let config_file = return_value.config_file_path.clone().unwrap();
@@ -323,23 +325,23 @@ impl GlobalConfig {
 	}
 
 	/// Update paths
-	pub fn update_paths(&mut self, grin_home: &PathBuf) {
+	pub fn update_paths(&mut self, grin_home: &Path) {
 		// need to update server chain path
-		let mut chain_path = grin_home.clone();
+		let mut chain_path = grin_home.to_path_buf();
 		chain_path.push(GRIN_CHAIN_DIR);
 		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
-		let mut api_secret_path = grin_home.clone();
+		let mut api_secret_path = grin_home.to_path_buf();
 		api_secret_path.push(API_SECRET_FILE_NAME);
 		self.members.as_mut().unwrap().server.api_secret_path =
 			Some(api_secret_path.to_str().unwrap().to_owned());
-		let mut foreign_api_secret_path = grin_home.clone();
+		let mut foreign_api_secret_path = grin_home.to_path_buf();
 		foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
 		self.members
 			.as_mut()
 			.unwrap()
 			.server
 			.foreign_api_secret_path = Some(foreign_api_secret_path.to_str().unwrap().to_owned());
-		let mut log_path = grin_home.clone();
+		let mut log_path = grin_home.to_path_buf();
 		log_path.push(SERVER_LOG_FILE_NAME);
 		self.members
 			.as_mut()
@@ -490,17 +492,17 @@ fn temp_config_dir(name: &str) -> PathBuf {
 }
 
 #[cfg(test)]
-fn write_test_config(test_dir: &PathBuf) -> (PathBuf, PathBuf, PathBuf) {
+fn write_test_config(test_dir: &Path) -> (PathBuf, PathBuf, PathBuf) {
 	let mut config = GlobalConfig::for_chain(&global::ChainTypes::Mainnet);
 	config.update_paths(test_dir);
 
-	let mut config_path = test_dir.clone();
+	let mut config_path = test_dir.to_path_buf();
 	config_path.push(SERVER_CONFIG_FILE_NAME);
 	config.write_to_file(config_path.to_str().unwrap()).unwrap();
 
-	let mut api_secret_path = test_dir.clone();
+	let mut api_secret_path = test_dir.to_path_buf();
 	api_secret_path.push(API_SECRET_FILE_NAME);
-	let mut foreign_api_secret_path = test_dir.clone();
+	let mut foreign_api_secret_path = test_dir.to_path_buf();
 	foreign_api_secret_path.push(FOREIGN_API_SECRET_FILE_NAME);
 
 	(config_path, api_secret_path, foreign_api_secret_path)
@@ -509,8 +511,8 @@ fn write_test_config(test_dir: &PathBuf) -> (PathBuf, PathBuf, PathBuf) {
 #[cfg(test)]
 fn check_test_secrets(
 	server_config: ServerConfig,
-	api_secret_path: &PathBuf,
-	foreign_api_secret_path: &PathBuf,
+	api_secret_path: &Path,
+	foreign_api_secret_path: &Path,
 	api_secret_exists: bool,
 	foreign_api_secret_exists: bool,
 ) {

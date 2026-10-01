@@ -321,6 +321,12 @@ pub struct BlindSum {
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
 
+impl Default for BlindSum {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl BlindSum {
 	/// Creates a new blinding factor sum.
 	pub fn new() -> BlindSum {
@@ -579,13 +585,7 @@ mod test {
 		let ret_path = id.to_path();
 		assert_eq!(path, ret_path);
 
-		let path = ExtKeychainPath::new(
-			1,
-			<u32>::max_value(),
-			<u32>::max_value(),
-			3,
-			<u32>::max_value(),
-		);
+		let path = ExtKeychainPath::new(1, u32::MAX, u32::MAX, 3, u32::MAX);
 		let id = Identifier::from_path(&path);
 		let ret_path = id.to_path();
 		assert_eq!(path, ret_path);

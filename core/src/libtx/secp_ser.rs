@@ -25,7 +25,7 @@ pub mod pubkey_serde {
 	use util::secp::key::PublicKey;
 	use util::{from_hex, static_secp_instance, ToHex};
 
-	///
+	/// Serialize as hex
 	pub fn serialize<S>(key: &PublicKey, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
@@ -35,7 +35,7 @@ pub mod pubkey_serde {
 		serializer.serialize_str(&key.serialize_vec(&static_secp, true).to_hex())
 	}
 
-	///
+	/// Deserialize from hex
 	pub fn deserialize<'de, D>(deserializer: D) -> Result<PublicKey, D::Error>
 	where
 		D: Deserializer<'de>,
@@ -57,7 +57,7 @@ pub mod option_sig_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
-	///
+	/// Serialize as hex
 	pub fn serialize<S>(sig: &Option<secp::Signature>, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
@@ -72,7 +72,7 @@ pub mod option_sig_serde {
 		}
 	}
 
-	///
+	/// Deserialize from hex
 	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<secp::Signature>, D::Error>
 	where
 		D: Deserializer<'de>,
@@ -103,7 +103,7 @@ pub mod option_seckey_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
-	///
+	/// Serialize as hex
 	pub fn serialize<S>(
 		key: &Option<secp::key::SecretKey>,
 		serializer: S,
@@ -117,7 +117,7 @@ pub mod option_seckey_serde {
 		}
 	}
 
-	///
+	/// Deserialize from hex
 	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<secp::key::SecretKey>, D::Error>
 	where
 		D: Deserializer<'de>,
@@ -148,7 +148,7 @@ pub mod sig_serde {
 	use serde::{Deserialize, Deserializer, Serializer};
 	use util::{from_hex, secp, static_secp_instance, ToHex};
 
-	///
+	/// Serialize as hex
 	pub fn serialize<S>(sig: &secp::Signature, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
@@ -158,7 +158,7 @@ pub mod sig_serde {
 		serializer.serialize_str(&(&sig.serialize_compact(&static_secp)[..]).to_hex())
 	}
 
-	///
+	/// Deserialize from hex
 	pub fn deserialize<'de, D>(deserializer: D) -> Result<secp::Signature, D::Error>
 	where
 		D: Deserializer<'de>,
@@ -185,7 +185,7 @@ pub mod option_commitment_serde {
 	use util::secp::pedersen::Commitment;
 	use util::{from_hex, ToHex};
 
-	///
+	/// Serialize as hex
 	pub fn serialize<S>(commit: &Option<Commitment>, serializer: S) -> Result<S::Ok, S::Error>
 	where
 		S: Serializer,
@@ -196,7 +196,7 @@ pub mod option_commitment_serde {
 		}
 	}
 
-	///
+	/// Deserialize from hex
 	pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Commitment>, D::Error>
 	where
 		D: Deserializer<'de>,

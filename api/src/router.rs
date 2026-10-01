@@ -132,8 +132,7 @@ impl Default for Router {
 impl Router {
 	pub fn new() -> Router {
 		let root = Node::new(calculate_hash(&""), None);
-		let mut nodes = vec![];
-		nodes.push(root);
+		let nodes = vec![root];
 		Router { nodes }
 	}
 
