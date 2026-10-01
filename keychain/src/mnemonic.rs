@@ -127,7 +127,7 @@ pub fn from_entropy(entropy: &[u8]) -> Result<String, Error> {
 	sha2sum.update(entropy);
 	hash.copy_from_slice(sha2sum.finalize().as_slice());
 
-	let checksum = (hash[0] >> 8 - checksum_bits) & mask;
+	let checksum = (hash[0] >> (8 - checksum_bits)) & mask;
 
 	let nwords = (length * 8 + checksum_bits) / 11;
 	let mut indexes: Vec<u16> = vec![0; nwords];
@@ -352,7 +352,7 @@ mod tests {
 		assert!(to_entropy("abandon abandon badword abandon abandon abandon abandon abandon abandon abandon abandon abandon").is_err());
 		// Invalid length
 		assert!(to_entropy("abandon abandon abandon abandon abandon abandon").is_err());
-		assert!(from_entropy(&vec![1, 2, 3, 4, 5]).is_err());
+		assert!(from_entropy(&[1, 2, 3, 4, 5]).is_err());
 		assert!(from_entropy(&vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]).is_err());
 		// Invalid checksum
 		assert!(to_entropy("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").is_err());

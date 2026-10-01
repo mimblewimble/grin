@@ -106,7 +106,7 @@ fn test_coinbase_maturity() {
 		)
 		.unwrap();
 
-		let txs = &[coinbase_txn.clone()];
+		let txs = std::slice::from_ref(&coinbase_txn);
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 		let next_header_info =
@@ -192,7 +192,7 @@ fn test_coinbase_maturity() {
 			)
 			.unwrap();
 
-			let txs = &[coinbase_txn.clone()];
+			let txs = std::slice::from_ref(&coinbase_txn);
 			let fees = txs.iter().map(|tx| tx.fee()).sum();
 			let reward = libtx::reward::output(&keychain, &builder, &key_id3, fees, false).unwrap();
 			let next_header_info =

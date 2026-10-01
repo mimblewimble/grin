@@ -296,7 +296,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		} else {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
-				SizeInfo::FixedSize(SizeEntry::LEN as u16),
+				SizeInfo::FixedSize(SizeEntry::LEN),
 				version,
 			)?))
 		};
@@ -304,8 +304,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
 		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
-		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
-		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
+		let hash_file = DataFile::open(data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
+		let data_file = DataFile::open(data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
@@ -321,7 +321,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
+		let prune_list = PruneList::open(data_dir.join(PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),

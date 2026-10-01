@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - run: cargo clippy
+      - run: cargo clippy --all --workspace --all-targets -- -D warnings
   linux-tests:
     name: Linux Tests
     runs-on: ubuntu-latest

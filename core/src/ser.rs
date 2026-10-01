@@ -160,42 +160,42 @@ pub trait Writer {
 
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
-		self.write_fixed_bytes(&[n])
+		self.write_fixed_bytes([n])
 	}
 
 	/// Writes a u16 as bytes
 	fn write_u16(&mut self, n: u16) -> Result<(), Error> {
 		let mut bytes = [0; 2];
 		BigEndian::write_u16(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_u32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_i32(&mut self, n: i32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_i32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u64 as bytes
 	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_u64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a i64 as bytes
 	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_i64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
@@ -957,7 +957,7 @@ where
 	}
 }
 
-impl<'a, A: Writeable> Writeable for &'a A {
+impl<A: Writeable> Writeable for &A {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(*self, writer)
 	}

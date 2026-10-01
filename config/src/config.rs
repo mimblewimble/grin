@@ -44,7 +44,7 @@ pub const FOREIGN_API_SECRET_FILE_NAME: &str = ".foreign_api_secret";
 
 fn get_grin_path(chain_type: &global::ChainTypes) -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
-	let mut grin_path = dirs::home_dir().unwrap_or_else(|| PathBuf::new());
+	let mut grin_path = dirs::home_dir().unwrap_or_default();
 	grin_path.push(GRIN_HOME);
 	grin_path.push(chain_type.shortname());
 	// Create if the default path doesn't exist
@@ -238,7 +238,7 @@ impl GlobalConfig {
 	pub fn for_chain(chain_type: &global::ChainTypes) -> GlobalConfig {
 		let mut defaults_conf = GlobalConfig::default();
 		let defaults = &mut defaults_conf.members.as_mut().unwrap().server;
-		defaults.chain_type = chain_type.clone();
+		defaults.chain_type = *chain_type;
 
 		match *chain_type {
 			global::ChainTypes::Mainnet => {}
@@ -393,7 +393,7 @@ impl GlobalConfig {
 		let mut config: ConfigMembers =
 			toml::from_str(&GlobalConfig::fix_warning_level(config_str.clone()))
 				.map_err(|e| e.to_string())?;
-		if config.config_file_version != None {
+		if config.config_file_version.is_some() {
 			return Ok(config_str);
 		}
 

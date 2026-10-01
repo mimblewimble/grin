@@ -373,11 +373,11 @@ impl HeaderSync {
 			} else if let Some(ref stalling_ts) = self.stalling_ts {
 				if let Some(ref peer) = self.syncing_peer {
 					match self.sync_state.status() {
-						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
+						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. }
 							// Ban this fraud peer which claims a higher work but can't send us the real headers
 							if now > *stalling_ts + Duration::seconds(120)
 								&& header_head.total_difficulty < peer.info.total_difficulty()
-							{
+							=> {
 								if let Err(e) = self
 									.peers
 									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
@@ -391,7 +391,6 @@ impl HeaderSync {
 										peer.info.total_difficulty(),
 									);
 							}
-						}
 						_ => (),
 					}
 					self.syncing_peer = None;
@@ -655,7 +654,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 			break;
 		}
 		let next = 2u64.pow(heights.len() as u32);
-		current = if current > next { current - next } else { 0 }
+		current = current.saturating_sub(next)
 	}
 	heights.push(0);
 	heights

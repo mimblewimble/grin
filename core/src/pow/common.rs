@@ -63,12 +63,12 @@ pub fn set_header_nonce(header: &[u8], nonce: Option<u32>) -> Result<[u64; 4], E
 		header.write_u32::<LittleEndian>(n)?;
 		create_siphash_keys(&header)
 	} else {
-		create_siphash_keys(&header)
+		create_siphash_keys(header)
 	}
 }
 
 pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
-	let h = blake2b(32, &[], &header);
+	let h = blake2b(32, &[], header);
 	let hb = h.as_bytes();
 	let mut rdr = Cursor::new(hb);
 	Ok([

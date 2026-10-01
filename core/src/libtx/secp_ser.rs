@@ -204,7 +204,7 @@ pub mod option_commitment_serde {
 		Option::<String>::deserialize(deserializer).and_then(|res| match res {
 			Some(string) => from_hex(&string)
 				.map_err(Error::custom)
-				.and_then(|bytes: Vec<u8>| Ok(Some(Commitment::from_vec(bytes.to_vec())))),
+				.map(|bytes: Vec<u8>| Some(Commitment::from_vec(bytes.to_vec()))),
 			None => Ok(None),
 		})
 	}
@@ -239,7 +239,7 @@ where
 	use serde::de::Error;
 	String::deserialize(deserializer)
 		.and_then(|string| from_hex(&string).map_err(Error::custom))
-		.and_then(|bytes: Vec<u8>| Ok(Commitment::from_vec(bytes.to_vec())))
+		.map(|bytes: Vec<u8>| Commitment::from_vec(bytes.to_vec()))
 }
 
 /// Seralizes a byte string into hex
@@ -398,7 +398,7 @@ mod test {
 				pub_key: PublicKey::from_secret_key(&secp, &sk).unwrap(),
 				opt_sig: Some(sig),
 				opt_commit: Some(commit),
-				sig: sig,
+				sig,
 				num: 30,
 				opt_num: Some(33),
 			}

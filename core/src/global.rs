@@ -110,7 +110,7 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
@@ -119,6 +119,7 @@ pub enum ChainTypes {
 	/// Protocol testing network
 	Testnet,
 	/// Main production network
+	#[default]
 	Mainnet,
 }
 
@@ -131,12 +132,6 @@ impl ChainTypes {
 			ChainTypes::Testnet => "test".to_owned(),
 			ChainTypes::Mainnet => "main".to_owned(),
 		}
-	}
-}
-
-impl Default for ChainTypes {
-	fn default() -> ChainTypes {
-		ChainTypes::Mainnet
 	}
 }
 
@@ -164,16 +159,16 @@ lazy_static! {
 
 thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
-	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = const { Cell::new(None) };
 
 	/// minimum transaction fee per unit of transaction weight for mempool acceptance
-	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
+	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = const { Cell::new(None) };
 
 	/// maximum number of seconds into future for timestamp of block to be acceptable
-	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = Cell::new(None);
+	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = const { Cell::new(None) };
 
 	/// Local feature flag for NRD kernel support.
-	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
+	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 /// One time initialization of the global chain_type.
@@ -425,7 +420,7 @@ pub fn max_block_weight() -> u64 {
 /// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
 pub fn max_tx_weight() -> u64 {
 	let coinbase_weight = OUTPUT_WEIGHT + KERNEL_WEIGHT;
-	max_block_weight().saturating_sub(coinbase_weight) as u64
+	max_block_weight().saturating_sub(coinbase_weight)
 }
 
 /// Horizon at which we can cut-through and do full local pruning

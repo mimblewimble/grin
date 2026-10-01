@@ -49,19 +49,10 @@ impl From<grin_store::lmdb::Error> for SeedCheckError {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SeedCheckResults {
 	pub mainnet: Vec<SeedCheckResult>,
 	pub testnet: Vec<SeedCheckResult>,
-}
-
-impl Default for SeedCheckResults {
-	fn default() -> Self {
-		Self {
-			mainnet: vec![],
-			testnet: vec![],
-		}
-	}
 }
 
 #[derive(Debug, Serialize, Deserialize)]

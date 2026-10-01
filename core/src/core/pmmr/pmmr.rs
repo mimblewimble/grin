@@ -208,7 +208,7 @@ where
 
 	/// Build a "readonly" view of this PMMR.
 	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
-		ReadonlyPMMR::at(&self.backend, self.size)
+		ReadonlyPMMR::at(self.backend, self.size)
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
@@ -587,7 +587,7 @@ pub fn round_up_to_leaf_pos(pos0: u64) -> u64 {
 	} else {
 		insert_idx + 1
 	};
-	return insertion_to_pmmr_index(leaf_idx);
+	insertion_to_pmmr_index(leaf_idx)
 }
 
 /// Returns the 0-based pmmr index of 0-based leaf index n
@@ -689,7 +689,7 @@ pub fn bintree_leaf_pos_iter(pos0: u64) -> Box<dyn Iterator<Item = u64>> {
 		Some(l) => l,
 		None => return Box::new(iter::empty::<u64>()),
 	};
-	Box::new((leaf_start..=leaf_end).map(|n| insertion_to_pmmr_index(n)))
+	Box::new((leaf_start..=leaf_end).map(insertion_to_pmmr_index))
 }
 
 /// Iterator over all pos beneath the provided subtree root (including the root itself).

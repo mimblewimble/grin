@@ -58,12 +58,7 @@ fn next_dma_difficulty_adjustment() {
 	hi.difficulty = Difficulty::from_num(500);
 	let sec = DMA_WINDOW / 2;
 	let mut s1 = repeat(BLOCK_TIME_SEC, hi.clone(), sec, Some(cur_time));
-	let mut s2 = repeat_offs(
-		BLOCK_TIME_SEC,
-		1500,
-		sec,
-		cur_time + (sec * BLOCK_TIME_SEC) as u64,
-	);
+	let mut s2 = repeat_offs(BLOCK_TIME_SEC, 1500, sec, cur_time + (sec * BLOCK_TIME_SEC));
 	s2.append(&mut s1);
 	assert_eq!(
 		next_dma_difficulty(1, s2).difficulty,

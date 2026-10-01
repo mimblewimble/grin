@@ -101,7 +101,7 @@ impl Readable for ShortId {
 
 impl Writeable for ShortId {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.0)
+		writer.write_fixed_bytes(self.0)
 	}
 }
 

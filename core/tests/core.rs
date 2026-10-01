@@ -192,17 +192,17 @@ fn build_two_half_kernels() {
 	let msg = kernel.msg_to_sign().unwrap();
 
 	// Generate a kernel with public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp()).unwrap();
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp()).unwrap();
 	kernel.excess = keychain.secp().commit(0, skey).unwrap();
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 	kernel.excess_sig =
-		aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+		aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 	kernel.verify().unwrap();
 
 	let tx1 = build::transaction_with_kernel(
 		&[input(10, key_id1), output(8, key_id2.clone())],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -211,7 +211,7 @@ fn build_two_half_kernels() {
 
 	let tx2 = build::transaction_with_kernel(
 		&[input(8, key_id2), output(6, key_id3)],
-		kernel.clone(),
+		kernel,
 		excess.clone(),
 		&keychain,
 		&builder,
@@ -275,7 +275,7 @@ fn multi_kernel_transaction_deaggregation() {
 	assert!(tx12.validate(Weighting::AsTransaction).is_ok());
 	assert!(tx34.validate(Weighting::AsTransaction).is_ok());
 
-	let deaggregated_tx34 = deaggregate(tx1234.clone(), &[tx12.clone()]).unwrap();
+	let deaggregated_tx34 = deaggregate(tx1234.clone(), std::slice::from_ref(&tx12)).unwrap();
 	assert!(deaggregated_tx34.validate(Weighting::AsTransaction).is_ok());
 	assert_eq!(tx34, deaggregated_tx34);
 
@@ -408,7 +408,7 @@ fn basic_transaction_deaggregation() {
 
 	assert!(tx3.validate(Weighting::AsTransaction).is_ok());
 
-	let deaggregated_tx1 = deaggregate(tx3.clone(), &[tx2.clone()]).unwrap();
+	let deaggregated_tx1 = deaggregate(tx3.clone(), std::slice::from_ref(&tx2)).unwrap();
 
 	assert!(deaggregated_tx1.validate(Weighting::AsTransaction).is_ok());
 	assert_eq!(tx1, deaggregated_tx1);

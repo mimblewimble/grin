@@ -87,9 +87,9 @@ where
 const DEFAULT_DB_VERSION: ProtocolVersion = ProtocolVersion(3);
 
 /// Default environment.
-pub const DEFAULT_ENV_NAME: &'static str = "lmdb";
+pub const DEFAULT_ENV_NAME: &str = "lmdb";
 /// Default multi-database environment without prefixes.
-const DEFAULT_MULTI_DB_ENV_NAME: &'static str = "multi_lmdb";
+const DEFAULT_MULTI_DB_ENV_NAME: &str = "multi_lmdb";
 /// Migration completion marker in the default database.
 const MIGRATION_COMPLETE_KEY: &[u8] = b"__grin_migration_complete";
 /// Prefix key separator.
@@ -242,15 +242,14 @@ impl Store {
 			}
 			write.commit()?;
 
-			let s = Store {
+			Store {
 				env: env.clone(),
 				env_path: full_path.clone(),
 				pre_dbs: Arc::new(dbs_map),
 				def_db,
 				version: DEFAULT_DB_VERSION,
 				alloc_chunk_size,
-			};
-			s
+			}
 		};
 
 		// Migrate to default environment if needed.
@@ -261,25 +260,19 @@ impl Store {
 				let delete_old_db_file = || -> Result<(), Error> {
 					match fs::remove_dir_all(&migrate_from) {
 						Ok(_) => Ok(()),
-						Err(e) => {
-							return Err(Error::FileErr(format!(
-								"Can not remove old DB file: {:?}",
-								e
-							)));
-						}
+						Err(e) => Err(Error::FileErr(format!(
+							"Can not remove old DB file: {:?}",
+							e
+						))),
 					}
 				};
 				if s.migration_complete()? {
-					if let Err(e) = delete_old_db_file() {
-						return Err(e);
-					}
+					delete_old_db_file()?;
 				} else {
 					let _ = s.clear();
 					match s.migrate_to_default_env(db_name, &migrate_from, db_migration_prog_tx) {
 						Ok(_) => {
-							if let Err(e) = delete_old_db_file() {
-								return Err(e);
-							}
+							delete_old_db_file()?;
 						}
 						Err(e) => {
 							error!("DB {} migration error: {:?}", env_name, e);
@@ -338,7 +331,8 @@ impl Store {
 
 		// Leave headroom so the migrated env is not immediately above the resize threshold.
 		let used = to_used.saturating_add(from_used) as u128;
-		let required = ((used * 100 + RESIZE_MIN_TARGET_PERCENT - 1) / RESIZE_MIN_TARGET_PERCENT)
+		let required = (used * 100)
+			.div_ceil(RESIZE_MIN_TARGET_PERCENT)
 			.min(usize::MAX as u128) as usize;
 		let required = round_size_to_chunk(required, self.alloc_chunk_size);
 
@@ -371,13 +365,13 @@ impl Store {
 				let db_name = k.split_at(1).0;
 				if let Some(db) = self.pre_dbs.get(&db_name[0]) {
 					let key = k.split_at(2).1;
-					db.put(&mut write_to, key, &v)?;
+					db.put(&mut write_to, key, v)?;
 					count += 1;
 				} else {
 					warn!("Migration: unknown DB key: {}", db_name[0]);
 				}
 			} else {
-				self.def_db.put(&mut write_to, k, &v)?;
+				self.def_db.put(&mut write_to, k, v)?;
 				count += 1;
 			}
 		}
@@ -595,7 +589,7 @@ impl Store {
 								Err(e) => Err(Error::from(e)),
 							}
 						}
-						Err(e) => Err(Error::from(e)),
+						Err(e) => Err(e),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
@@ -621,12 +615,12 @@ impl Store {
 					let db_res = self.get_db(db_key);
 					match db_res {
 						Ok(db) => DatabaseIterator::new(
-							Arc::new(db.clone()),
+							Arc::new(*db),
 							Some(tx_counter),
 							read,
 							deserialize,
 						),
-						Err(e) => Err(Error::from(e)),
+						Err(e) => Err(e),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
@@ -792,10 +786,8 @@ impl<'a> Batch<'a> {
 				Ok(read) => {
 					let db_res = self.store.get_db(db_key);
 					match db_res {
-						Ok(db) => {
-							DatabaseIterator::new(Arc::new(db.clone()), None, read, deserialize)
-						}
-						Err(e) => Err(Error::from(e)),
+						Ok(db) => DatabaseIterator::new(Arc::new(*db), None, read, deserialize),
+						Err(e) => Err(e),
 					}
 				}
 				Err(e) => Err(Error::from(e)),
@@ -880,7 +872,7 @@ where
 		loop {
 			if self.done {
 				return None;
-			} else if let Some(k) = self.keys.iter().skip(self.skip_cur).next() {
+			} else if let Some(k) = self.keys.get(self.skip_cur) {
 				self.skip_total += 1;
 				self.skip_cur += 1;
 				match self.db.get(&self.read, k) {
@@ -890,7 +882,7 @@ where
 								Ok(v) => Some(Ok(v)),
 								Err(e) => {
 									error!("db iter: error deserializing: {}", e);
-									Some(Err(Error::from(e)))
+									Some(Err(e))
 								}
 							};
 						}

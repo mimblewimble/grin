@@ -154,13 +154,13 @@ fn test_bintree_pos_iter() {
 
 #[test]
 fn test_is_leaf() {
-	assert_eq!(pmmr::is_leaf(0), true);
-	assert_eq!(pmmr::is_leaf(1), true);
-	assert_eq!(pmmr::is_leaf(2), false);
-	assert_eq!(pmmr::is_leaf(3), true);
-	assert_eq!(pmmr::is_leaf(4), true);
-	assert_eq!(pmmr::is_leaf(5), false);
-	assert_eq!(pmmr::is_leaf(6), false);
+	assert!(pmmr::is_leaf(0));
+	assert!(pmmr::is_leaf(1));
+	assert!(!pmmr::is_leaf(2));
+	assert!(pmmr::is_leaf(3));
+	assert!(pmmr::is_leaf(4));
+	assert!(!pmmr::is_leaf(5));
+	assert!(!pmmr::is_leaf(6));
 }
 
 #[test]
@@ -243,9 +243,9 @@ fn various_families() {
 
 #[test]
 fn test_is_left_sibling() {
-	assert_eq!(pmmr::is_left_sibling(0), true);
-	assert_eq!(pmmr::is_left_sibling(1), false);
-	assert_eq!(pmmr::is_left_sibling(2), true);
+	assert!(pmmr::is_left_sibling(0));
+	assert!(!pmmr::is_left_sibling(1));
+	assert!(pmmr::is_left_sibling(2));
 }
 
 #[test]

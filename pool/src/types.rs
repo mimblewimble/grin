@@ -258,7 +258,7 @@ impl From<transaction::Error> for PoolError {
 	fn from(e: transaction::Error) -> PoolError {
 		match e {
 			transaction::Error::InvalidNRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
-			e @ _ => PoolError::InvalidTx(e),
+			e => PoolError::InvalidTx(e),
 		}
 	}
 }

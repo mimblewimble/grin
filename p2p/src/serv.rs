@@ -133,7 +133,7 @@ impl Server {
 									peer_addr, e
 								);
 							} else {
-								debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+								debug!("Error accepting peer {}: {:?}", peer_addr, e);
 								let _ =
 									self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
 							}
@@ -142,7 +142,7 @@ impl Server {
 							debug!("Ignoring peer accept error from {}", peer_addr);
 						}
 						Err(e) => {
-							debug!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
+							debug!("Error accepting peer {}: {:?}", peer_addr, e);
 							let _ = self.peers.add_banned(peer_addr, ReasonForBan::BadHandshake);
 						}
 						Ok(_) => {}

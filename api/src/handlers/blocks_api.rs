@@ -256,7 +256,7 @@ fn check_block_param(input: &str) -> Result<(), Error> {
 	lazy_static! {
 		static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 	}
-	if !RE.is_match(&input) {
+	if !RE.is_match(input) {
 		return Err(Error::Argument("Not a valid hash or height.".to_owned()));
 	}
 	Ok(())
