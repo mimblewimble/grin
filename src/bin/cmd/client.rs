@@ -86,10 +86,14 @@ impl HTTPNodeClient {
 		}
 		let mut t = term::stdout().unwrap();
 		let mut e = term::stdout().unwrap();
-		let _ = t.fg(term::color::MAGENTA);
+		if let Err(e) = t.fg(term::color::MAGENTA) {
+			error!("Failed to get terminal colour: {}", e);
+		};
 		writeln!(t, "{}", title).unwrap();
 		writeln!(t, "--------------------------").unwrap();
-		let _ = t.reset();
+		if let Err(e) = t.reset() {
+			error!("Failed to reset terminal: {}", e);
+		}
 		match self.send_json_request::<Status>("get_status", &serde_json::Value::Null) {
 			Ok(status) => {
 				writeln!(e, "Chain type: {}", status.chain).unwrap();
@@ -111,7 +115,9 @@ impl HTTPNodeClient {
 			)
 			.unwrap(),
 		};
-		let _ = e.reset();
+		if let Err(e) = e.reset() {
+			error!("Failed to reset terminal: {}", e);
+		}
 		println!()
 	}
 
