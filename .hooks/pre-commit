@@ -14,6 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+cargo clippy --all --workspace --all-targets -- -D warnings
+if [ $? != 0 ]; then
+  printf "fix clippy errors before commit, check with: \n"
+  printf "cargo clippy --all --workspace --all-targets -- -D warnings"
+  exit 1
+fi
+
 rustfmt --version &>/dev/null
 if [ $? != 0 ]; then
 	printf "[pre_commit] \033[0;31merror\033[0m: \"rustfmt\" not available. \n"
