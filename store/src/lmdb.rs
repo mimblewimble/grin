@@ -15,7 +15,10 @@
 //! Storage of core types using LMDB.
 
 use heed::types::Bytes;
-use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use heed::{
+	Comparator, Database, DatabaseFlags, DefaultComparator, Env, EnvOpenOptions, RoTxn, RwTxn,
+	WithoutTls,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -113,16 +116,16 @@ struct EnvState {
 
 /// LMDB-backed store facilitating data access and serialization. All writes
 /// are done through a Batch abstraction providing atomicity.
-pub struct Store {
+pub struct Store<C: Comparator> {
 	env: Env<WithoutTls>,
 	env_path: String,
-	pre_dbs: Arc<HashMap<u8, Database<Bytes, Bytes>>>,
-	def_db: Database<Bytes, Bytes>,
+	pre_dbs: Arc<HashMap<u8, Database<Bytes, Bytes, DefaultComparator, C>>>,
+	def_db: Database<Bytes, Bytes, DefaultComparator, C>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
 }
 
-impl Drop for Store {
+impl<C: Comparator> Drop for Store<C> {
 	fn drop(&mut self) {
 		{
 			let mut w_map = ENV_MAP.get().unwrap().write();
@@ -155,7 +158,7 @@ impl Drop for Store {
 	}
 }
 
-impl Store {
+impl<C: Comparator + 'static> Store<C> {
 	/// Create a new LMDB env under the provided directory.
 	/// Creates default environment named "multi_lmdb".
 	/// Be aware of transactional semantics in lmdb
@@ -169,7 +172,7 @@ impl Store {
 		prefixes: Vec<u8>,
 		max_readers: Option<u32>,
 		db_migration_prog_tx: Option<mpsc::Sender<i8>>,
-	) -> Result<Store, Error> {
+	) -> Result<Store<C>, Error> {
 		let full_path = Path::new(root_path)
 			.join(DEFAULT_MULTI_DB_ENV_NAME)
 			.to_str()
@@ -234,10 +237,22 @@ impl Store {
 			let env = r_env_map.get(&full_path).unwrap().env.clone();
 			let mut write = env.write_txn()?;
 			let def_name = db_name.unwrap_or(DEFAULT_ENV_NAME);
-			let def_db = env.create_database(&mut write, Some(def_name))?;
-			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes>>::new();
+			let def_db = env
+				.database_options()
+				.types::<Bytes, Bytes>()
+				.name(def_name)
+				.flags(DatabaseFlags::DUP_SORT)
+				.dup_sort_comparator::<C>()
+				.create(&mut write)?;
+			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes, DefaultComparator, C>>::new();
 			for p in prefixes {
-				let db = env.create_database(&mut write, Some(p.to_string().as_str()))?;
+				let db = env
+					.database_options()
+					.types::<Bytes, Bytes>()
+					.name(p.to_string().as_str())
+					.flags(DatabaseFlags::DUP_SORT)
+					.dup_sort_comparator::<C>()
+					.create(&mut write)?;
 				dbs_map.insert(p, db);
 			}
 			write.commit()?;
@@ -521,7 +536,10 @@ impl Store {
 	}
 
 	/// Get database from provided key or return default.
-	fn get_db(&self, db_key: Option<u8>) -> Result<&Database<Bytes, Bytes>, Error> {
+	fn get_db(
+		&self,
+		db_key: Option<u8>,
+	) -> Result<&Database<Bytes, Bytes, DefaultComparator, C>, Error> {
 		match db_key {
 			Some(db) => {
 				if let Some(db) = self.pre_dbs.get(&db) {
@@ -609,7 +627,7 @@ impl Store {
 		&self,
 		db_key: Option<u8>,
 		deserialize: F,
-	) -> Result<DatabaseIterator<'a, F, T>, Error>
+	) -> Result<DatabaseIterator<'a, F, T, C>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
@@ -636,7 +654,7 @@ impl Store {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch<'_>, Error> {
+	pub fn batch(&self) -> Result<Batch<'_, C>, Error> {
 		self.maybe_resize();
 		Batch::new(self)
 	}
@@ -695,16 +713,16 @@ impl Drop for TxCounter {
 }
 
 /// Batch to write multiple Writeables to the database in an atomic manner.
-pub struct Batch<'a> {
-	store: &'a Store,
+pub struct Batch<'a, C: Comparator> {
+	store: &'a Store<C>,
 	write: RwTxn<'a>,
 	#[allow(dead_code)]
 	tx_counter: Option<TxCounter>,
 }
 
-impl<'a> Batch<'a> {
+impl<'a, C: Comparator + 'static> Batch<'a, C> {
 	/// Creates a new batch for provided store.
-	pub fn new(store: &'a Store) -> Result<Batch<'a>, Error> {
+	pub fn new(store: &'a Store<C>) -> Result<Batch<'a, C>, Error> {
 		let tx_counter = store.enter_tx();
 		let write = store.env.write_txn()?;
 		Ok(Batch {
@@ -783,7 +801,7 @@ impl<'a> Batch<'a> {
 		&'a self,
 		db_key: Option<u8>,
 		deserialize: F,
-	) -> Result<DatabaseIterator<'a, F, T>, Error>
+	) -> Result<DatabaseIterator<'a, F, T, C>, Error>
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
@@ -838,7 +856,7 @@ impl<'a> Batch<'a> {
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
-	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
+	pub fn child(&mut self) -> Result<Batch<'_, C>, Error> {
 		let res = {
 			match self.store.env.nested_write_txn(&mut self.write) {
 				Ok(write) => Ok(Batch {
@@ -855,11 +873,11 @@ impl<'a> Batch<'a> {
 
 /// An iterator based on database key.
 /// Caller is responsible for deserialization of the data.
-pub struct DatabaseIterator<'a, F, T>
+pub struct DatabaseIterator<'a, F, T, C>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
-	db: Arc<Database<Bytes, Bytes>>,
+	db: Arc<Database<Bytes, Bytes, DefaultComparator, C>>,
 	read: Arc<RoTxn<'a, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
 	skip_cur: usize,
@@ -870,7 +888,7 @@ where
 	tx_counter: Option<TxCounter>,
 }
 
-impl<F, T> Iterator for DatabaseIterator<'_, F, T>
+impl<F, T, C> Iterator for DatabaseIterator<'_, F, T, C>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
@@ -911,17 +929,17 @@ where
 	}
 }
 
-impl<'a, F, T> DatabaseIterator<'a, F, T>
+impl<'a, F, T, C> DatabaseIterator<'a, F, T, C>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		db: Arc<Database<Bytes, Bytes>>,
+		db: Arc<Database<Bytes, Bytes, DefaultComparator, C>>,
 		tx_counter: Option<TxCounter>,
 		read: RoTxn<'a, WithoutTls>,
 		deserialize: F,
-	) -> Result<DatabaseIterator<'a, F, T>, Error> {
+	) -> Result<DatabaseIterator<'a, F, T, C>, Error> {
 		// load keys before constructing tx_counter to avoid double-decrementing open_txs_count on error
 		let keys = Self::read_key_page(&db, &read, 0)?;
 		let done = keys.is_empty();
@@ -945,7 +963,7 @@ where
 	}
 
 	fn read_key_page(
-		db: &Database<Bytes, Bytes>,
+		db: &Database<Bytes, Bytes, DefaultComparator, C>,
 		read: &RoTxn<'a, WithoutTls>,
 		skip: usize,
 	) -> Result<Vec<Vec<u8>>, Error> {
