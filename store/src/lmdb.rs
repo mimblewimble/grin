@@ -119,8 +119,8 @@ struct EnvState {
 pub struct Store<C: Comparator> {
 	env: Env<WithoutTls>,
 	env_path: String,
-	pre_dbs: Arc<HashMap<u8, Database<Bytes, Bytes, DefaultComparator, C>>>,
-	def_db: Database<Bytes, Bytes, DefaultComparator, C>,
+	pre_dbs: Arc<HashMap<u8, Database<Bytes, Bytes, C, DefaultComparator>>>,
+	def_db: Database<Bytes, Bytes, C, DefaultComparator>,
 	version: ProtocolVersion,
 	alloc_chunk_size: usize,
 }
@@ -241,15 +241,15 @@ impl<C: Comparator + 'static> Store<C> {
 				.database_options()
 				.types::<Bytes, Bytes>()
 				.name(def_name)
-				.dup_sort_comparator::<C>()
+				.key_comparator::<C>()
 				.create(&mut write)?;
-			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes, DefaultComparator, C>>::new();
+			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes, C, DefaultComparator>>::new();
 			for p in prefixes {
 				let db = env
 					.database_options()
 					.types::<Bytes, Bytes>()
 					.name(p.to_string().as_str())
-					.dup_sort_comparator::<C>()
+					.key_comparator::<C>()
 					.create(&mut write)?;
 				dbs_map.insert(p, db);
 			}
@@ -537,7 +537,7 @@ impl<C: Comparator + 'static> Store<C> {
 	fn get_db(
 		&self,
 		db_key: Option<u8>,
-	) -> Result<&Database<Bytes, Bytes, DefaultComparator, C>, Error> {
+	) -> Result<&Database<Bytes, Bytes, C, DefaultComparator>, Error> {
 		match db_key {
 			Some(db) => {
 				if let Some(db) = self.pre_dbs.get(&db) {
@@ -875,7 +875,7 @@ pub struct DatabaseIterator<'a, F, T, C>
 where
 	F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 {
-	db: Arc<Database<Bytes, Bytes, DefaultComparator, C>>,
+	db: Arc<Database<Bytes, Bytes, C, DefaultComparator>>,
 	read: Arc<RoTxn<'a, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
 	skip_cur: usize,
@@ -933,7 +933,7 @@ where
 {
 	/// Initialize a new prefix iterator.
 	pub fn new(
-		db: Arc<Database<Bytes, Bytes, DefaultComparator, C>>,
+		db: Arc<Database<Bytes, Bytes, C, DefaultComparator>>,
 		tx_counter: Option<TxCounter>,
 		read: RoTxn<'a, WithoutTls>,
 		deserialize: F,
@@ -961,7 +961,7 @@ where
 	}
 
 	fn read_key_page(
-		db: &Database<Bytes, Bytes, DefaultComparator, C>,
+		db: &Database<Bytes, Bytes, C, DefaultComparator>,
 		read: &RoTxn<'a, WithoutTls>,
 		skip: usize,
 	) -> Result<Vec<Vec<u8>>, Error> {
