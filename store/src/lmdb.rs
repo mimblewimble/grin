@@ -241,7 +241,6 @@ impl<C: Comparator + 'static> Store<C> {
 				.database_options()
 				.types::<Bytes, Bytes>()
 				.name(def_name)
-				.flags(DatabaseFlags::DUP_SORT)
 				.dup_sort_comparator::<C>()
 				.create(&mut write)?;
 			let mut dbs_map = HashMap::<u8, Database<Bytes, Bytes, DefaultComparator, C>>::new();
@@ -250,7 +249,6 @@ impl<C: Comparator + 'static> Store<C> {
 					.database_options()
 					.types::<Bytes, Bytes>()
 					.name(p.to_string().as_str())
-					.flags(DatabaseFlags::DUP_SORT)
 					.dup_sort_comparator::<C>()
 					.create(&mut write)?;
 				dbs_map.insert(p, db);
