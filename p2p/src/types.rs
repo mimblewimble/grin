@@ -163,7 +163,7 @@ impl Writeable for PeerAddr {
 				ser_multiwrite!(
 					writer,
 					[write_u8, 0],
-					[write_fixed_bytes, &sav4.ip().octets().to_vec()],
+					[write_fixed_bytes, sav4.ip().octets()],
 					[write_u16, sav4.port()]
 				);
 			}
@@ -354,7 +354,7 @@ pub fn is_private_ip(ip: &IpAddr) -> bool {
 				|| matches!(ip.segments(), [0x2001, 4, 0x112, _, _, _, _, _])
 				// ORCHIDv2 (`2001:20::/28`)
 				// Drone Remote ID Protocol Entity Tags (DETs) Prefix (`2001:30::/28`)`
-				|| matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if b >= 0x20 && b <= 0x3F)
+				|| matches!(ip.segments(), [0x2001, b, _, _, _, _, _, _] if (0x20..=0x3F).contains(&b))
 		))
 			// 6to4 (`2002::/16`) – it's not explicitly documented as globally reachable,
 			// IANA says N/A.
@@ -489,51 +489,46 @@ impl Default for P2PConfig {
 impl P2PConfig {
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {
-		self.ban_window.unwrap_or_else(|| BAN_WINDOW)
+		self.ban_window.unwrap_or(BAN_WINDOW)
 	}
 
 	/// return maximum inbound peer connections count
 	pub fn peer_max_inbound_count(&self) -> u32 {
 		self.peer_max_inbound_count
-			.unwrap_or_else(|| PEER_MAX_INBOUND_COUNT)
+			.unwrap_or(PEER_MAX_INBOUND_COUNT)
 	}
 
 	/// return maximum outbound peer connections count
 	pub fn peer_max_outbound_count(&self) -> u32 {
 		self.peer_max_outbound_count
-			.unwrap_or_else(|| PEER_MAX_OUTBOUND_COUNT)
+			.unwrap_or(PEER_MAX_OUTBOUND_COUNT)
 	}
 
 	/// return minimum preferred outbound peer count
 	pub fn peer_min_preferred_outbound_count(&self) -> u32 {
 		self.peer_min_preferred_outbound_count
-			.unwrap_or_else(|| PEER_MIN_PREFERRED_OUTBOUND_COUNT)
+			.unwrap_or(PEER_MIN_PREFERRED_OUTBOUND_COUNT)
 	}
 
 	/// return peer buffer count for listener
 	pub fn peer_listener_buffer_count(&self) -> u32 {
 		self.peer_listener_buffer_count
-			.unwrap_or_else(|| PEER_LISTENER_BUFFER_COUNT)
+			.unwrap_or(PEER_LISTENER_BUFFER_COUNT)
 	}
 }
 
 /// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum Seeding {
 	/// No seeding, mostly for tests that programmatically connect
 	None,
 	/// A list of seeds provided to the server (can be addresses or DNS names)
 	List,
 	/// Automatically get a list of seeds from multiple DNS
+	#[default]
 	DNSSeed,
 	/// Mostly for tests, where connections are initiated programmatically
 	Programmatic,
-}
-
-impl Default for Seeding {
-	fn default() -> Seeding {
-		Seeding::DNSSeed
-	}
 }
 
 bitflags! {

@@ -222,7 +222,7 @@ where
 				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
-					return Ok(false);
+					Ok(false)
 				}
 			}
 		} else {
@@ -458,10 +458,10 @@ where
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<p2p::TxHashSetRead> {
-		match self.chain().txhashset_read(h.clone()) {
+		match self.chain().txhashset_read(h) {
 			Ok((out_index, kernel_index, read)) => Some(p2p::TxHashSetRead {
 				output_index: out_index,
-				kernel_index: kernel_index,
+				kernel_index,
 				reader: read,
 			}),
 			Err(e) => {
@@ -476,10 +476,10 @@ where
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
-		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload { .. } => true,
-			_ => false,
-		}
+		matches!(
+			self.sync_state.status(),
+			SyncStatus::TxHashsetDownload { .. }
+		)
 	}
 
 	fn txhashset_download_update(
@@ -1141,7 +1141,7 @@ where
 		let header_pmmr = header_pmmr.read();
 
 		for hash in locator {
-			if let Ok(header) = self.chain().get_block_header(&hash) {
+			if let Ok(header) = self.chain().get_block_header(hash) {
 				if let Ok(hash_at_height) = header_pmmr.get_header_hash_by_height(header.height) {
 					if let Ok(header_at_height) = self.chain().get_block_header(&hash_at_height) {
 						if header.hash() == header_at_height.hash() {
@@ -1506,6 +1506,12 @@ impl PoolToNetAdapter {
 #[derive(Clone)]
 pub struct PoolToChainAdapter {
 	chain: OneTime<Weak<chain::Chain>>,
+}
+
+impl Default for PoolToChainAdapter {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl PoolToChainAdapter {

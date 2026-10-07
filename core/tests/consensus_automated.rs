@@ -58,12 +58,7 @@ fn next_dma_difficulty_adjustment() {
 	hi.difficulty = Difficulty::from_num(500);
 	let sec = DMA_WINDOW / 2;
 	let mut s1 = repeat(BLOCK_TIME_SEC, hi.clone(), sec, Some(cur_time));
-	let mut s2 = repeat_offs(
-		BLOCK_TIME_SEC,
-		1500,
-		sec,
-		cur_time + (sec * BLOCK_TIME_SEC) as u64,
-	);
+	let mut s2 = repeat_offs(BLOCK_TIME_SEC, 1500, sec, cur_time + (sec * BLOCK_TIME_SEC));
 	s2.append(&mut s1);
 	assert_eq!(
 		next_dma_difficulty(1, s2).difficulty,
@@ -206,7 +201,7 @@ fn repeat(
 		None => Utc::now().timestamp() as u64,
 	};
 	// watch overflow here, length shouldn't be ridiculous anyhow
-	assert!(len < std::usize::MAX as u64);
+	assert!(len < usize::MAX as u64);
 	let diffs = vec![diff.difficulty; len as usize];
 	let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 	let pairs = times.zip(diffs.iter());

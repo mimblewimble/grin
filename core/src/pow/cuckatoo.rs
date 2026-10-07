@@ -30,11 +30,11 @@ struct Graph {
 	links: Vec<Link>,
 	/// Index into links array
 	adj_list: Vec<u64>,
-	///
+	/// Visited nodes
 	visited: Bitmap,
 	/// Maximum solutions
 	max_sols: u32,
-	///
+	/// Cycle proofs found
 	pub solutions: Vec<Proof>,
 	/// proof size
 	proof_size: usize,
@@ -45,7 +45,7 @@ struct Graph {
 impl Graph {
 	/// Create a new graph with given parameters
 	pub fn new(max_edges: u64, max_sols: u32, proof_size: usize) -> Result<Graph, Error> {
-		if max_edges >= u64::max_value() / 2 {
+		if max_edges >= u64::MAX / 2 {
 			return Err(Error::Verification("graph is to big to build".to_string()));
 		}
 		let max_nodes = 2 * max_edges;
@@ -58,14 +58,14 @@ impl Graph {
 			adj_list: vec![],
 			visited: Bitmap::new(),
 			solutions: vec![],
-			nil: u64::max_value(),
+			nil: u64::MAX,
 		})
 	}
 
 	pub fn reset(&mut self) -> Result<(), Error> {
 		//TODO: Can be optimised
 		self.links = Vec::with_capacity(2 * self.max_nodes as usize);
-		self.adj_list = vec![u64::max_value(); 2 * self.max_nodes as usize];
+		self.adj_list = vec![u64::MAX; 2 * self.max_nodes as usize];
 		self.solutions = vec![Proof::zero(self.proof_size); 1];
 		self.visited = Bitmap::new();
 		Ok(())
@@ -81,7 +81,7 @@ impl Graph {
 		if u >= self.max_nodes || v >= self.max_nodes {
 			return Err(Error::EdgeAddition);
 		}
-		v = v + self.max_nodes;
+		v += self.max_nodes;
 		let adj_u = self.adj_list[(u ^ 1) as usize];
 		let adj_v = self.adj_list[(v ^ 1) as usize];
 		if adj_u != self.nil && adj_v != self.nil {
@@ -243,7 +243,7 @@ impl CuckatooContext {
 			s.nonces.sort_unstable();
 		}
 		for s in &self.graph.solutions {
-			self.verify_impl(&s)?;
+			self.verify_impl(s)?;
 		}
 		if self.graph.solutions.is_empty() {
 			Err(Error::NoSolution)

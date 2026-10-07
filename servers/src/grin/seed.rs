@@ -306,7 +306,7 @@ fn monitor_peers(
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !enough_outbound {
 		for addr in seed_addrs {
-			if !peers_deny.matches_addr(&addr) && !new_peers.contains(&addr) {
+			if !peers_deny.matches_addr(addr) && !new_peers.contains(addr) {
 				new_peers.push(*addr);
 			}
 		}
@@ -438,7 +438,7 @@ fn listen_for_addrs(
 				debug!(
 					"peer_connect: ignore a duplicate request to {}. previous connecting time: {}",
 					addr,
-					last_connect_time.format("%H:%M:%S%.3f").to_string(),
+					last_connect_time.format("%H:%M:%S%.3f"),
 				);
 				continue;
 			} else if let Some(history) = connecting_history.get_mut(&addr) {
@@ -538,9 +538,7 @@ pub fn resolve_dns_to_addrs(config: &P2PConfig, dns_records: &Vec<String>) -> Ve
 			Ok(addrs) => addresses.append(
 				&mut addrs
 					.map(PeerAddr)
-					.filter(|addr| {
-						!addresses.contains(addr) && !Peer::is_denied(config, addr.clone())
-					})
+					.filter(|addr| !addresses.contains(addr) && !Peer::is_denied(config, *addr))
 					.collect(),
 			),
 			Err(e) => debug!("Failed to resolve dns {:?} got error {:?}", dns, e),

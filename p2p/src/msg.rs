@@ -113,7 +113,7 @@ fn default_max_msg_size() -> u64 {
 fn max_header_size() -> u64 {
 	let header_bytes = 2 + 2 * 8 + 5 * 32 + 32 + 2 * 8;
 	let pow_bytes = 8 + 4 + 8 + 1;
-	let proof_bytes = (63 * consensus::PROOFSIZE + 7) / 8;
+	let proof_bytes = (63 * consensus::PROOFSIZE).div_ceil(8);
 	(header_bytes + pow_bytes + proof_bytes) as u64
 }
 
@@ -326,7 +326,7 @@ impl MsgHeader {
 	pub fn new(msg_type: Type, len: u64) -> MsgHeader {
 		MsgHeader {
 			magic: magic(),
-			msg_type: msg_type,
+			msg_type,
 			msg_len: len,
 		}
 	}
@@ -523,7 +523,7 @@ impl Readable for GetPeerAddrs {
 
 /// Peer addresses we know of that are fresh enough, in response to
 /// GetPeerAddrs.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
 pub struct PeerAddrs {
 	pub peers: Vec<PeerAddr>,
 }
@@ -559,12 +559,6 @@ impl IntoIterator for PeerAddrs {
 	type IntoIter = std::vec::IntoIter<Self::Item>;
 	fn into_iter(self) -> Self::IntoIter {
 		self.peers.into_iter()
-	}
-}
-
-impl Default for PeerAddrs {
-	fn default() -> Self {
-		PeerAddrs { peers: vec![] }
 	}
 }
 
@@ -611,10 +605,7 @@ impl Readable for PeerError {
 		let code = reader.read_u32()?;
 		let msg = reader.read_bytes_len_prefix()?;
 		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
-		Ok(PeerError {
-			code: code,
-			message: message,
-		})
+		Ok(PeerError { code, message })
 	}
 }
 
@@ -644,7 +635,7 @@ impl Readable for Locator {
 		for _ in 0..len {
 			hashes.push(Hash::read(reader)?);
 		}
-		Ok(Locator { hashes: hashes })
+		Ok(Locator { hashes })
 	}
 }
 
@@ -772,10 +763,7 @@ impl Writeable for BanReason {
 
 impl Readable for BanReason {
 	fn read<R: Reader>(reader: &mut R) -> Result<BanReason, ser::Error> {
-		let ban_reason_i32 = match reader.read_i32() {
-			Ok(h) => h,
-			Err(_) => 0,
-		};
+		let ban_reason_i32 = reader.read_i32().unwrap_or_default();
 
 		let ban_reason = ReasonForBan::from_i32(ban_reason_i32).ok_or(ser::Error::CorruptedData)?;
 
