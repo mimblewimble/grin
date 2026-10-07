@@ -123,11 +123,16 @@ pub struct Node {
 	mws: Option<Vec<HandlerObj>>,
 }
 
+impl Default for Router {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl Router {
 	pub fn new() -> Router {
 		let root = Node::new(calculate_hash(&""), None);
-		let mut nodes = vec![];
-		nodes.push(root);
+		let nodes = vec![root];
 		Router { nodes }
 	}
 

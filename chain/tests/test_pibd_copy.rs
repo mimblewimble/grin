@@ -196,29 +196,25 @@ impl DesegmenterRequestor {
 			// Perform request and response
 			match seg_id.segment_type {
 				SegmentType::Bitmap => {
-					let (seg, output_root) =
-						self.responder.get_bitmap_segment(seg_id.identifier.clone());
+					let (seg, output_root) = self.responder.get_bitmap_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_bitmap_segment(seg, output_root).unwrap();
 					}
 				}
 				SegmentType::Output => {
-					let (seg, _bitmap_root) =
-						self.responder.get_output_segment(seg_id.identifier.clone());
+					let (seg, _bitmap_root) = self.responder.get_output_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_output_segment(seg).unwrap();
 					}
 				}
 				SegmentType::RangeProof => {
-					let seg = self
-						.responder
-						.get_rangeproof_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_rangeproof_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_rangeproof_segment(seg).unwrap();
 					}
 				}
 				SegmentType::Kernel => {
-					let seg = self.responder.get_kernel_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_kernel_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_kernel_segment(seg).unwrap();
 					}
@@ -271,11 +267,11 @@ fn test_pibd_copy_impl(is_fixture: bool, src_root_dir: &str, dest_root_dir: &str
 fn test_pibd_copy_sample() {
 	util::init_test_logger();
 	// Rebuild both fixtures via PIBD and compare their roots
-	let src_root_dir = format!("./tests/test_data/chain_raw");
-	let dest_root_dir = format!("./tests/test_output/.segment_copy");
+	let src_root_dir = "./tests/test_data/chain_raw".to_string();
+	let dest_root_dir = "./tests/test_output/.segment_copy".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
-	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
 	clean_output_dir(&dest_root_dir);
@@ -287,7 +283,7 @@ fn test_pibd_copy_sample() {
 fn test_pibd_copy_real() {
 	util::init_test_logger();
 	let src_root_dir = std::env::var("GRIN_CHAIN_DATA").expect("GRIN_CHAIN_DATA must be set");
-	let dest_root_dir = format!("./tests/test_output/.segment_copy_real");
+	let dest_root_dir = "./tests/test_output/.segment_copy_real".to_string();
 	clean_output_dir(&dest_root_dir);
 	test_pibd_copy_impl(false, &src_root_dir, &dest_root_dir);
 	clean_output_dir(&dest_root_dir);

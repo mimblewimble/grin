@@ -146,6 +146,12 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	fn dump_stats(&self) {}
 }
 
+impl<T: PMMRable> Default for VecBackend<T> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<T: PMMRable> VecBackend<T> {
 	/// Instantiates a new empty vec backend.
 	pub fn new() -> VecBackend<T> {

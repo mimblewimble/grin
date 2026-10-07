@@ -121,8 +121,8 @@ where
 	B: ProofBuild,
 {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward_output = reward::output(keychain, builder, &key_id, fees, false).unwrap();
-	Block::new(&previous_header, txs, Difficulty::min_dma(), reward_output).unwrap()
+	let reward_output = reward::output(keychain, builder, key_id, fees, false).unwrap();
+	Block::new(previous_header, txs, Difficulty::min_dma(), reward_output).unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided
@@ -148,6 +148,8 @@ where
 	.unwrap()
 }
 
+// Used by only some integration tests
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
 

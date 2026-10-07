@@ -19,6 +19,7 @@ use crate::core::pmmr::{self, Backend, ReadablePMMR, ReadonlyPMMR};
 use crate::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use croaring::Bitmap;
 use std::cmp::min;
+use std::fmt;
 use std::fmt::Debug;
 
 const MAX_SEGMENT_READ_ITEMS: u64 = 1_000_000;
@@ -65,6 +66,17 @@ pub enum SegmentType {
 	RangeProof,
 	/// Kernel
 	Kernel,
+}
+
+impl fmt::Display for SegmentType {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match *self {
+			SegmentType::Bitmap => f.write_str("bitmap"),
+			SegmentType::Output => f.write_str("output"),
+			SegmentType::RangeProof => f.write_str("rangeproof"),
+			SegmentType::Kernel => f.write_str("kernel"),
+		}
+	}
 }
 
 /// Lumps possible types with segment ids to enable a unique identifier
@@ -147,7 +159,7 @@ impl SegmentIdentifier {
 	/// pmmr of size `target_mmr_size` in segments of height `segment_height`
 	pub fn count_segments_required(target_mmr_size: u64, segment_height: u8) -> usize {
 		let d = 1 << segment_height;
-		((pmmr::n_leaves(target_mmr_size) + d - 1) / d) as usize
+		pmmr::n_leaves(target_mmr_size).div_ceil(d) as usize
 	}
 
 	/// Return pmmr size of number of segments of the given height
@@ -250,7 +262,7 @@ impl<T> Segment<T> {
 			.zip(&self.hashes)
 			.find(|&(&p, _)| p == pos0)
 			.map(|(_, &h)| h)
-			.ok_or_else(|| SegmentError::MissingHash(pos0))
+			.ok_or(SegmentError::MissingHash(pos0))
 	}
 
 	/// Get the identifier associated with this segment
@@ -313,7 +325,7 @@ impl<T> Segment<T> {
 
 	/// Iterator of all the leaves in the segment
 	pub fn leaf_iter(&self) -> impl Iterator<Item = (u64, &T)> + '_ {
-		self.leaf_pos.iter().map(|&p| p).zip(&self.leaf_data)
+		self.leaf_pos.iter().copied().zip(&self.leaf_data)
 	}
 
 	/// Iterator of all the hashes in the segment
@@ -443,7 +455,7 @@ where
 					let data = leaves0
 						.find(|&(&p, _)| p == pos0)
 						.map(|(_, l)| l)
-						.ok_or_else(|| SegmentError::MissingLeaf(pos0))?;
+						.ok_or(SegmentError::MissingLeaf(pos0))?;
 					Some(data.hash_with_index(pos0))
 				} else {
 					None
@@ -473,9 +485,8 @@ where
 					// Non-prunable MMR: require both children
 					Some(
 						(
-							left_child.ok_or_else(|| SegmentError::MissingHash(left_child_pos))?,
-							right_child
-								.ok_or_else(|| SegmentError::MissingHash(right_child_pos))?,
+							left_child.ok_or(SegmentError::MissingHash(left_child_pos))?,
+							right_child.ok_or(SegmentError::MissingHash(right_child_pos))?,
 						)
 							.hash_with_index(pos0),
 					)
@@ -672,10 +683,7 @@ impl SegmentProof {
 		let hashes: Result<Vec<_>, _> = family_branch
 			.iter()
 			.filter(|&&(p0, _)| start_pos.map(|s| p0 >= s).unwrap_or(true))
-			.map(|&(_, s0)| {
-				pmmr.get_hash(s0)
-					.ok_or_else(|| SegmentError::MissingHash(s0))
-			})
+			.map(|&(_, s0)| pmmr.get_hash(s0).ok_or(SegmentError::MissingHash(s0)))
 			.collect();
 		let mut proof = Self { hashes: hashes? };
 
@@ -693,7 +701,7 @@ impl SegmentProof {
 			.into_iter()
 			.filter(|&x| 1 + x < segment_first_pos)
 			.rev()
-			.map(|p| pmmr.get_hash(p).ok_or_else(|| SegmentError::MissingHash(p)))
+			.map(|p| pmmr.get_hash(p).ok_or(SegmentError::MissingHash(p)))
 			.collect();
 		proof.hashes.extend(peaks?);
 
@@ -739,10 +747,7 @@ impl SegmentProof {
 			.map(|&(p0, _)| p0)
 			.unwrap_or(segment_last_pos0);
 
-		let rhs = pmmr::peaks(last_pos)
-			.into_iter()
-			.filter(|&x| x > peak_pos0)
-			.next();
+		let rhs = pmmr::peaks(last_pos).into_iter().find(|&x| x > peak_pos0);
 
 		if let Some(pos0) = rhs {
 			root = (
@@ -796,6 +801,8 @@ impl SegmentProof {
 
 	/// Check validity of the proof by equating the reconstructed root with the actual root
 	/// This function assumes a final hashing step together with `other_root`
+	// Keep the existing validation API
+	#[allow(clippy::too_many_arguments)]
 	pub fn validate_with(
 		&self,
 		last_pos: u64,

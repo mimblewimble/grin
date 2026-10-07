@@ -121,19 +121,14 @@ impl From<libtx::Error> for Error {
 }
 
 /// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum ChainValidationMode {
 	/// Run full chain validation after processing every block.
 	EveryBlock,
 	/// Do not automatically run chain validation during normal block
 	/// processing.
+	#[default]
 	Disabled,
-}
-
-impl Default for ChainValidationMode {
-	fn default() -> ChainValidationMode {
-		ChainValidationMode::Disabled
-	}
 }
 
 /// Full server configuration, aggregating configurations required for the
@@ -408,6 +403,8 @@ impl DandelionEpoch {
 }
 
 /// Server initialization status.
+// Keep the existing initialization message API
+#[allow(clippy::large_enum_variant)]
 pub enum ServerInitStatus {
 	/// Database loading.
 	LoadDatabase,
