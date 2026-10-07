@@ -9,6 +9,7 @@ target
 grin.log
 wallet.seed
 test_output
+chain/tests/test_data/**/lock.mdb
 wallet_data
 wallet/db
 .idea/
