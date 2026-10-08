@@ -24,7 +24,7 @@ use store::{
 
 use byteorder::WriteBytesExt;
 use heed::types::Bytes;
-use heed::{Database, Env, EnvOpenOptions, WithoutTls};
+use heed::{Database, DefaultComparator, Env, EnvOpenOptions, WithoutTls};
 use std::fs;
 use std::path::Path;
 use std::sync::{mpsc, Arc};
@@ -82,7 +82,8 @@ fn test_exists() -> Result<(), store::Error> {
 	setup(test_dir);
 
 	let prefix = b'P';
-	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+	let store: Store<DefaultComparator> =
+		Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
@@ -112,7 +113,8 @@ fn test_iter() -> Result<(), store::Error> {
 	setup(test_dir);
 
 	let prefix = b'P';
-	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+	let store: Store<DefaultComparator> =
+		Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 	let key = [0, 0, 0, 1];
 	let value = [1, 1, 1, 1];
@@ -149,7 +151,8 @@ fn test_iter_pages() -> Result<(), store::Error> {
 	setup(test_dir);
 
 	let prefix = b'P';
-	let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+	let store: Store<DefaultComparator> =
+		Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 	{
 		let mut batch = store.batch()?;
@@ -177,7 +180,8 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	// Allocate more than the initial chunk, ensuring
 	// the DB resizes underneath
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+		let store: Store<DefaultComparator> =
+			Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
@@ -193,7 +197,8 @@ fn lmdb_allocate() -> Result<(), store::Error> {
 	println!("***********************************");
 	// Open env again and keep adding
 	{
-		let store = store::Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
+		let store: Store<DefaultComparator> =
+			Store::new(test_dir, Some("test1"), None, vec![prefix], None, None)?;
 		for i in 0..WRITE_CHUNK_SIZE * 2 {
 			println!("Allocating chunk: {}", i);
 			let chunk = PhatChunkStruct::new();
@@ -276,7 +281,7 @@ fn test_migration() -> Result<(), store::Error> {
 	}
 
 	// Create new store to migrate data.
-	let store = Store::new(
+	let store: Store<DefaultComparator> = Store::new(
 		test_dir,
 		None,
 		Some(DEFAULT_ENV_NAME),
@@ -321,7 +326,7 @@ fn resize_batch_waits_for_open_read_iterator() -> Result<(), store::Error> {
 	clean_output_dir(test_dir);
 
 	let prefix = b'P';
-	let store = Arc::new(Store::new(
+	let store = Arc::new(Store::<DefaultComparator>::new(
 		test_dir,
 		Some("test1"),
 		None,
