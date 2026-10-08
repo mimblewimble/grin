@@ -958,7 +958,7 @@ fn test_overflow_cached_rangeproof() {
 			res.unwrap_err(),
 			chain::Error::InvalidBlockProof {
 				source: block::Error::Transaction(transaction::Error::Secp(
-					util::secp::Error::InvalidRangeProof
+					util::secp::Error::InvalidBulletproof
 				))
 			}
 		);

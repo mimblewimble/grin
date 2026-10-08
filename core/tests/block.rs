@@ -764,7 +764,7 @@ fn same_amount_outputs_copy_range_proof() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	match b.validate(&BlindingFactor::zero()) {
-		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidBulletproof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
 }
@@ -816,7 +816,7 @@ fn wrong_amount_range_proof() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	match b.validate(&BlindingFactor::zero()) {
-		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidBulletproof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
 }

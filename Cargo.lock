@@ -1207,9 +1207,9 @@ dependencies = [
 
 [[package]]
 name = "grin_secp256k1zkp"
-version = "0.7.15"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf7bb95f155b1eede2648a1b9afbba82bc3d9f2af0518b478767559a572bd973"
+checksum = "57e0a5f761e8c56db5be865f79832677d3badb3be91d7172d468e448f3d69f82"
 dependencies = [
  "arrayvec 0.7.6",
  "cc",

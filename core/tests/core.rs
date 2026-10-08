@@ -440,21 +440,20 @@ fn hash_output() {
 	assert!(h != h2);
 }
 
-#[ignore]
 #[test]
 fn blind_tx() {
+	test_setup();
 	let btx = tx2i1o();
 	assert!(btx.validate(Weighting::AsTransaction).is_ok());
 
-	// Ignored for bullet proofs, because calling range_proof_info
-	// with a bullet proof causes painful errors
-
 	// checks that the range proof on our blind output is sufficiently hiding
-	let Output { proof, .. } = btx.outputs()[0];
+	let Output { identifier, proof } = btx.outputs()[0];
 
 	let secp = static_secp_instance();
 	let secp = secp.lock();
-	let info = secp.range_proof_info(proof);
+	let info = secp
+		.verify_bullet_proof(identifier.commitment(), proof, None)
+		.unwrap();
 
 	assert!(info.min == 0);
 	assert!(info.max == u64::max_value());
