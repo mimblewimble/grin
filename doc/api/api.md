@@ -11,6 +11,27 @@ This API version uses jsonrpc for its requests. It is split up in a foreign API 
 
 Basic auth passwords can be found in `.api_secret`/`.foreign_api_secret` files respectively.
 
+### Mining status (Owner API)
+
+Headless operators can query stratum mining statistics (the same data shown on the TUI mining tab) via:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "get_mining_status",
+  "params": [],
+  "id": 1
+}
+```
+
+Or from the CLI:
+
+```
+grin client miningstatus
+```
+
+The response includes whether stratum is enabled/running, connected worker count, current block height and network difficulty, blocks found, network hashrate estimate, and per-worker share stats for currently connected workers.
+
 ## Node API v1
 
 **Note:** version 1 of the API will be deprecated in v4.0.0 and subsequently removed in v5.0.0. Users of this API are encouraged to upgrade to API v2.

@@ -19,7 +19,7 @@ use clap::ArgMatches;
 
 use crate::api::client;
 use crate::api::json_rpc::*;
-use crate::api::types::Status;
+use crate::api::types::{MiningStatus, Status};
 use crate::config::GlobalConfig;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::util::file::get_first_line;
@@ -139,6 +139,69 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
+	pub fn show_mining_status(&self) {
+		println!();
+		let title = "Grin Mining Status".to_string();
+		if term::stdout().is_none() {
+			println!("Could not open terminal");
+			return;
+		}
+		let mut t = term::stdout().unwrap();
+		let mut e = term::stdout().unwrap();
+		t.fg(term::color::MAGENTA).unwrap();
+		writeln!(t, "{}", title).unwrap();
+		writeln!(t, "--------------------------").unwrap();
+		t.reset().unwrap();
+		match self.send_json_request::<MiningStatus>("get_mining_status", &serde_json::Value::Null)
+		{
+			Ok(status) => {
+				writeln!(e, "Mining server enabled: {}", status.is_enabled).unwrap();
+				writeln!(e, "Mining server running: {}", status.is_running).unwrap();
+				writeln!(e, "Active workers:        {}", status.num_workers).unwrap();
+				writeln!(e, "Blocks found:          {}", status.blocks_found).unwrap();
+				if status.num_workers > 0 {
+					writeln!(e, "Solving block height:  {}", status.block_height).unwrap();
+					writeln!(e, "Network difficulty:    {}", status.network_difficulty).unwrap();
+					writeln!(
+						e,
+						"Network hashrate (C{}): {:.2}",
+						status.edge_bits, status.network_hashrate
+					)
+					.unwrap();
+				}
+				writeln!(
+					e,
+					"Minimum share difficulty: {}",
+					status.minimum_share_difficulty
+				)
+				.unwrap();
+				if !status.worker_stats.is_empty() {
+					writeln!(e, "Workers:").unwrap();
+					for worker in status.worker_stats {
+						writeln!(
+							e,
+							"  id={} accepted={} rejected={} stale={} blocks={} difficulty={}",
+							worker.id,
+							worker.num_accepted,
+							worker.num_rejected,
+							worker.num_stale,
+							worker.num_blocks_found,
+							worker.pow_difficulty
+						)
+						.unwrap();
+					}
+				}
+			}
+			Err(_) => writeln!(
+				e,
+				"WARNING: Client failed to get mining data. Is your `grin server` offline or broken?"
+			)
+			.unwrap(),
+		};
+		e.reset().unwrap();
+		println!()
+	}
+
 	pub fn reset_chain_head(&self, hash: String) {
 		let mut e = term::stdout().unwrap();
 		let params = json!([hash]);
@@ -210,6 +273,9 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 	match client_args.subcommand() {
 		("status", Some(_)) => {
 			node_client.show_status();
+		}
+		("miningstatus", Some(_)) => {
+			node_client.show_mining_status();
 		}
 		("listconnectedpeers", Some(_)) => {
 			node_client.list_connected_peers();
