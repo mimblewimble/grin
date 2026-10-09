@@ -16,7 +16,7 @@ use crate::util::{Mutex, RwLock};
 use lru_cache::LruCache;
 use std::fmt;
 use std::fs::File;
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -34,6 +34,7 @@ use crate::msg::{
 	self, BanReason, GetPeerAddrs, Locator, Msg, Ping, SegmentRequest, TxHashSetRequest, Type,
 };
 use crate::protocol::Protocol;
+use crate::stream::Stream;
 use crate::types::{
 	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
 	PeerInfo, ReasonForBan, TxHashSetRead,
@@ -76,7 +77,7 @@ impl fmt::Debug for Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, conn: TcpStream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
+	fn new(info: PeerInfo, conn: Stream, adapter: Arc<dyn NetAdapter>) -> std::io::Result<Peer> {
 		let state = Arc::new(RwLock::new(State::Connected));
 		let state_sync_requested = Arc::new(AtomicBool::new(false));
 		let tracking_adapter = TrackingAdapter::new(adapter);
@@ -101,7 +102,7 @@ impl Peer {
 	}
 
 	pub fn accept(
-		mut conn: TcpStream,
+		mut conn: Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
@@ -126,7 +127,7 @@ impl Peer {
 	}
 
 	pub fn connect(
-		mut conn: TcpStream,
+		mut conn: Stream,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,

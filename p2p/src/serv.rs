@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::io;
 use std::net::{IpAddr, Shutdown, SocketAddr, SocketAddrV4, TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -32,6 +32,7 @@ use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::peers::Peers;
 use crate::store::PeerStore;
+use crate::stream::{default_tls_dir, Stream, TlsContext};
 use crate::types::{
 	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
 	PeerInfo, ReasonForBan, TxHashSetRead,
@@ -48,9 +49,10 @@ pub struct Server {
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
 	stop_state: Arc<StopState>,
+	/// Optional TLS context when `p2p_config.tls_enabled` is set.
+	tls: Option<TlsContext>,
 }
 
-// TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
@@ -61,12 +63,24 @@ impl Server {
 		genesis: Hash,
 		stop_state: Arc<StopState>,
 	) -> Result<Server, Error> {
+		let tls = if config.tls_enabled {
+			let cert = config.tls_certificate_file.as_ref().map(Path::new);
+			let key = config.tls_certificate_key.as_ref().map(Path::new);
+			let auto = Some(default_tls_dir(db_root));
+			Some(TlsContext::new(cert, key, auto.as_deref())?)
+		} else {
+			None
+		};
+		if tls.is_some() {
+			info!("P2P TLS enabled (privacy-only, self-signed certificates accepted)");
+		}
 		Ok(Server {
 			config: config.clone(),
 			capabilities,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
 			stop_state,
+			tls,
 		})
 	}
 
@@ -197,10 +211,11 @@ impl Server {
 			addr
 		);
 		match TcpStream::connect_timeout(&addr.0, Duration::from_secs(10)) {
-			Ok(stream) => {
+			Ok(tcp) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty()?;
 
+				let stream = self.wrap_outbound(tcp)?;
 				let peer = Peer::connect(
 					stream,
 					self.capabilities,
@@ -238,12 +253,13 @@ impl Server {
 		}
 	}
 
-	fn handle_new_peer(&self, stream: TcpStream) -> Result<(), Error> {
+	fn handle_new_peer(&self, tcp: TcpStream) -> Result<(), Error> {
 		if self.stop_state.is_stopped() {
 			return Err(Error::ConnectionClose);
 		}
 		let total_diff = self.peers.total_difficulty()?;
 
+		let stream = self.wrap_inbound(tcp)?;
 		// accept the peer and add it to the server map
 		let peer = Peer::accept(
 			stream,
@@ -254,6 +270,22 @@ impl Server {
 		)?;
 		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
+	}
+
+	/// Wrap an accepted TCP connection, optionally upgrading to TLS.
+	fn wrap_inbound(&self, tcp: TcpStream) -> Result<Stream, Error> {
+		match &self.tls {
+			Some(tls) => tls.accept(tcp).map_err(Error::Connection),
+			None => Ok(Stream::plain(tcp)),
+		}
+	}
+
+	/// Wrap an outbound TCP connection, optionally upgrading to TLS.
+	fn wrap_outbound(&self, tcp: TcpStream) -> Result<Stream, Error> {
+		match &self.tls {
+			Some(tls) => tls.connect(tcp).map_err(Error::Connection),
+			None => Ok(Stream::plain(tcp)),
+		}
 	}
 
 	/// Checks whether there's any reason we don't want to accept an incoming peer
