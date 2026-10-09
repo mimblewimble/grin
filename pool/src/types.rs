@@ -47,6 +47,7 @@ const DANDELION_ALWAYS_STEM_OUR_TXS: bool = true;
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct DandelionConfig {
 	/// Length of each "epoch".
 	#[serde(default = "default_dandelion_epoch_secs")]
@@ -100,6 +101,7 @@ fn default_dandelion_always_stem_our_txs() -> bool {
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and

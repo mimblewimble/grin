@@ -87,12 +87,19 @@ pub struct GlobalConfig {
 /// internal state that we don't necessarily
 /// want serialised or deserialised
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct ConfigMembers {
 	/// Config file version (None == version 1)
+	#[serde(default)]
 	pub config_file_version: Option<u32>,
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Logging config
+	/// Logging config. Omitted section falls back to defaults (never `None` after load).
+	#[serde(default = "default_logging")]
 	pub logging: Option<LoggingConfig>,
+}
+
+fn default_logging() -> Option<LoggingConfig> {
+	Some(LoggingConfig::default())
 }
