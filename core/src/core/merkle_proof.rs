@@ -18,6 +18,7 @@ use crate::core::hash::Hash;
 use crate::core::pmmr;
 use crate::ser;
 use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
+use std::cmp::min;
 use util::ToHex;
 
 /// Merkle proof errors.
@@ -26,6 +27,15 @@ pub enum MerkleProofError {
 	/// Merkle proof root hash does not match when attempting to verify.
 	RootMismatch,
 }
+
+/// Maximum sibling path length accepted when deserializing a Merkle proof.
+///
+/// Path length is O(log n) for an MMR of size n (plus a few peak hashes).
+/// 64 is far larger than any legitimate proof and prevents a malicious
+/// `path_len` from causing a capacity overflow / huge allocation.
+pub const MAX_MERKLE_PROOF_PATH: u64 = 64;
+
+const MERKLE_PROOF_PATH_PREALLOC: u64 = 16;
 
 /// A Merkle proof that proves a particular element exists in the MMR.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -50,7 +60,11 @@ impl Readable for MerkleProof {
 	fn read<R: Reader>(reader: &mut R) -> Result<MerkleProof, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
-		let mut path = Vec::with_capacity(path_len as usize);
+		if path_len > MAX_MERKLE_PROOF_PATH {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		// Cap preallocation even when path_len is within the allowed range.
+		let mut path = Vec::with_capacity(min(path_len, MERKLE_PROOF_PATH_PREALLOC) as usize);
 		for _ in 0..path_len {
 			let hash = Hash::read(reader)?;
 			path.push(hash);
