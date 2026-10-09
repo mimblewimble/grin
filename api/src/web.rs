@@ -52,6 +52,7 @@ where
 			Error::Argument(msg) => response(StatusCode::BAD_REQUEST, msg),
 			Error::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg),
 			Error::NotFound => response(StatusCode::NOT_FOUND, "".into()),
+			Error::Unavailable(msg) => response(StatusCode::SERVICE_UNAVAILABLE, msg),
 			Error::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
 			Error::ResponseError(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg),
 			Error::Router { .. } => response(StatusCode::INTERNAL_SERVER_ERROR, "".into()),

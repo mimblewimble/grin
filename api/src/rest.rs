@@ -49,6 +49,10 @@ pub enum Error {
 	Argument(String),
 	#[error("Not found.")]
 	NotFound,
+	/// Node is not ready yet (e.g. still syncing). Prefer this over [`NotFound`]
+	/// so clients can distinguish "missing data" from "try again later" (#3546).
+	#[error("Service unavailable: {0}")]
+	Unavailable(String),
 	#[error("Request error: {0}")]
 	RequestError(String),
 	#[error("ResponseError error: {0}")]
