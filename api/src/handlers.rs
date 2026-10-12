@@ -51,6 +51,8 @@ use tokio::sync::mpsc;
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
+// Keep the existing API startup signature
+#[allow(clippy::too_many_arguments)]
 pub fn node_apis<B, P>(
 	addr: &str,
 	chain: Arc<Chain>,

@@ -18,24 +18,28 @@ use self::chain::types::{NoopAdapter, Options};
 use self::chain::Chain;
 use self::core::consensus;
 use self::core::core::hash::Hash;
-use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use self::core::core::{Block, BlockHeader, BlockSums, KernelFeatures, Transaction};
+use self::core::core::{
+	Block, BlockHeader, BlockSums, Inputs, KernelFeatures, OutputIdentifier, Transaction,
+};
 use self::core::genesis;
 use self::core::global;
-use self::core::libtx::{build, reward, ProofBuilder, DEFAULT_BASE_FEE};
+use self::core::libtx::{build, reward, ProofBuilder};
 use self::core::pow;
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::pool::types::*;
 use self::pool::TransactionPool;
-use self::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_pool as pool;
-use grin_util as util;
+use std::convert::TryInto;
 use std::fs;
 use std::sync::Arc;
+
+// These amounts are first created as spendable outputs from a deterministic
+// funding transaction, then reused as inputs for the generated corpus txs.
+pub const CORPUS_INPUT_VALUES: [u64; 8] = [10, 100, 1000, 10000, 100000, 200000, 400000, 800000];
 
 /// Build genesis block with reward (non-empty, like we have in mainnet).
 // Same as from pool/tests/common.rs
@@ -90,16 +94,23 @@ impl BlockChain for ChainAdapter {
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain.validate_tx(tx).map_err(|e| match e.kind() {
-			chain::Error::Transaction(txe) => txe.into(),
+		self.chain.validate_tx(tx).map_err(|e| match e {
+			chain::Error::Transaction { source: txe } => txe.into(),
 			chain::Error::NRDRelativeHeight => PoolError::NRDKernelRelativeHeight,
 			_ => PoolError::Other("failed to validate tx".into()),
 		})
 	}
 
-	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), PoolError> {
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, PoolError> {
 		self.chain
-			.verify_coinbase_maturity(tx)
+			.validate_inputs(inputs)
+			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
+			.map_err(|_| PoolError::Other("failed to validate inputs".into()))
+	}
+
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), PoolError> {
+		self.chain
+			.verify_coinbase_maturity(inputs)
 			.map_err(|_| PoolError::ImmatureCoinbase)
 	}
 
@@ -120,26 +131,22 @@ pub fn clean_output_dir(db_root: String) {
 pub struct PoolFuzzer {
 	pub chain: Arc<Chain>,
 	pub keychain: ExtKeychain,
-	pub pool: TransactionPool<ChainAdapter, NoopPoolAdapter, LruVerifierCache>,
+	pub pool: TransactionPool<ChainAdapter, NoopPoolAdapter>,
 }
 
 impl PoolFuzzer {
 	pub fn new(db_root: &str) -> Self {
-		let keychain: ExtKeychain = Keychain::from_random_seed(false).unwrap();
+		let keychain: ExtKeychain = Keychain::from_seed(b"grin_pool_fuzz_keychain", false).unwrap();
 
 		clean_output_dir(db_root.into());
 
 		let genesis = genesis_block(&keychain);
 		let chain = Arc::new(Self::init_chain(db_root, genesis));
-		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		// Initialize a new pool with our chain adapter.
-		let pool = Self::init_transaction_pool(
-			Arc::new(ChainAdapter {
-				chain: chain.clone(),
-			}),
-			verifier_cache.clone(),
-		);
+		let pool = Self::init_transaction_pool(Arc::new(ChainAdapter {
+			chain: chain.clone(),
+		}));
 
 		let ret = Self {
 			chain,
@@ -147,14 +154,30 @@ impl PoolFuzzer {
 			pool,
 		};
 
-		ret.add_some_blocks(3);
+		ret.add_some_blocks(3 * consensus::TESTING_HARD_FORK_INTERVAL);
+
+		let funding_tx = ret
+			.test_transaction_spending_coinbase_at_height(2, CORPUS_INPUT_VALUES.to_vec())
+			.unwrap();
+		ret.add_block(vec![funding_tx]);
 
 		ret
 	}
 
 	// Same as from pool/tests/common.rs, with interface change
-	pub fn test_transaction_spending_coinbase(&self, output_values: Vec<u64>) -> Transaction {
-		let header = self.chain.get_header_by_height(1).unwrap();
+	pub fn test_transaction_spending_coinbase(
+		&self,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
+		self.test_transaction_spending_coinbase_at_height(1, output_values)
+	}
+
+	fn test_transaction_spending_coinbase_at_height(
+		&self,
+		height: u64,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
+		let header = self.chain.get_header_by_height(height).unwrap();
 
 		let mut output_sum = 0u64;
 		for &s in output_values.iter() {
@@ -163,7 +186,7 @@ impl PoolFuzzer {
 
 		let coinbase_reward: u64 = 60_000_000_000;
 
-		let fees = coinbase_reward.overflowing_sub(output_sum).0;
+		let fee = coinbase_reward.checked_sub(output_sum)?.try_into().ok()?;
 
 		let mut tx_elements = Vec::new();
 
@@ -179,17 +202,21 @@ impl PoolFuzzer {
 		}
 
 		build::transaction(
-			KernelFeatures::Plain { fee: fees },
-			tx_elements,
+			KernelFeatures::Plain { fee },
+			&tx_elements,
 			&self.keychain,
 			&ProofBuilder::new(&self.keychain),
 		)
-		.unwrap()
+		.ok()
 	}
 
 	// Same as from pool/tests/common.rs,
 	//   with changes for summing inputs and outputs
-	pub fn test_transaction(&self, input_values: Vec<u64>, output_values: Vec<u64>) -> Transaction {
+	pub fn test_transaction(
+		&self,
+		input_values: Vec<u64>,
+		output_values: Vec<u64>,
+	) -> Option<Transaction> {
 		let mut input_sum = 0u64;
 		for &s in input_values.iter() {
 			input_sum = input_sum.overflowing_add(s).0;
@@ -200,13 +227,13 @@ impl PoolFuzzer {
 			output_sum = output_sum.overflowing_add(s).0;
 		}
 
-		let fees = input_sum.overflowing_sub(output_sum).0;
+		let fee = input_sum.checked_sub(output_sum)?.try_into().ok()?;
 
-		self.test_transaction_with_kernel_features(
+		Some(self.test_transaction_with_kernel_features(
 			input_values,
 			output_values,
-			KernelFeatures::Plain { fee: fees },
-		)
+			KernelFeatures::Plain { fee },
+		))
 	}
 
 	pub fn test_transaction_with_kernel_features(
@@ -231,7 +258,7 @@ impl PoolFuzzer {
 
 		build::transaction(
 			kernel_features,
-			tx_elements,
+			&tx_elements,
 			keychain,
 			&ProofBuilder::new(keychain),
 		)
@@ -239,36 +266,31 @@ impl PoolFuzzer {
 	}
 
 	fn init_chain(dir_name: &str, genesis: Block) -> Chain {
-		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		Chain::init(
 			dir_name.to_string(),
 			Arc::new(NoopAdapter {}),
 			genesis,
 			pow::verify_size,
-			verifier_cache,
 			false,
+			None,
 		)
 		.unwrap()
 	}
 
 	// Same as from pool/tests/common.rs
-	fn init_transaction_pool<B, V>(
-		chain: Arc<B>,
-		verifier_cache: Arc<RwLock<V>>,
-	) -> TransactionPool<B, NoopPoolAdapter, V>
+	fn init_transaction_pool<B>(chain: Arc<B>) -> TransactionPool<B, NoopPoolAdapter>
 	where
 		B: BlockChain,
-		V: VerifierCache + 'static,
 	{
 		TransactionPool::new(
 			PoolConfig {
-				accept_fee_base: DEFAULT_BASE_FEE,
+				accept_fee_base: default_accept_fee_base(),
+				reorg_cache_period: 30,
 				max_pool_size: 50,
 				max_stempool_size: 50,
 				mineable_max_weight: 10_000,
 			},
 			chain.clone(),
-			verifier_cache.clone(),
 			Arc::new(NoopPoolAdapter {}),
 		)
 	}
@@ -294,7 +316,7 @@ impl PoolFuzzer {
 			reward::output(keychain, &ProofBuilder::new(keychain), &key_id, fee, false).unwrap();
 
 		let mut block =
-			Block::new(&prev, txs, next_header_info.clone().difficulty, reward).unwrap();
+			Block::new(&prev, &txs, next_header_info.clone().difficulty, reward).unwrap();
 
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;

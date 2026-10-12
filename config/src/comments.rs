@@ -63,6 +63,7 @@ fn comments() -> HashMap<String, String> {
 		"api_secret_path".to_string(),
 		"
 #path of the secret token used by the Rest API and v2 Owner API to authenticate the calls
+#relative paths are resolved relative to the chain-specific grin home directory
 #comment the it to disable basic auth
 "
 		.to_string(),
@@ -72,6 +73,7 @@ fn comments() -> HashMap<String, String> {
 		"foreign_api_secret_path".to_string(),
 		"
 #path of the secret token used by the Foreign API to authenticate the calls
+#relative paths are resolved relative to the chain-specific grin home directory
 #comment the it to disable basic auth
 "
 		.to_string(),
@@ -282,7 +284,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"seeding_type".to_string(),
 		"
-#All seeds/peers can be either IP address or DNS names. Port number must always be specified
+#All seeds/peers can be either IP address or DNS names
 #how to seed this server, can be None, List or DNSSeed
 "
 		.to_string(),
@@ -295,10 +297,11 @@ fn comments() -> HashMap<String, String> {
 #seeds = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
 #hardcoded peer lists for allow/deny
-#will *only* connect to peers in allow list
-#peers_allow = [\"192.168.0.1:3414\", \"192.168.0.2:3414\"]
-#will *never* connect to peers in deny list
-#peers_deny = [\"192.168.0.3:3414\", \"192.168.0.4:3414\"]
+#will *only* connect to peers in allow list, use :0 to match any private port
+#unresolvable DNS names in allow/deny lists are skipped
+#peers_allow = [\"192.168.0.1:3414\", \"192.168.0.2:0\"]
+#will *never* connect to peers in deny list, use :0 to match any private port
+#peers_deny = [\"192.168.0.3:3414\", \"192.168.0.4:0\"]
 #a list of preferred peers to connect to
 #peers_preferred = [\"192.168.0.1:3414\",\"192.168.0.2:3414\"]
 
@@ -508,11 +511,11 @@ fn comments() -> HashMap<String, String> {
 
 fn get_key(line: &str) -> String {
 	if line.contains('[') && line.contains(']') {
-		return line.to_owned();
+		line.to_owned()
 	} else if line.contains('=') {
-		return line.split('=').collect::<Vec<&str>>()[0].trim().to_owned();
+		line.split('=').collect::<Vec<&str>>()[0].trim().to_owned()
 	} else {
-		return "NOT_FOUND".to_owned();
+		"NOT_FOUND".to_owned()
 	}
 }
 

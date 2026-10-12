@@ -220,7 +220,7 @@ fn test_fee_fields() -> Result<(), Error> {
 	)
 	.expect("valid tx");
 
-	assert_eq!(tx.accept_fee(), (1 * 1 + 1 * 21 + 1 * 3) * 500_000);
+	assert_eq!(tx.accept_fee(), (1 + 21 + 3) * 500_000);
 	assert_eq!(tx.fee(), 42);
 	assert_eq!(tx.shifted_fee(), 21);
 

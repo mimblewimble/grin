@@ -107,3 +107,7 @@ subcommands:
               help: Output file to write the results to
               long: output
               takes_value: true
+          - seed:
+              help: DNS seed hostname to check instead of the default seed list
+              long: seed
+              takes_value: true

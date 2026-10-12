@@ -35,8 +35,8 @@ use crate::msg::{
 };
 use crate::protocol::Protocol;
 use crate::types::{
-	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	TxHashSetRead,
+	Capabilities, ChainAdapter, Error, HeaderSegmentAcceptance, NetAdapter, P2PConfig, PeerAddr,
+	PeerInfo, ReasonForBan, TxHashSetRead,
 };
 use crate::util::secp::pedersen::RangeProof;
 use chrono::prelude::{DateTime, Utc};
@@ -70,7 +70,7 @@ pub struct Peer {
 
 impl fmt::Debug for Peer {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "Peer({:?})", &self.info)
+		write!(f, "Peer({:?})", self.info)
 	}
 }
 
@@ -108,7 +108,7 @@ impl Peer {
 		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		debug!("accept: handshaking from {:?}", conn.peer_addr());
-		let info = hs.accept(capab, total_difficulty, &mut conn);
+		let info = hs.accept(capab, total_difficulty, &mut conn, &adapter);
 		match info {
 			Ok(info) => Ok(Peer::new(info, conn, adapter)?),
 			Err(e) => {
@@ -153,7 +153,7 @@ impl Peer {
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: PeerAddr) -> bool {
 		if let Some(ref denied) = config.peers_deny {
-			if denied.peers.contains(&peer_addr) {
+			if denied.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly denied",
 					peer_addr
@@ -162,19 +162,19 @@ impl Peer {
 			}
 		}
 		if let Some(ref allowed) = config.peers_allow {
-			if allowed.peers.contains(&peer_addr) {
+			return if allowed.peers.iter().any(|p| p.matches_filter(&peer_addr)) {
 				debug!(
 					"checking peer allowed/denied: {:?} explicitly allowed",
 					peer_addr
 				);
-				return false;
+				false
 			} else {
 				debug!(
 					"checking peer allowed/denied: {:?} not explicitly allowed, denying",
 					peer_addr
 				);
-				return true;
-			}
+				true
+			};
 		}
 
 		// default to allowing peer connection if we do not explicitly allow or deny
@@ -328,12 +328,17 @@ impl Peer {
 		self.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
+	/// Sends a request for a deterministic header segment.
+	pub fn send_header_segment_request(&self, identifier: SegmentIdentifier) -> Result<(), Error> {
+		self.send(identifier, msg::Type::GetHeaderSegment)
+	}
+
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
 		debug!(
 			"Requesting tx (kernel hash) {} from peer {}.",
 			h, self.info.addr
 		);
-		self.send(&h, msg::Type::GetTransaction)
+		self.send(h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash.
@@ -341,13 +346,13 @@ impl Peer {
 	pub fn send_block_request(&self, h: Hash, opts: chain::Options) -> Result<(), Error> {
 		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.tracking_adapter.push_req(h, opts);
-		self.send(&h, msg::Type::GetBlock)
+		self.send(h, msg::Type::GetBlock)
 	}
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
 		debug!("Requesting compact block {} from {}", h, self.info.addr);
-		self.send(&h, msg::Type::GetCompactBlock)
+		self.send(h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
@@ -429,8 +434,8 @@ impl Peer {
 	}
 
 	/// Stops the peer
-	pub fn stop(&self) {
-		debug!("Stopping peer {:?}", self.info.addr);
+	pub fn stop(&self, reason: &str) {
+		debug!("Stopping peer {:?}, reason: {}", self.info.addr, reason);
 		match self.stop_handle.try_lock() {
 			Some(handle) => handle.stop(),
 			None => error!("can't get stop lock for peer"),
@@ -460,7 +465,7 @@ struct TrackingAdapter {
 impl TrackingAdapter {
 	fn new(adapter: Arc<dyn NetAdapter>) -> TrackingAdapter {
 		TrackingAdapter {
-			adapter: adapter,
+			adapter,
 			received: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
 			requested: Arc::new(RwLock::new(LruCache::new(MAX_TRACK_SIZE))),
 		}
@@ -569,6 +574,14 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.locate_headers(locator)
 	}
 
+	fn locate_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_info: &PeerInfo,
+	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+		self.adapter.locate_header_segment(id, peer_info)
+	}
+
 	fn get_block(&self, h: Hash, peer_info: &PeerInfo) -> Option<core::Block> {
 		self.adapter.get_block(h, peer_info)
 	}
@@ -649,9 +662,10 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		output_root: Hash,
 		segment: Segment<BitmapChunk>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_bitmap_segment(block_hash, output_root, segment)
+			.receive_bitmap_segment(block_hash, output_root, segment, peer_info)
 	}
 
 	fn receive_output_segment(
@@ -659,25 +673,39 @@ impl ChainAdapter for TrackingAdapter {
 		block_hash: Hash,
 		bitmap_root: Hash,
 		segment: Segment<OutputIdentifier>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		self.adapter
-			.receive_output_segment(block_hash, bitmap_root, segment)
+			.receive_output_segment(block_hash, bitmap_root, segment, peer_info)
 	}
 
 	fn receive_rangeproof_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<RangeProof>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_rangeproof_segment(block_hash, segment)
+		self.adapter
+			.receive_rangeproof_segment(block_hash, segment, peer_info)
 	}
 
 	fn receive_kernel_segment(
 		&self,
 		block_hash: Hash,
 		segment: Segment<TxKernel>,
+		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
-		self.adapter.receive_kernel_segment(block_hash, segment)
+		self.adapter
+			.receive_kernel_segment(block_hash, segment, peer_info)
+	}
+
+	fn receive_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		headers: &[core::BlockHeader],
+		peer_info: &PeerInfo,
+	) -> Result<HeaderSegmentAcceptance, chain::Error> {
+		self.adapter.receive_header_segment(id, headers, peer_info)
 	}
 }
 

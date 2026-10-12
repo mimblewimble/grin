@@ -17,21 +17,21 @@
 //! configurable with either no peers, a user-defined list or a preset
 //! list of DNS records (the default).
 
+use crate::core::global;
+use crate::core::pow::Difficulty;
+use crate::p2p;
+use crate::p2p::types::{PeerAddr, MAINNET_PEER_PORT, TESTNET_PEER_PORT};
+use crate::p2p::ChainAdapter;
+use crate::util::StopState;
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use grin_p2p::Peer;
 use p2p::{msg::PeerAddrs, P2PConfig};
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
 use std::sync::{mpsc, Arc};
 use std::{cmp, str, thread, time};
-
-use crate::core::global;
-use crate::core::pow::Difficulty;
-use crate::p2p;
-use crate::p2p::types::PeerAddr;
-use crate::p2p::ChainAdapter;
-use crate::util::StopState;
 
 /// DNS Seeds with contacts associated - Mainnet
 pub const MAINNET_DNS_SEEDS: &[&str] = &[
@@ -40,6 +40,8 @@ pub const MAINNET_DNS_SEEDS: &[&str] = &[
 	"main.gri.mw",                      // admin@gri.mw
 	"mainnet.grinffindor.org",          // support@grinffindor.org
 	"main-seed.grin.money",             // support@grinily.com
+	"mainnet.grin-coffee.com",          // grin-coffee@proton.me
+	"main.seed.grin.raubritter.org",    // er@raubritter.org
 	"mainnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 /// DNS Seeds with contacts associated - Testnet
@@ -48,6 +50,8 @@ pub const TESTNET_DNS_SEEDS: &[&str] = &[
 	"test.gri.mw",                      // admin@gri.mw
 	"testnet.grinffindor.org",          // support@grinffindor.org
 	"test-seed.grin.money",             // support@grinily.com
+	"testnet.grin-coffee.com",          // grin-coffee@proton.me
+	"test.seed.grin.raubritter.org",    // er@raubritter.org
 	"testnet.fountainoffairfortune.it", // support@fountainoffairfortune.it
 ];
 
@@ -66,7 +70,8 @@ pub fn connect_and_monitor(
 			let (tx, rx) = mpsc::channel();
 
 			// check seeds first
-			connect_to_seeds_and_peers(peers.clone(), tx.clone(), config);
+			let seed_addrs = seed_list(&config);
+			connect_to_seeds_and_peers(peers.clone(), tx.clone(), config, &seed_addrs);
 
 			let mut prev = DateTime::<Utc>::MIN_UTC;
 			let mut prev_expire_check = DateTime::<Utc>::MIN_UTC;
@@ -105,7 +110,12 @@ pub fn connect_and_monitor(
 					);
 
 					// monitor additional peers if we need to add more
-					monitor_peers(peers.clone(), p2p_server.config.clone(), tx.clone());
+					monitor_peers(
+						peers.clone(),
+						p2p_server.config.clone(),
+						tx.clone(),
+						&seed_addrs,
+					);
 
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
@@ -128,7 +138,12 @@ pub fn connect_and_monitor(
 		})
 }
 
-fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sender<PeerAddr>) {
+fn monitor_peers(
+	peers: Arc<p2p::Peers>,
+	config: p2p::P2PConfig,
+	tx: mpsc::Sender<PeerAddr>,
+	seed_addrs: &[PeerAddr],
+) {
 	// maintenance step first, clean up p2p server peers
 	peers.clean_peers(
 		config.peer_max_inbound_count() as usize,
@@ -187,18 +202,24 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 		unknown.len()
 	);
 
-	// Connect to seeds again if there is no peers at database,
-	// helps to avoid stuck when 1st request to seed list was failed.
-	if total_count == 0 {
-		connect_to_seeds_and_peers(peers.clone(), tx.clone(), config);
+	// Connect only to allow list if configured.
+	if connect_to_allow_list(&config, &peers, &tx) {
 		return;
 	}
 
+	// Connect to seeds again if there is no peers at database,
+	// helps to avoid stuck when 1st request to seed list was failed.
+	if total_count == 0 {
+		connect_to_seeds_and_peers(peers.clone(), tx.clone(), config, seed_addrs);
+		return;
+	}
+
+	let default_peers = PeerAddrs::default();
 	let enough_outbound = peers.enough_outbound_peers();
+
 	if !enough_outbound {
 		// loop over connected peers that can provide peer lists
 		// ask them for their list of peers
-		let mut connected_peers: Vec<PeerAddr> = vec![];
 		for p in peers
 			.iter()
 			.with_capabilities(p2p::Capabilities::PEER_LIST)
@@ -211,20 +232,19 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 				p.info.addr,
 			);
 			let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
-			connected_peers.push(p.info.addr)
 		}
+	}
 
-		// Attempt to connect to any preferred peers.
-		let default_peers = PeerAddrs::default();
-		let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
-		for p in peers_preferred.peers.iter() {
-			if !connected_peers.is_empty() {
-				if !connected_peers.contains(&p) {
-					let _ = tx.send(*p);
-				}
-			} else {
-				let _ = tx.send(*p);
-			}
+	// Attempt to connect to any preferred peers even if all outbound slots are full.
+	let peers_preferred = config.peers_preferred.as_ref().unwrap_or(&default_peers);
+	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+	let connected_peers: Vec<_> = peers.iter().connected().into_iter().collect();
+	for preferred in peers_preferred.peers.iter() {
+		let connected = connected_peers
+			.iter()
+			.any(|peer| preferred.matches_filter(&peer.info.addr));
+		if !peers_deny.matches_addr(preferred) && !connected {
+			let _ = tx.send(*preferred);
 		}
 	}
 
@@ -239,13 +259,14 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	for hp in healthy
 		.iter()
 		.filter(|p| {
-			peers.get_connected_peer(p.addr).is_none()
+			!peers_deny.matches_addr(&p.addr)
+				&& peers.get_connected_peer(p.addr).is_none()
 				&& (!enough_outbound
 					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts / 2)
 	{
-		new_peers.push(&hp.addr);
+		new_peers.push(hp.addr);
 	}
 	let healthy_count = new_peers.len();
 
@@ -256,9 +277,10 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	);
 	for upa in unknown
 		.iter()
+		.filter(|p| !peers_deny.matches_addr(p))
 		.choose_multiple(&mut thread_rng(), req_unk_count)
 	{
-		new_peers.push(upa);
+		new_peers.push(*upa);
 	}
 	let unk_count = new_peers.len() - healthy_count;
 
@@ -266,11 +288,28 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	for dp in defuncts
 		.iter()
 		.filter(|p| {
-			!enough_outbound || Utc::now().timestamp() - p.last_attempt >= max_attempt_delay
+			!peers_deny.matches_addr(&p.addr)
+				&& (!enough_outbound
+					|| Utc::now().timestamp() - p.last_attempt >= max_attempt_delay)
 		})
 		.choose_multiple(&mut thread_rng(), max_peer_attempts - new_peers.len())
 	{
-		new_peers.push(&dp.addr);
+		new_peers.push(dp.addr);
+	}
+	let defuncts_count = new_peers.len() - unk_count - healthy_count;
+
+	debug!(
+		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
+		healthy_count, unk_count, defuncts_count
+	);
+
+	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
+	if !enough_outbound {
+		for addr in seed_addrs {
+			if !peers_deny.matches_addr(addr) && !new_peers.contains(addr) {
+				new_peers.push(*addr);
+			}
+		}
 	}
 	let defuncts_count = new_peers.len() - unk_count - healthy_count;
 
@@ -284,8 +323,8 @@ fn monitor_peers(peers: Arc<p2p::Peers>, config: p2p::P2PConfig, tx: mpsc::Sende
 	// The call to is_known() may fail due to contention on the peers map.
 	// Do not attempt any connection where is_known() fails for any reason.
 	for pa in new_peers {
-		if let Ok(false) = peers.is_known(*pa) {
-			tx.send(*pa).unwrap();
+		if let Ok(false) = peers.is_known(pa) {
+			tx.send(pa).unwrap();
 		}
 	}
 }
@@ -296,18 +335,15 @@ fn connect_to_seeds_and_peers(
 	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<PeerAddr>,
 	config: P2PConfig,
+	seed_addrs: &[PeerAddr],
 ) {
-	let default_peers = PeerAddrs::default();
-	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
-
-	// If "peers_allow" is explicitly configured then just use this list
-	// remembering to filter out "peers_deny".
-	if let Some(peers) = config.peers_allow {
-		for addr in peers.difference(peers_deny.as_slice()) {
-			let _ = tx.send(addr);
-		}
+	// If "peers_allow" is explicitly configured then just use this list.
+	if connect_to_allow_list(&config, &peers, &tx) {
 		return;
 	}
+
+	let default_peers = PeerAddrs::default();
+	let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
 
 	// Always try our "peers_preferred" remembering to filter out "peers_deny".
 	if let Some(peers) = config.peers_preferred.as_ref() {
@@ -321,11 +357,30 @@ fn connect_to_seeds_and_peers(
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 128);
 
 	// if so, get their addresses, otherwise use our seeds
-	let peer_addrs = if peers.len() > 3 {
+	let mut peer_addrs = if peers.len() > 3 {
 		peers.iter().map(|p| p.addr).collect::<Vec<_>>()
 	} else {
-		seed_list(&config)
+		seed_addrs.to_vec()
 	};
+
+	// If the peer db has too few healthy peer-list providers, fill from seeds.
+	let min_outbound = config.peer_min_preferred_outbound_count() as usize;
+	let allowed_peer_count = peer_addrs
+		.iter()
+		.filter(|addr| !peers_deny.matches_addr(addr))
+		.count();
+	if allowed_peer_count < min_outbound {
+		let mut allowed_peer_count = allowed_peer_count;
+		for addr in seed_addrs {
+			if !peers_deny.matches_addr(addr) && !peer_addrs.contains(addr) {
+				peer_addrs.push(*addr);
+				allowed_peer_count += 1;
+			}
+			if allowed_peer_count >= min_outbound {
+				break;
+			}
+		}
+	}
 
 	if peer_addrs.is_empty() {
 		warn!("No seeds were retrieved.");
@@ -333,10 +388,33 @@ fn connect_to_seeds_and_peers(
 
 	// connect to this initial set of peer addresses (either seeds or from our local db).
 	for addr in peer_addrs {
-		if !peers_deny.as_slice().contains(&addr) {
+		if !peers_deny.matches_addr(&addr) {
 			let _ = tx.send(addr);
 		}
 	}
+}
+
+/// Connect to the configured allow list, excluding denied peers.
+fn connect_to_allow_list(
+	config: &P2PConfig,
+	peers: &Arc<p2p::Peers>,
+	tx: &mpsc::Sender<PeerAddr>,
+) -> bool {
+	if let Some(p) = &config.peers_allow {
+		let default_peers = PeerAddrs::default();
+		let peers_deny = config.peers_deny.as_ref().unwrap_or(&default_peers);
+		let peers_allow = p.difference(peers_deny.as_slice());
+		for mut addr in peers_allow {
+			if addr.0.port() == 0 {
+				addr = PeerAddr::from_ip(addr.0.ip());
+			}
+			if !peers.is_known(addr).unwrap_or(false) {
+				let _ = tx.send(addr);
+			}
+		}
+		return true;
+	}
+	false
 }
 
 /// Regularly poll a channel receiver for new addresses and initiate a
@@ -366,7 +444,7 @@ fn listen_for_addrs(
 				debug!(
 					"peer_connect: ignore a duplicate request to {}. previous connecting time: {}",
 					addr,
-					last_connect_time.format("%H:%M:%S%.3f").to_string(),
+					last_connect_time.format("%H:%M:%S%.3f"),
 				);
 				continue;
 			} else if let Some(history) = connecting_history.get_mut(&addr) {
@@ -426,34 +504,39 @@ fn seed_list(config: &P2PConfig) -> Vec<PeerAddr> {
 				vec![]
 			}
 		},
-		p2p::Seeding::DNSSeed => default_dns_seeds(),
+		p2p::Seeding::DNSSeed => default_dns_seeds(config),
 		_ => vec![],
 	}
 }
 
-fn default_dns_seeds() -> Vec<PeerAddr> {
+fn default_dns_seeds(config: &P2PConfig) -> Vec<PeerAddr> {
 	let net_seeds = if global::is_testnet() {
 		TESTNET_DNS_SEEDS
 	} else {
 		MAINNET_DNS_SEEDS
 	};
 	resolve_dns_to_addrs(
+		config,
 		&net_seeds
 			.iter()
 			.map(|s| {
 				s.to_string()
-					+ if global::is_testnet() {
-						":13414"
-					} else {
-						":3414"
-					}
+					+ format!(
+						":{}",
+						if global::is_testnet() {
+							TESTNET_PEER_PORT
+						} else {
+							MAINNET_PEER_PORT
+						}
+					)
+					.as_str()
 			})
 			.collect(),
 	)
 }
 
 /// Convenience function to resolve dns addresses from DNS records
-pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
+pub fn resolve_dns_to_addrs(config: &P2PConfig, dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	let mut addresses: Vec<PeerAddr> = vec![];
 	for dns in dns_records {
 		debug!("Retrieving addresses from dns {}", dns);
@@ -461,7 +544,7 @@ pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 			Ok(addrs) => addresses.append(
 				&mut addrs
 					.map(PeerAddr)
-					.filter(|addr| !addresses.contains(addr))
+					.filter(|addr| !addresses.contains(addr) && !Peer::is_denied(config, *addr))
 					.collect(),
 			),
 			Err(e) => debug!("Failed to resolve dns {:?} got error {:?}", dns, e),
@@ -469,4 +552,26 @@ pub fn resolve_dns_to_addrs(dns_records: &Vec<String>) -> Vec<PeerAddr> {
 	}
 	debug!("Resolved addresses: {:?}", addresses);
 	addresses
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn resolve_dns_skips_denied_peers() {
+		let addr = PeerAddr("127.0.0.1:3414".parse().unwrap());
+		let dns_records = vec!["127.0.0.1:3414".to_string()];
+
+		let config = P2PConfig::default();
+		let addrs = resolve_dns_to_addrs(&config, &dns_records);
+		assert_eq!(addrs, vec![addr]);
+
+		let config = P2PConfig {
+			peers_deny: Some(PeerAddrs { peers: vec![addr] }),
+			..P2PConfig::default()
+		};
+		let addrs = resolve_dns_to_addrs(&config, &dns_records);
+		assert!(addrs.is_empty());
+	}
 }

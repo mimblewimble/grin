@@ -92,15 +92,14 @@ impl SyncRunner {
 			// * we have more than MIN_PEERS more_or_same_work peers
 			// * we are synced already, e.g. grin was quickly restarted
 			// * timeout
-			if wp > MIN_PEERS
+			if (wp > MIN_PEERS
 				|| (wp == 0
 					&& self.peers.enough_outbound_peers()
 					&& head.total_difficulty > Difficulty::zero())
-				|| n > wait_secs
+				|| n > wait_secs)
+				&& (wp > 0 || !global::is_production_mode())
 			{
-				if wp > 0 || !global::is_production_mode() {
-					break;
-				}
+				break;
 			}
 			thread::sleep(time::Duration::from_secs(1));
 			n += 1;
@@ -189,7 +188,6 @@ impl SyncRunner {
 
 			// if syncing is needed
 			let head = unwrap_or_restart_loop!(self.chain.head());
-			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
 			let header_head = unwrap_or_restart_loop!(self.chain.header_head());
 
 			// "sync_head" allows us to sync against a large fork on the header chain
@@ -229,13 +227,7 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
-				state_sync.check_run(
-					&header_head,
-					&head,
-					&tail,
-					highest_height,
-					self.stop_state.clone(),
-				);
+				state_sync.check_run(&header_head, highest_height, self.stop_state.clone());
 			}
 		}
 	}
@@ -243,7 +235,9 @@ impl SyncRunner {
 	/// Whether we're currently syncing the chain or we're fully caught up and
 	/// just receiving blocks through gossip.
 	fn needs_syncing(&self) -> Result<(bool, u64), chain::Error> {
-		let local_diff = self.chain.head()?.total_difficulty;
+		let head = self.chain.head()?;
+		let header_head = self.chain.header_head()?;
+		let local_diff = head.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
 
 		// Find a peer with greatest known difficulty.
@@ -274,12 +268,19 @@ impl SyncRunner {
 		// difficulty than us
 		if is_syncing {
 			if peer_info.total_difficulty() <= local_diff {
-				let ch = self.chain.head()?;
+				if header_head.height > head.height || header_head.total_difficulty > local_diff {
+					debug!(
+						"sync: body head {} @ {} is behind header head {} @ {}, staying in sync",
+						head.height, local_diff, header_head.height, header_head.total_difficulty
+					);
+					return Ok((true, peer_info.height().max(header_head.height)));
+				}
+
 				info!(
 					"synchronized at {} @ {} [{}]",
 					local_diff.to_num(),
-					ch.height,
-					ch.last_block_h
+					head.height,
+					head.last_block_h
 				);
 				is_syncing = false;
 			}

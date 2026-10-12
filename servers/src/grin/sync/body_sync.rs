@@ -66,7 +66,7 @@ impl BodySync {
 
 			self.sync_state.update(SyncStatus::BodySync {
 				current_height: head.height,
-				highest_height: highest_height,
+				highest_height,
 			});
 		}
 		Ok(false)
@@ -153,14 +153,14 @@ impl BodySync {
 				if let Some(peer) = peers.choose(&mut rng) {
 					if let Err(e) = peer.send_block_request(hash, chain::Options::SYNC) {
 						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
-						peer.stop();
+						peer.stop("error sending block request");
 					} else {
 						self.blocks_requested += 1;
 					}
 				}
 			}
 		}
-		return Ok(false);
+		Ok(false)
 	}
 
 	fn block_hashes_to_sync(

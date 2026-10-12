@@ -475,6 +475,8 @@ impl<'a> Batch<'a> {
 
 	/// Iterator over raw data for full blocks in the db.
 	/// Used during block migration (we need flexibility around deserialization).
+	// Keep the existing raw iterator API
+	#[allow(clippy::type_complexity)]
 	pub fn blocks_raw_iter(
 		&'a self,
 	) -> Result<impl Iterator<Item = Result<(Vec<u8>, Vec<u8>), Error>> + 'a, Error> {

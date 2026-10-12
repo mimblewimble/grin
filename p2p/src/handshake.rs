@@ -18,7 +18,9 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::msg::{read_message, user_agent, write_message, Hand, Msg, Shake, Type};
 use crate::peer::Peer;
-use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo};
+use crate::types::{
+	Capabilities, Direction, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo,
+};
 use crate::util::RwLock;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
@@ -169,6 +171,7 @@ impl Handshake {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
+		adapter: &Arc<dyn NetAdapter>,
 	) -> Result<PeerInfo, Error> {
 		// Set explicit timeouts on the tcp stream for hand/shake messages.
 		// Once the peer is up and running we will set new values for these.
@@ -187,7 +190,7 @@ impl Handshake {
 		} else {
 			// check the nonce to see if we are trying to connect to ourselves
 			let nonces = self.nonces.read();
-			let addr = resolve_peer_addr(hand.sender_addr, &conn);
+			let addr = resolve_peer_addr(hand.sender_addr, conn);
 			if nonces.contains(&hand.nonce) {
 				// save ip addresses of ourselves
 				let mut addrs = self.addrs.write();
@@ -205,11 +208,16 @@ impl Handshake {
 		let peer_info = PeerInfo {
 			capabilities: hand.capabilities,
 			user_agent: hand.user_agent,
-			addr: resolve_peer_addr(hand.sender_addr, &conn),
+			addr: resolve_peer_addr(hand.sender_addr, conn),
 			version: negotiated_version,
 			live_info: Arc::new(RwLock::new(PeerLiveInfo::new(hand.total_difficulty))),
 			direction: Direction::Inbound,
 		};
+
+		// Close connection with banned peer.
+		if adapter.is_banned(peer_info.addr) {
+			return Err(Error::Banned);
+		}
 
 		// At this point we know the published ip and port of the peer
 		// so check if we are configured to explicitly allow or deny it.
@@ -224,7 +232,7 @@ impl Handshake {
 			version: self.protocol_version,
 			capabilities: capab,
 			genesis: self.genesis,
-			total_difficulty: total_difficulty,
+			total_difficulty,
 			user_agent: user_agent().to_string(),
 		};
 

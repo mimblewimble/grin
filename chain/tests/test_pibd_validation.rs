@@ -88,10 +88,9 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
 
 		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = pmmr::peaks(bitmap_mmr_num_leaves)
+		let bitmap_pmmr_size = *pmmr::peaks(bitmap_mmr_num_leaves)
 			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves))
-			.clone();
+			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves));
 		println!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
 		println!(
 			"Bitmap Segments required: {}",
@@ -221,9 +220,9 @@ fn test_pibd_chain_validation_sample() {
 	// small test chain with actual transaction data
 
 	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./tests/test_data/chain_raw");
+	let src_root_dir = "./tests/test_data/chain_raw".to_string();
 	test_pibd_chain_validation_impl(true, &src_root_dir);
-	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
 	test_pibd_chain_validation_impl(true, &src_root_dir);
 }
 
@@ -233,6 +232,6 @@ fn test_pibd_chain_validation_sample() {
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
 	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/Users/yeastplume/Projects/grin_project/server/chain_data");
+	let src_root_dir = "/Users/yeastplume/Projects/grin_project/server/chain_data".to_string();
 	test_pibd_chain_validation_impl(false, &src_root_dir);
 }

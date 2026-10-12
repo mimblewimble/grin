@@ -64,13 +64,13 @@ where
 				keychain,
 				&msg,
 				value,
-				&key_id,
+				key_id,
 				Some(&test_nonce),
 				Some(&pubkey),
 			)?
 		}
 		false => {
-			aggsig::sign_from_key_id(&secp, keychain, &msg, value, &key_id, None, Some(&pubkey))?
+			aggsig::sign_from_key_id(&secp, keychain, &msg, value, key_id, None, Some(&pubkey))?
 		}
 	};
 

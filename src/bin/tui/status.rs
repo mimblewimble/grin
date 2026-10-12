@@ -25,7 +25,7 @@ use std::borrow::Cow;
 use crate::tui::constants::VIEW_BASIC_STATUS;
 use crate::tui::types::TUIStatusListener;
 
-use crate::chain::SyncStatus;
+use crate::chain::{HeaderSyncMode, SyncStatus};
 use crate::servers::ServerStats;
 
 const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
@@ -33,6 +33,8 @@ const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
 pub struct TUIStatusView;
 
 impl TUIStatusView {
+	// Check totals before multiplying progress counters
+	#[allow(clippy::manual_checked_ops)]
 	pub fn update_sync_status(sync_status: SyncStatus) -> Cow<'static, str> {
 		match sync_status {
 			SyncStatus::Initial => Cow::Borrowed("Initializing"),
@@ -40,6 +42,7 @@ impl TUIStatusView {
 			SyncStatus::AwaitingPeers(_) => Cow::Borrowed("Waiting for peers"),
 			SyncStatus::HeaderSync {
 				sync_head,
+				sync_mode,
 				highest_height,
 				..
 			} => {
@@ -48,7 +51,14 @@ impl TUIStatusView {
 				} else {
 					sync_head.height * 100 / highest_height
 				};
-				Cow::Owned(format!("Sync step 1/7: Downloading headers: {}%", percent))
+				let sync_mode = match sync_mode {
+					HeaderSyncMode::Legacy => "Legacy",
+					HeaderSyncMode::Pihd => "PIHD",
+				};
+				Cow::Owned(format!(
+					"Sync step 1/7: Downloading headers ({}) - {}%",
+					sync_mode, percent
+				))
 			}
 			SyncStatus::TxHashsetPibd {
 				aborted: _,
@@ -81,7 +91,7 @@ impl TUIStatusView {
 					Cow::Owned(format!("Sync step 2/7: Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s)",
 							stat.total_size / 1_000_000,
 							percent,
-							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms as f64 } else { 0f64 },
+							if dur_ms > 1.0f64 { stat.downloaded_size.saturating_sub(stat.prev_downloaded_size) as f64 / dur_ms } else { 0f64 },
 					))
 				} else {
 					let start = stat.start_time.timestamp_millis();
@@ -99,17 +109,13 @@ impl TUIStatusView {
 				kernel_pos,
 				kernel_pos_total,
 			} => {
-				if headers.is_some() && headers_total.is_some() {
-					let h = headers.unwrap();
-					let ht = headers_total.unwrap();
+				if let (Some(h), Some(ht)) = (headers, headers_total) {
 					let percent = h * 100 / ht;
 					Cow::Owned(format!(
 						"Sync step 3/7: Preparing for validation (kernel history) - {}/{} - {}%",
 						h, ht, percent
 					))
-				} else if kernel_pos.is_some() && kernel_pos_total.is_some() {
-					let k = kernel_pos.unwrap();
-					let kt = kernel_pos_total.unwrap();
+				} else if let (Some(k), Some(kt)) = (kernel_pos, kernel_pos_total) {
 					let percent = k * 100 / kt;
 					Cow::Owned(format!(
 						"Sync step 3/7: Preparing for validation (kernel position) - {}/{} - {}%",
@@ -172,6 +178,11 @@ impl TUIStatusView {
 	pub fn create() -> impl View {
 		let basic_status_view = ResizedView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
+				.child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Uptime:                       "))
+						.child(TextView::new("0").with_name("basic_uptime")),
+				)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Current Status:               "))
@@ -284,6 +295,9 @@ impl TUIStatusListener for TUIStatusView {
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		let basic_status = TUIStatusView::update_sync_status(stats.sync_status);
 
+		c.call_on_name("basic_uptime", |t: &mut TextView| {
+			t.set_content(stats.uptime_format());
+		});
 		c.call_on_name("basic_current_status", |t: &mut TextView| {
 			t.set_content(basic_status);
 		});

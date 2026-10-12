@@ -42,7 +42,7 @@ impl<T: AsRef<[u8]>> ToHex for T {
 /// Decode a hex string into bytes.
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, String> {
 	let hex = hex.trim().trim_start_matches("0x");
-	if hex.len() % 2 != 0 {
+	if !hex.len().is_multiple_of(2) {
 		Err(hex.to_string())
 	} else {
 		(0..hex.len())

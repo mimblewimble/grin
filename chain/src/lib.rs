@@ -39,6 +39,7 @@ mod chain;
 mod error;
 pub mod linked_list;
 pub mod pibd_params;
+pub mod pihd_params;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;
@@ -50,6 +51,6 @@ pub use crate::chain::{Chain, MAX_ORPHAN_SIZE};
 pub use crate::error::Error;
 pub use crate::store::ChainStore;
 pub use crate::types::{
-	BlockStatus, ChainAdapter, Options, SyncState, SyncStatus, Tip, TxHashsetDownloadStats,
-	TxHashsetWriteStatus,
+	BlockStatus, ChainAdapter, HeaderSyncMode, Options, SyncState, SyncStatus, Tip,
+	TxHashsetDownloadStats, TxHashsetWriteStatus,
 };
