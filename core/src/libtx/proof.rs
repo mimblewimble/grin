@@ -54,7 +54,7 @@ where
 		private_nonce,
 		extra_data,
 		Some(message),
-	))
+	)?)
 }
 
 /// Verify a proof
