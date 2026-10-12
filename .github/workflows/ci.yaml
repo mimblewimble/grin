@@ -7,12 +7,18 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
+        job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store, integration]
     steps:
       - uses: actions/checkout@v3
       - name: Test ${{ matrix.job_args }}
         working-directory: ${{ matrix.job_args }}
-        run: cargo test --release
+        # Integration tests open real ports and multi-node clusters; run them serially.
+        run: |
+          if [ "${{ matrix.job_args }}" = "integration" ]; then
+            cargo test --release -- --test-threads=1
+          else
+            cargo test --release
+          fi
 
   macos-tests:
     name: macOS Tests
