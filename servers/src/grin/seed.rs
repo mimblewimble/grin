@@ -296,12 +296,6 @@ fn monitor_peers(
 	{
 		new_peers.push(dp.addr);
 	}
-	let defuncts_count = new_peers.len() - unk_count - healthy_count;
-
-	debug!(
-		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
-		healthy_count, unk_count, defuncts_count
-	);
 
 	// If the peer db is stale or mostly defunct, include seeds as recovery candidates.
 	if !enough_outbound {
