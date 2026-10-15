@@ -221,8 +221,8 @@ where
 	/// * `end_height` - end height to stop the lookup.
 	/// * `include_proof` - whether to include the range proof in the response.
 	/// * `include_merkle_proof` (currently ignored) - whether to include the merkle proof in the response.
-	///    removed as it is not used and expensive to generate for historical blocks. See comments below to
-	///    re-enable this feature at compile-time.
+	///   removed as it is not used and expensive to generate for historical blocks. See comments below to
+	///   re-enable this feature at compile-time.
 	///
 	/// # Returns
 	/// * Result Containing:

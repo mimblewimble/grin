@@ -85,10 +85,7 @@ impl<'a> UTXOView<'a> {
 			Inputs::CommitOnly(inputs) => {
 				let outputs_spent: Result<Vec<_>, Error> = inputs
 					.iter()
-					.map(|input| {
-						self.validate_input(input.commitment(), batch)
-							.and_then(|(out, pos)| Ok((out, pos)))
-					})
+					.map(|input| self.validate_input(input.commitment(), batch))
 					.collect();
 				outputs_spent
 			}

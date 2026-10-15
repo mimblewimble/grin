@@ -66,7 +66,7 @@ impl BodySync {
 
 			self.sync_state.update(SyncStatus::BodySync {
 				current_height: head.height,
-				highest_height: highest_height,
+				highest_height,
 			});
 		}
 		Ok(false)
@@ -160,7 +160,7 @@ impl BodySync {
 				}
 			}
 		}
-		return Ok(false);
+		Ok(false)
 	}
 
 	fn block_hashes_to_sync(

@@ -125,7 +125,7 @@ impl From<&str> for QueryParams {
 		let params = form_urlencoded::parse(query_string.as_bytes())
 			.into_owned()
 			.fold(HashMap::new(), |mut hm, (k, v)| {
-				hm.entry(k).or_insert_with(|| vec![]).push(v);
+				hm.entry(k).or_insert_with(std::vec::Vec::new).push(v);
 				hm
 			});
 		QueryParams { params }

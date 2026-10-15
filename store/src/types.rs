@@ -263,7 +263,7 @@ where
 		if self.size()? == 0 {
 			self.buffer_start_pos = 0;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(self.file.as_ref().unwrap())? });
 			self.buffer_start_pos = self.size_in_elmts()?;
 		}
 
@@ -288,8 +288,7 @@ where
 
 	/// Append element to append-only file by serializing it to bytes and appending the bytes.
 	fn append_elmt(&mut self, data: &T) -> io::Result<()> {
-		let mut bytes = ser::ser_vec(data, self.version)
-			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		let mut bytes = ser::ser_vec(data, self.version).map_err(io::Error::other)?;
 		self.append(&mut bytes)?;
 		Ok(())
 	}
@@ -374,6 +373,7 @@ where
 				let file = OpenOptions::new()
 					.read(true)
 					.create(true)
+					.truncate(false)
 					.write(true)
 					.open(&self.path)?;
 
@@ -407,7 +407,7 @@ where
 		if self.file.as_ref().unwrap().metadata()?.len() == 0 {
 			self.mmap = None;
 		} else {
-			self.mmap = Some(unsafe { memmap::Mmap::map(&self.file.as_ref().unwrap())? });
+			self.mmap = Some(unsafe { memmap::Mmap::map(self.file.as_ref().unwrap())? });
 		}
 
 		Ok(())
@@ -450,7 +450,7 @@ where
 	fn read_as_elmt(&self, pos: u64) -> io::Result<T> {
 		let data = self.read(pos)?;
 		ser::deserialize(&mut &data[..], self.version, DeserializationMode::default())
-			.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+			.map_err(io::Error::other)
 	}
 
 	// Read length bytes starting at offset from the buffer.
@@ -507,7 +507,7 @@ where
 		let mut buf_reader = BufReader::new(reader);
 		let mut streaming_reader = StreamingReader::new(&mut buf_reader, self.version);
 
-		let mut buf_writer = BufWriter::new(File::create(&self.tmp_path())?);
+		let mut buf_writer = BufWriter::new(File::create(self.tmp_path())?);
 		let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 		let mut current_pos = 0;
@@ -518,8 +518,7 @@ where
 				prune_pos = &prune_pos[1..];
 			} else {
 				// Not pruned, write to file.
-				elmt.write(&mut bin_writer)
-					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				elmt.write(&mut bin_writer).map_err(io::Error::other)?;
 			}
 			current_pos += 1;
 		}
@@ -532,7 +531,7 @@ where
 	pub fn replace_with_tmp(&mut self) -> io::Result<()> {
 		// Replace the underlying file -
 		// pmmr_data.tmp -> pmmr_data.bin
-		self.replace(&self.tmp_path())?;
+		self.replace(self.tmp_path())?;
 
 		// Now rebuild our size file to reflect the pruned data file.
 		// This will replace the underlying file internally.
@@ -562,6 +561,8 @@ where
 				let mut bin_writer = BinWriter::new(&mut buf_writer, self.version);
 
 				let mut current_offset = 0;
+				// Preserve drop order for decoded values
+				#[allow(clippy::redundant_pattern_matching)]
 				while let Ok(_) = T::read(&mut streaming_reader) {
 					let size = streaming_reader
 						.total_bytes_read()
@@ -572,9 +573,7 @@ where
 					};
 
 					// Not pruned, write to file.
-					entry
-						.write(&mut bin_writer)
-						.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+					entry.write(&mut bin_writer).map_err(io::Error::other)?;
 
 					current_offset += size as u64;
 				}

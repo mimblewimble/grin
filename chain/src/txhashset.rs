@@ -19,6 +19,8 @@ mod bitmap_accumulator;
 mod desegmenter;
 mod rewindable_kernel_view;
 mod segmenter;
+// Keep the existing module layout
+#[allow(clippy::module_inception)]
 mod txhashset;
 mod utxo_view;
 

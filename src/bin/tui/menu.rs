@@ -41,7 +41,7 @@ pub fn create() -> impl View {
 	main_menu.get_mut().add_item("Logs", VIEW_LOGS);
 	main_menu.get_mut().add_item("Version Info", VIEW_VERSION);
 	let change_view = |s: &mut Cursive, v: &&str| {
-		if *v == "" {
+		if v.is_empty() {
 			return;
 		}
 
@@ -76,12 +76,12 @@ pub fn create() -> impl View {
 				s.select_down(1)(c);
 			}
 		});
-	let main_menu = LinearLayout::new(Orientation::Vertical)
+
+	LinearLayout::new(Orientation::Vertical)
 		.child(ResizedView::with_full_height(main_menu))
 		.child(TextView::new("------------------"))
 		.child(TextView::new("Tab/Arrow : Cycle "))
 		.child(TextView::new("Enter     : Select"))
 		.child(TextView::new("Esc       : Back  "))
-		.child(TextView::new("Q         : Quit  "));
-	main_menu
+		.child(TextView::new("Q         : Quit  "))
 }

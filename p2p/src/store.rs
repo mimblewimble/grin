@@ -88,7 +88,7 @@ impl Readable for PeerData {
 		let last_connected = lc.unwrap_or_else(|_| Utc::now().timestamp());
 
 		let la = reader.read_i64();
-		let last_attempt = la.unwrap_or_else(|_| 0);
+		let last_attempt = la.unwrap_or(0);
 
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits_truncate(capab);
@@ -294,11 +294,9 @@ impl<'a> PeersIterBatch<'a> {
 	{
 		let mut to_remove = vec![];
 
-		for x in self.peers_iter()? {
-			if let Ok(x) = x {
-				if predicate(&x) {
-					to_remove.push(x)
-				}
+		for x in self.peers_iter()?.flatten() {
+			if predicate(&x) {
+				to_remove.push(x)
 			}
 		}
 

@@ -2,15 +2,24 @@ name: Continuous Integration
 on: [push, pull_request]
 
 jobs:
+  clippy:
+    name: Cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: rustup toolchain install 1.99.0 --profile minimal --component clippy
+      - run: cargo +1.99.0 clippy --workspace --all-targets -- -D warnings
   linux-tests:
     name: Linux Tests
     runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'linux-gnu-x64' || 'ubuntu-latest' }}
+    needs: clippy
     steps:
       - uses: actions/checkout@v6
       - name: Tests
         run: cargo test --release --all --locked
 
   musl-tests:
+    needs: clippy
     name: Linux musl ${{ matrix.arch }} Tests
     runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && matrix.arch == 'x86_64' && 'linux-musl-x64' || matrix.runner }}
     container:
@@ -35,6 +44,7 @@ jobs:
   macos-tests:
     name: macOS Tests
     runs-on: macos-latest
+    needs: clippy
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -44,6 +54,7 @@ jobs:
   windows-tests:
     name: Windows Tests
     runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'windows-x64' || 'windows-2022' }}
+    needs: clippy
     env:
       ROARING_ARCH: x86-64-v2
     steps:
@@ -53,6 +64,7 @@ jobs:
         run: cargo test --release --all --locked
 
   bsd-tests:
+    needs: clippy
     name: ${{ matrix.name }} Tests
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
@@ -114,7 +126,7 @@ jobs:
 
   telegram-notify:
     name: Telegram Notification
-    needs: [linux-tests, musl-tests, macos-tests, windows-tests, bsd-tests]
+    needs: [clippy, linux-tests, musl-tests, macos-tests, windows-tests, bsd-tests]
     if: always() && github.event_name == 'push'
     uses: ./.github/workflows/telegram.yaml
     secrets: inherit
@@ -122,6 +134,7 @@ jobs:
       title: Grin CI
       status: ${{ contains(join(needs.*.result, ','), 'failure') && 'failed' || contains(join(needs.*.result, ','), 'cancelled') && 'cancelled' || 'success' }}
       details: |
+        <b>Clippy:</b> ${{ needs.clippy.result }}
         <b>Linux:</b> ${{ needs.linux-tests.result }}
         <b>musl:</b> ${{ needs.musl-tests.result }}
         <b>macOS:</b> ${{ needs.macos-tests.result }}

@@ -111,7 +111,7 @@ pub fn get_block(
 
 		result = build_block(chain, tx_pool, new_key_id, wallet_listener_url.clone());
 	}
-	return result.unwrap();
+	result.unwrap()
 }
 
 /// Builds a new block with the chain head as previous and eligible
@@ -231,7 +231,7 @@ fn get_coinbase(
 	match wallet_listener_url {
 		None => {
 			// Burn it
-			return burn_reward(block_fees);
+			burn_reward(block_fees)
 		}
 		Some(wallet_listener_url) => {
 			let res = create_coinbase(&wallet_listener_url, &block_fees)?;
@@ -239,12 +239,12 @@ fn get_coinbase(
 			let kernel = res.kernel;
 			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: key_id,
+				key_id,
 				..block_fees
 			};
 
 			debug!("get_coinbase: {:?}", block_fees);
-			return Ok((output, kernel, block_fees));
+			Ok((output, kernel, block_fees))
 		}
 	}
 }

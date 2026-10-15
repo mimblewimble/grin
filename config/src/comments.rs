@@ -511,11 +511,11 @@ fn comments() -> HashMap<String, String> {
 
 fn get_key(line: &str) -> String {
 	if line.contains('[') && line.contains(']') {
-		return line.to_owned();
+		line.to_owned()
 	} else if line.contains('=') {
-		return line.split('=').collect::<Vec<&str>>()[0].trim().to_owned();
+		line.split('=').collect::<Vec<&str>>()[0].trim().to_owned()
 	} else {
-		return "NOT_FOUND".to_owned();
+		"NOT_FOUND".to_owned()
 	}
 }
 

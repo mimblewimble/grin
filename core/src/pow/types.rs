@@ -23,7 +23,6 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 /// proof of work within a block header.
 use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
-use std::u64;
 use std::{fmt, iter};
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
@@ -375,7 +374,7 @@ impl Proof {
 
 	/// Number of bytes required store a proof of given edge bits
 	pub fn pack_len(bit_width: u8) -> usize {
-		(bit_width as usize * global::proofsize() + 7) / 8
+		(bit_width as usize * global::proofsize()).div_ceil(8)
 	}
 
 	/// Builds a proof with random POW data,
@@ -416,7 +415,7 @@ impl Proof {
 	/// Difficulty achieved by this proof with given scaling factor
 	fn scaled_difficulty(&self, scale: u64) -> u64 {
 		let diff = ((scale as u128) << 64) / (max(1, self.hash().to_u64()) as u128);
-		min(diff, <u64>::max_value() as u128) as u64
+		min(diff, u64::MAX as u128) as u64
 	}
 }
 
@@ -525,7 +524,7 @@ impl Writeable for Proof {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.edge_bits)?;
 		}
-		writer.write_fixed_bytes(&self.pack_nonces())
+		writer.write_fixed_bytes(self.pack_nonces())
 	}
 }
 
@@ -567,7 +566,7 @@ mod tests {
 			v.push(rng.gen_range(
 				u64::pow(2, bits - 1),
 				if bits == 64 {
-					std::u64::MAX
+					u64::MAX
 				} else {
 					u64::pow(2, bits)
 				},

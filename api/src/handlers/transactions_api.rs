@@ -32,7 +32,7 @@ use std::sync::Weak;
 /// GET /v1/txhashset/lastoutputs?n=5
 /// GET /v1/txhashset/lastrangeproofs
 /// GET /v1/txhashset/lastkernels
-
+///
 /// UTXO traversal:
 /// GET /v1/txhashset/outputs?start_index=1&max=100
 /// GET /v1/txhashset/heightstopmmr?start_height=1&end_height=1000
