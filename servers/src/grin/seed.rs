@@ -311,12 +311,6 @@ fn monitor_peers(
 			}
 		}
 	}
-	let defuncts_count = new_peers.len() - unk_count - healthy_count;
-
-	debug!(
-		"monitor_peers: check {} healthy, {} unknown, {} defuncts",
-		healthy_count, unk_count, defuncts_count
-	);
 
 	// Only queue up connection attempts for candidate peers where we
 	// are confident we do not yet know about this peer.
