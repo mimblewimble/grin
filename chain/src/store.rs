@@ -26,7 +26,7 @@ use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
 use grin_core::ser;
 use grin_store as store;
-use grin_store::{option_to_not_found, Error};
+use grin_store::{option_to_not_found, DefaultComparator, Error};
 use std::convert::TryInto;
 use std::sync::{mpsc, Arc};
 
@@ -62,7 +62,7 @@ const DB_PREFIXES: [u8; 7] = [
 
 /// All chain-related database operations
 pub struct ChainStore {
-	db: store::Store,
+	db: store::Store<DefaultComparator>,
 }
 
 impl ChainStore {
@@ -204,7 +204,7 @@ impl ChainStore {
 /// discarded on error.
 pub struct Batch<'a> {
 	/// The underlying db instance.
-	pub db: store::Batch<'a>,
+	pub db: store::Batch<'a, DefaultComparator>,
 }
 
 impl<'a> Batch<'a> {

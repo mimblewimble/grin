@@ -20,7 +20,7 @@ use rand::prelude::*;
 
 use crate::core::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
 use crate::types::{is_private_ip, Capabilities, PeerAddr, ReasonForBan};
-use grin_store::{self, option_to_not_found, Error};
+use grin_store::{self, option_to_not_found, DefaultComparator, Error};
 
 const DB_NAME: &str = "peer";
 const STORE_SUBPATH: &str = "peers";
@@ -112,7 +112,7 @@ impl Readable for PeerData {
 
 /// Storage facility for peer data.
 pub struct PeerStore {
-	db: grin_store::Store,
+	db: grin_store::Store<DefaultComparator>,
 }
 
 impl PeerStore {
@@ -245,7 +245,7 @@ impl PeerStore {
 }
 
 pub struct PeersIterBatch<'a> {
-	db: grin_store::Batch<'a>,
+	db: grin_store::Batch<'a, DefaultComparator>,
 }
 
 impl<'a> PeersIterBatch<'a> {
