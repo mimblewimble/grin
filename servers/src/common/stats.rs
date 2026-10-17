@@ -19,7 +19,7 @@ use chrono::prelude::*;
 use grin_core::pow::Difficulty;
 use millisecond::MillisecondFormatter;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::chain::SyncStatus;
 use crate::core::core::hash::Hash;
@@ -27,6 +27,7 @@ use crate::core::ser::ProtocolVersion;
 use crate::p2p;
 use crate::p2p::Capabilities;
 use crate::util::RwLock;
+use grin_api::types::{MiningStatus, WorkerInfo};
 
 /// Server state info collection struct, to be passed around into internals
 /// and populated when required
@@ -290,5 +291,102 @@ impl Default for StratumStats {
 			minimum_share_difficulty: 1,
 			worker_stats: Vec::new(),
 		}
+	}
+}
+
+impl From<&WorkerStats> for WorkerInfo {
+	fn from(stats: &WorkerStats) -> WorkerInfo {
+		let last_seen = stats
+			.last_seen
+			.duration_since(UNIX_EPOCH)
+			.map(|d| d.as_secs())
+			.unwrap_or(0);
+		WorkerInfo {
+			id: stats.id.clone(),
+			last_seen,
+			initial_block_height: stats.initial_block_height,
+			pow_difficulty: stats.pow_difficulty,
+			num_accepted: stats.num_accepted,
+			num_rejected: stats.num_rejected,
+			num_stale: stats.num_stale,
+			num_blocks_found: stats.num_blocks_found,
+		}
+	}
+}
+
+impl From<&StratumStats> for MiningStatus {
+	fn from(stats: &StratumStats) -> MiningStatus {
+		MiningStatus {
+			is_enabled: stats.is_enabled,
+			is_running: stats.is_running,
+			num_workers: stats.num_workers,
+			block_height: stats.block_height,
+			network_difficulty: stats.network_difficulty,
+			edge_bits: stats.edge_bits,
+			blocks_found: stats.blocks_found,
+			network_hashrate: stats.network_hashrate,
+			minimum_share_difficulty: stats.minimum_share_difficulty,
+			// worker_stats retains every worker that ever connected; only expose
+			// currently connected ones so the response does not grow unbounded.
+			worker_stats: stats
+				.worker_stats
+				.iter()
+				.filter(|w| w.is_connected)
+				.map(WorkerInfo::from)
+				.collect(),
+		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use std::time::Duration;
+
+	#[test]
+	fn stratum_stats_to_mining_status() {
+		let mut worker = WorkerStats::default();
+		worker.id = "42".into();
+		worker.is_connected = true;
+		worker.last_seen = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
+		worker.initial_block_height = 100;
+		worker.pow_difficulty = 7;
+		worker.num_accepted = 5;
+		worker.num_rejected = 1;
+		worker.num_stale = 2;
+		worker.num_blocks_found = 1;
+
+		let mut disconnected = WorkerStats::default();
+		disconnected.id = "gone".into();
+		disconnected.is_connected = false;
+
+		let stats = StratumStats {
+			is_enabled: true,
+			is_running: true,
+			num_workers: 1,
+			block_height: 123,
+			network_difficulty: 999,
+			edge_bits: 29,
+			blocks_found: 4,
+			network_hashrate: 12.5,
+			minimum_share_difficulty: 3,
+			worker_stats: vec![worker, disconnected],
+		};
+
+		let mining = MiningStatus::from(&stats);
+		assert!(mining.is_enabled);
+		assert!(mining.is_running);
+		assert_eq!(mining.num_workers, 1);
+		assert_eq!(mining.block_height, 123);
+		assert_eq!(mining.network_difficulty, 999);
+		assert_eq!(mining.edge_bits, 29);
+		assert_eq!(mining.blocks_found, 4);
+		assert!((mining.network_hashrate - 12.5).abs() < f64::EPSILON);
+		assert_eq!(mining.minimum_share_difficulty, 3);
+		assert_eq!(mining.worker_stats.len(), 1);
+		assert_eq!(mining.worker_stats[0].id, "42");
+		assert_eq!(mining.worker_stats[0].last_seen, 1_600_000_000);
+		assert_eq!(mining.worker_stats[0].num_accepted, 5);
+		assert_eq!(mining.worker_stats[0].num_blocks_found, 1);
 	}
 }

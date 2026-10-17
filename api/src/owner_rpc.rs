@@ -18,7 +18,7 @@ use crate::owner::Owner;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::PeerData;
 use crate::rest::Error;
-use crate::types::Status;
+use crate::types::{MiningStatus, Status};
 use std::net::SocketAddr;
 
 /// Public definition used to generate Node jsonrpc api.
@@ -72,6 +72,61 @@ pub trait OwnerRpc: Sync + Send {
 	```
 	 */
 	fn get_status(&self) -> Result<Status, Error>;
+
+	/**
+	Networked version of [Owner::get_mining_status](struct.Owner.html#method.get_mining_status).
+
+	Returns the same mining / stratum information shown on the TUI mining tab so
+	headless operators can query connected workers and share stats.
+
+	# Json rpc example
+
+	```
+	# grin_api::doctest_helper_json_rpc_owner_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_mining_status",
+		"params": [],
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": {
+				"is_enabled": true,
+				"is_running": true,
+				"num_workers": 1,
+				"block_height": 1000,
+				"network_difficulty": 42,
+				"edge_bits": 29,
+				"blocks_found": 3,
+				"network_hashrate": 1.5,
+				"minimum_share_difficulty": 1,
+				"worker_stats": [
+					{
+						"id": "0",
+						"last_seen": 1609459200,
+						"initial_block_height": 990,
+						"pow_difficulty": 1,
+						"num_accepted": 10,
+						"num_rejected": 0,
+						"num_stale": 0,
+						"num_blocks_found": 1
+					}
+				]
+			}
+		}
+	}
+	# "#
+	# );
+	```
+	 */
+	fn get_mining_status(&self) -> Result<MiningStatus, Error>;
 
 	/**
 	Networked version of [Owner::validate_chain](struct.Owner.html#method.validate_chain).
@@ -362,6 +417,10 @@ pub trait OwnerRpc: Sync + Send {
 impl OwnerRpc for Owner {
 	fn get_status(&self) -> Result<Status, Error> {
 		Owner::get_status(self)
+	}
+
+	fn get_mining_status(&self) -> Result<MiningStatus, Error> {
+		Owner::get_mining_status(self)
 	}
 
 	fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), Error> {
