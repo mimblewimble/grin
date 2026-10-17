@@ -21,7 +21,7 @@
 //! stream and make sure we get the right number of bytes out.
 
 use crate::codec::{Codec, BODY_IO_TIMEOUT};
-use crate::core::ser::ProtocolVersion;
+use crate::grin::ser::ProtocolVersion;
 use crate::msg::{write_message, Consumed, Message, Msg};
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
