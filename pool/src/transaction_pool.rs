@@ -283,6 +283,11 @@ where
 		debug!("truncate_reorg_cache: size: {}", cache.len());
 	}
 
+	/// Re-apply cached transactions to the mempool after a reorg.
+	///
+	/// Txs that are successfully re-accepted are also rebroadcast via the pool
+	/// adapter so peers learn about them again. Previously we only re-added to
+	/// the local pool and never announced them on the network (see #3489).
 	pub fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
 		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
 		debug!(
@@ -290,12 +295,19 @@ where
 			entries.len(),
 			header.hash(),
 		);
+		let mut rebroadcast = 0usize;
 		for entry in entries {
-			let _ = self.add_to_txpool(&entry, header);
+			// Only rebroadcast txs that were actually re-accepted (already-present
+			// or invalid-on-new-tip txs are skipped without network spam).
+			if self.add_to_txpool(&entry, header).is_ok() {
+				self.adapter.tx_accepted(&entry);
+				rebroadcast += 1;
+			}
 		}
 		debug!(
-			"reconcile_reorg_cache: block: {:?} ... done.",
-			header.hash()
+			"reconcile_reorg_cache: block: {:?} ... done (rebroadcast {})",
+			header.hash(),
+			rebroadcast
 		);
 		Ok(())
 	}
