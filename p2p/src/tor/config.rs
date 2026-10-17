@@ -21,9 +21,6 @@ pub trait TorConfig {
 	/// Tor bootstrap timeout in seconds.
 	const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
 
-	/// Check if attempt to send over Tor is needed using provided possible argument at priority.
-	fn send_tor(&self, skip_arg: Option<bool>) -> bool;
-
 	/// Request timeout.
 	fn request_timeout(&self) -> Duration;
 
