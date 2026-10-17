@@ -106,7 +106,13 @@ impl TxHashSetHandler {
 		let chain = w(&self.chain)?;
 		let range = chain
 			.block_height_range_to_pmmr_indices(start_block_height, end_block_height)
-			.map_err(|_| Error::NotFound)?;
+			.map_err(|e| {
+				// Prefer a descriptive error over empty NotFound (wallet misreports null).
+				Error::Argument(format!(
+					"cannot map block heights {}..{:?} to PMMR indices: {}",
+					start_block_height, end_block_height, e
+				))
+			})?;
 		let out = OutputListing {
 			last_retrieved_index: range.0,
 			highest_index: range.1,

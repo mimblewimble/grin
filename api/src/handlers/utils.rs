@@ -14,6 +14,7 @@
 
 use crate::chain;
 use crate::chain::types::CommitPos;
+use crate::chain::SyncState;
 use crate::core::core::OutputIdentifier;
 use crate::rest::*;
 use crate::types::*;
@@ -27,6 +28,18 @@ use std::sync::{Arc, Weak};
 pub fn w<T>(weak: &Weak<T>) -> Result<Arc<T>, Error> {
 	weak.upgrade()
 		.ok_or_else(|| Error::Internal("failed to upgrade weak reference".to_owned()))
+}
+
+/// Fail wallet-oriented queries while the node is still syncing so clients get a
+/// clear "try again later" signal instead of a misleading NotFound (#3546).
+pub fn ensure_not_syncing(sync_state: &Weak<SyncState>) -> Result<(), Error> {
+	let sync = w(sync_state)?;
+	if sync.is_syncing() {
+		return Err(Error::Unavailable(
+			"node is still syncing; wait until sync completes and retry".into(),
+		));
+	}
+	Ok(())
 }
 
 /// Internal function to retrieves an output by a given commitment
@@ -87,4 +100,32 @@ pub fn get_output_v2(
 	)?;
 
 	Ok(Some((output_printable, out)))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::chain::types::SyncStatus;
+	use crate::chain::SyncState;
+	use std::sync::Arc;
+
+	#[test]
+	fn ensure_not_syncing_ok_when_no_sync() {
+		let sync = Arc::new(SyncState::new());
+		sync.update(SyncStatus::NoSync);
+		let weak = Arc::downgrade(&sync);
+		assert!(ensure_not_syncing(&weak).is_ok());
+	}
+
+	#[test]
+	fn ensure_not_syncing_unavailable_while_syncing() {
+		let sync = Arc::new(SyncState::new());
+		// Default SyncState is Initial → is_syncing() true
+		let weak = Arc::downgrade(&sync);
+		let err = ensure_not_syncing(&weak).unwrap_err();
+		match err {
+			Error::Unavailable(msg) => assert!(msg.contains("syncing")),
+			other => panic!("expected Unavailable, got {:?}", other),
+		}
+	}
 }
