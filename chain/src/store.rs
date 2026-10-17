@@ -17,7 +17,6 @@
 use crate::core::consensus::HeaderDifficultyInfo;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{Block, BlockHeader, BlockSums};
-use crate::core::global;
 use crate::core::pow::Difficulty;
 use crate::core::ser::{DeserializationMode, ProtocolVersion, Readable, Writeable};
 use crate::linked_list::MultiIndex;
@@ -104,14 +103,14 @@ impl ChainStore {
 	}
 
 	/// The current PIBD head (will differ from the other heads. Return genesis block if PIBD head doesn't exist).
-	pub fn pibd_head(&self) -> Result<Tip, Error> {
+	pub fn pibd_head(&self, genesis: &BlockHeader) -> Result<Tip, Error> {
 		let res = option_to_not_found(self.db.get_ser(None, &[PIBD_HEAD_PREFIX], None), || {
 			"PIBD_HEAD".to_owned()
 		});
 
 		match res {
 			Ok(r) => Ok(r),
-			Err(_) => Ok(Tip::from_header(&global::get_genesis_block().header)),
+			Err(_) => Ok(Tip::from_header(genesis)),
 		}
 	}
 
