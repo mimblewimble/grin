@@ -23,11 +23,12 @@
 use crate::codec::{Codec, BODY_IO_TIMEOUT};
 use crate::core::ser::ProtocolVersion;
 use crate::msg::{write_message, Consumed, Message, Msg};
+use crate::stream::Stream;
 use crate::types::Error;
 use crate::util::{RateCounter, RwLock};
 use std::fs::File;
 use std::io::{self, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::Shutdown;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{mpsc, Arc};
@@ -172,7 +173,7 @@ impl Tracker {
 /// the current thread, instead just returns a future and the Connection
 /// itself.
 pub fn listen<H>(
-	stream: TcpStream,
+	stream: Stream,
 	version: ProtocolVersion,
 	tracker: Arc<Tracker>,
 	handler: H,
@@ -209,7 +210,7 @@ where
 }
 
 fn poll<H>(
-	conn: TcpStream,
+	conn: Stream,
 	conn_handle: ConnHandle,
 	version: ProtocolVersion,
 	handler: H,
@@ -220,7 +221,8 @@ fn poll<H>(
 where
 	H: MessageHandler,
 {
-	// Split out tcp stream out into separate reader/writer halves.
+	// Split out stream into separate reader/writer halves.
+	// Plain TCP uses OS-level clone; TLS shares a mutex-backed session.
 	let reader = conn.try_clone().expect("clone conn for reader failed");
 	let mut writer = conn.try_clone().expect("clone conn for writer failed");
 	let reader_stopped = stopped.clone();

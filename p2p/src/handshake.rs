@@ -18,13 +18,14 @@ use crate::core::pow::Difficulty;
 use crate::core::ser::ProtocolVersion;
 use crate::msg::{read_message, user_agent, write_message, Hand, Msg, Shake, Type};
 use crate::peer::Peer;
+use crate::stream::Stream;
 use crate::types::{
 	Capabilities, Direction, Error, NetAdapter, P2PConfig, PeerAddr, PeerInfo, PeerLiveInfo,
 };
 use crate::util::RwLock;
 use rand::{thread_rng, Rng};
 use std::collections::VecDeque;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -99,7 +100,7 @@ impl Handshake {
 		capabilities: Capabilities,
 		total_difficulty: Difficulty,
 		self_addr: PeerAddr,
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 	) -> Result<PeerInfo, Error> {
 		// Set explicit timeouts on the tcp stream for hand/shake messages.
 		// Once the peer is up and running we will set new values for these.
@@ -170,7 +171,7 @@ impl Handshake {
 		&self,
 		capab: Capabilities,
 		total_difficulty: Difficulty,
-		conn: &mut TcpStream,
+		conn: &mut Stream,
 		adapter: &Arc<dyn NetAdapter>,
 	) -> Result<PeerInfo, Error> {
 		// Set explicit timeouts on the tcp stream for hand/shake messages.
@@ -258,7 +259,7 @@ impl Handshake {
 }
 
 /// Resolve the correct peer_addr based on the connection and the advertised port.
-fn resolve_peer_addr(advertised: PeerAddr, conn: &TcpStream) -> PeerAddr {
+fn resolve_peer_addr(advertised: PeerAddr, conn: &Stream) -> PeerAddr {
 	let port = advertised.0.port();
 	if let Ok(addr) = conn.peer_addr() {
 		PeerAddr(SocketAddr::new(addr.ip(), port))

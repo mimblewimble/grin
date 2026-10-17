@@ -55,4 +55,58 @@ fn default_capabilities() {
 			| Capabilities::PIBD_HIST_1
 			| Capabilities::PIHD_HIST
 	);
+
+	// TLS is opt-in and not part of default capabilities.
+	assert_eq!(false, x.contains(Capabilities::TLS));
+}
+
+#[test]
+fn tls_capability_bit() {
+	let tls = Capabilities::TLS;
+	assert!(tls.contains(Capabilities::TLS));
+	assert!(tls.contains(Capabilities::UNKNOWN));
+	assert_eq!(false, tls.contains(Capabilities::PEER_LIST));
+
+	let combined = Capabilities::PEER_LIST | Capabilities::TLS;
+	assert!(combined.contains(Capabilities::PEER_LIST));
+	assert!(combined.contains(Capabilities::TLS));
+	assert!(combined.contains(Capabilities::PEER_LIST | Capabilities::TLS));
+	assert_eq!(false, Capabilities::PEER_LIST.contains(combined));
+}
+
+#[test]
+fn tls_peer_selection_helpers() {
+	use grin_p2p::P2PConfig;
+
+	let mut cfg = P2PConfig::default();
+	assert_eq!(false, cfg.tls_peers_required());
+	assert_eq!(
+		cfg.peer_list_request_capabilities(),
+		Capabilities::PEER_LIST
+	);
+	assert!(cfg.accepts_outbound_peer_capabilities(Capabilities::UNKNOWN));
+	assert!(cfg.accepts_outbound_peer_capabilities(Capabilities::PEER_LIST));
+
+	// tls_required alone does nothing without tls_enabled.
+	cfg.tls_required = true;
+	assert_eq!(false, cfg.tls_peers_required());
+
+	cfg.tls_enabled = true;
+	assert!(cfg.tls_peers_required());
+	assert_eq!(
+		cfg.peer_list_request_capabilities(),
+		Capabilities::PEER_LIST | Capabilities::TLS
+	);
+	assert_eq!(
+		false,
+		cfg.accepts_outbound_peer_capabilities(Capabilities::UNKNOWN)
+	);
+	assert_eq!(
+		false,
+		cfg.accepts_outbound_peer_capabilities(Capabilities::PEER_LIST)
+	);
+	assert!(cfg.accepts_outbound_peer_capabilities(Capabilities::TLS));
+	assert!(cfg.accepts_outbound_peer_capabilities(
+		Capabilities::PEER_LIST | Capabilities::TLS
+	));
 }
