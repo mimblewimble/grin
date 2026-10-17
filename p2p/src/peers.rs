@@ -23,11 +23,11 @@ use rand::prelude::*;
 
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
-use crate::core::core;
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
-use crate::core::global;
-use crate::core::pow::Difficulty;
+use crate::grin::core;
+use crate::grin::core::hash::{Hash, Hashed};
+use crate::grin::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
+use crate::grin::global;
+use crate::grin::pow::Difficulty;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{

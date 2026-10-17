@@ -20,16 +20,17 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use crate::core::global::header_size_bytes;
-use crate::core::ser::{BufReader, ProtocolVersion, Readable};
+use crate::grin::global::header_size_bytes;
+use crate::grin::ser::{BufReader, ProtocolVersion, Readable};
 use crate::msg::{Message, MsgHeader, MsgHeaderWrapper, Type};
 use crate::types::{AttachmentMeta, AttachmentUpdate, Error};
 use crate::{
-	core::core::block::{BlockHeader, UntrustedBlockHeader},
+	grin::core::block::{BlockHeader, UntrustedBlockHeader},
 	msg::HeadersData,
 };
+
+use crate::grin::ser::Reader;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use core::ser::Reader;
 use std::cmp::min;
 use std::io::Read;
 use std::mem;

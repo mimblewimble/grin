@@ -27,15 +27,15 @@ use serde::{Deserialize, Deserializer};
 
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
-use crate::core::core;
-use crate::core::core::hash::Hash;
-use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
-use crate::core::global;
-use crate::core::pow::Difficulty;
-use crate::core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use crate::msg::PeerAddrs;
 use crate::util::secp::pedersen::RangeProof;
 use crate::util::RwLock;
+use grin_core::core::hash::Hash;
+use grin_core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
+use grin_core::global;
+use grin_core::pow::Difficulty;
+use grin_core::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use grin_core::{core, ser_multiwrite, try_iter_map_vec};
 
 /// Default main network peer port.
 pub const MAINNET_PEER_PORT: u16 = 3414;

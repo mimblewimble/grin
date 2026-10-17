@@ -14,7 +14,7 @@
 
 use crate::chain;
 use crate::conn::MessageHandler;
-use crate::core::core::{hash::Hashed, CompactBlock};
+use crate::grin::core::{hash::Hashed, CompactBlock};
 
 use crate::msg::{
 	Consumed, HeaderSegment, Headers, Message, Msg, OutputBitmapSegmentResponse,
@@ -468,10 +468,10 @@ impl MessageHandler for Protocol {
 mod tests {
 	use super::*;
 	use crate::conn::Tracker;
-	use crate::core::core::SegmentIdentifier;
-	use crate::core::global;
-	use crate::core::pow::Difficulty;
-	use crate::core::ser::ProtocolVersion;
+	use crate::grin::core::SegmentIdentifier;
+	use crate::grin::global;
+	use crate::grin::pow::Difficulty;
+	use crate::grin::ser::ProtocolVersion;
 	use crate::msg::{read_message, write_message};
 	use crate::serv::DummyAdapter;
 	use crate::types::{
