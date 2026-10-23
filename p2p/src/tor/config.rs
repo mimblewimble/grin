@@ -15,17 +15,22 @@
 use std::fmt;
 use std::time::Duration;
 
+/// Tor request timeout in seconds.
+pub const REQUEST_TIMEOUT_SECS: u64 = 60;
+/// Tor bootstrap timeout in seconds.
+pub const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
+/// Default minimum Tor circuit build timeout in milliseconds.
+pub const MIN_CIRCUIT_TIMEOUT_MS: i32 = 60_000;
+
 pub trait TorConfig {
-	/// Tor request timeout in seconds.
-	const REQUEST_TIMEOUT_SECS: u64 = 60;
-	/// Tor bootstrap timeout in seconds.
-	const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
+	/// Custom request timeout.
+	fn request_timeout(&self) -> Option<Duration>;
 
-	/// Request timeout.
-	fn request_timeout(&self) -> Duration;
+	/// Custom bootstrap timeout.
+	fn bootstrap_timeout(&self) -> Option<Duration>;
 
-	/// Bootstrap timeout.
-	fn bootstrap_timeout(&self) -> Duration;
+	/// Custom minimum Tor circuit build timeout in milliseconds.
+	fn min_circuit_timeout_ms(&self) -> Option<i32>;
 
 	/// Get bridge configuration.
 	fn bridge_config(&self) -> TorBridgeConfig;

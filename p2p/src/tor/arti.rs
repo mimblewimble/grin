@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::config::TorConfig;
+use crate::tor::config::{
+	TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS, REQUEST_TIMEOUT_SECS,
+};
 use crate::tor::ov3::OnionV3Address;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
+
 use arti_client::config::pt::TransportConfigBuilder;
 use arti_client::config::{BridgeConfigBuilder, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
@@ -272,7 +275,9 @@ where
 	let port = url.port_u16().unwrap_or(80);
 	let request = build_post_request(json, &url)
 		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
-	let timeout = config.request_timeout();
+	let timeout = config
+		.request_timeout()
+		.unwrap_or(Duration::from_secs(REQUEST_TIMEOUT_SECS));
 	let (state_path, cache_path) = state_cache_paths(tor_dir);
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
@@ -350,9 +355,12 @@ where
 	let mut builder = TorClientConfigBuilder::from_directories(state_path, cache_path);
 	builder.address_filter().allow_onion_addrs(true);
 	// Circuit timeout minimum applies to listeners and sends too
-	builder
-		.override_net_params()
-		.insert("cbtmintimeout".into(), 60_000);
+	builder.override_net_params().insert(
+		"cbtmintimeout".into(),
+		config
+			.min_circuit_timeout_ms()
+			.unwrap_or(MIN_CIRCUIT_TIMEOUT_MS),
+	);
 
 	// Configure bridge.
 	let bridge_config = config.bridge_config();
@@ -424,7 +432,9 @@ where
 		.create_unbootstrapped()
 		.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 	let c = client.clone();
-	let timeout = config.bootstrap_timeout();
+	let timeout = config
+		.bootstrap_timeout()
+		.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS));
 	let res = client.runtime().block_on(async move {
 		let bootstrap = async || {
 			return match c.bootstrap().await {

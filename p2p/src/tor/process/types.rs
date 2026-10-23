@@ -51,7 +51,7 @@ extern crate timer;
 
 use crate::tor::ov3::OnionV3Error;
 
-use crate::tor::config::TorConfig;
+use crate::tor::config::{TorConfig, BOOTSTRAP_TIMEOUT_SECS};
 use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
@@ -66,6 +66,7 @@ use std::path::{Path, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
+use std::time::Duration;
 use std::{cmp, io};
 use sysinfo::{Process, ProcessExt, System, SystemExt};
 
@@ -137,7 +138,10 @@ impl TorProcess {
 		info!("Starting external Tor Process listener at {}.", addr);
 
 		let mut process = TorProcess::new();
-		let tor_timeout = config.bootstrap_timeout().as_secs();
+		let tor_timeout = config
+			.bootstrap_timeout()
+			.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS))
+			.as_secs();
 
 		let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
 		let bridge_config = config.bridge_config();
@@ -226,7 +230,12 @@ impl TorProcess {
 		path.push("torrc");
 		tor.torrc_path(path.to_str().unwrap())
 			.working_dir(tor_dir.to_str().unwrap())
-			.timeout(config.bootstrap_timeout().as_secs())
+			.timeout(
+				config
+					.bootstrap_timeout()
+					.unwrap_or(Duration::from_secs(BOOTSTRAP_TIMEOUT_SECS))
+					.as_secs(),
+			)
 			.completion_percent(100)
 			.launch()
 			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
