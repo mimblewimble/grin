@@ -16,18 +16,18 @@
 
 use crate::chain::txhashset::BitmapSegment;
 use crate::conn::Tracker;
-use crate::core::core::hash::Hash;
-use crate::core::core::transaction::{OutputIdentifier, TxKernel};
-use crate::core::core::{
+use crate::grin::core::hash::Hash;
+use crate::grin::core::transaction::{OutputIdentifier, TxKernel};
+use crate::grin::core::{
 	BlockHeader, Segment, SegmentIdentifier, Transaction, UntrustedBlock, UntrustedBlockHeader,
 	UntrustedCompactBlock,
 };
-use crate::core::pow::Difficulty;
-use crate::core::ser::{
+use crate::grin::pow::Difficulty;
+use crate::grin::ser::{
 	self, DeserializationMode, ProtocolVersion, Readable, Reader, StreamingReader, Writeable,
 	Writer,
 };
-use crate::core::{consensus, global};
+use crate::grin::{consensus, global};
 use crate::types::{
 	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
 	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,

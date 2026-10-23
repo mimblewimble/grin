@@ -27,7 +27,7 @@ extern crate bitflags;
 extern crate enum_primitive;
 
 #[macro_use]
-extern crate grin_core as core;
+extern crate grin_core as grin;
 use grin_chain as chain;
 use grin_util as util;
 
@@ -45,6 +45,7 @@ mod peers;
 mod protocol;
 mod serv;
 pub mod store;
+pub mod tor;
 pub mod types;
 
 pub use crate::conn::SEND_CHANNEL_CAP;

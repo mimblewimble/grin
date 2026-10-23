@@ -24,11 +24,11 @@ use std::sync::Arc;
 use crate::chain;
 use crate::chain::txhashset::BitmapChunk;
 use crate::conn;
-use crate::core::core::hash::{Hash, Hashed};
-use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
-use crate::core::pow::Difficulty;
-use crate::core::ser::Writeable;
-use crate::core::{core, global};
+use crate::grin::core::hash::{Hash, Hashed};
+use crate::grin::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
+use crate::grin::pow::Difficulty;
+use crate::grin::ser::Writeable;
+use crate::grin::{core, global};
 use crate::handshake::Handshake;
 use crate::msg::{
 	self, BanReason, GetPeerAddrs, Locator, Msg, Ping, SegmentRequest, TxHashSetRequest, Type,
