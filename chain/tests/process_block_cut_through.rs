@@ -141,7 +141,7 @@ fn process_block_cut_through() -> Result<(), chain::Error> {
 	);
 
 	// Build a block with this single invalid transaction.
-	let block = build_block(&chain, &keychain, &[tx.clone()], true)?;
+	let block = build_block(&chain, &keychain, std::slice::from_ref(&tx), true)?;
 
 	// The block is invalid due to cut-through.
 	let prev = chain.head_header()?;

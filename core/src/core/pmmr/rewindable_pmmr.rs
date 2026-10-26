@@ -72,6 +72,6 @@ where
 	/// Intended usage is to create a rewindable PMMR, rewind it,
 	/// then convert to "readonly" and read from it.
 	pub fn as_readonly(&self) -> ReadonlyPMMR<'a, T, B> {
-		ReadonlyPMMR::at(&self.backend, self.last_pos)
+		ReadonlyPMMR::at(self.backend, self.last_pos)
 	}
 }

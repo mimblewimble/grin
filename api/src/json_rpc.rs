@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 pub fn build_request<'a, 'b>(name: &'a str, params: &'b serde_json::Value) -> Request<'a, 'b> {
 	Request {
 		method: name,
-		params: params,
+		params,
 		id: From::from(1),
 		jsonrpc: Some("2.0"),
 	}
@@ -142,7 +142,7 @@ impl fmt::Display for Error {
 				write!(f, "duplicate RPC batch response ID: {}", v)
 			}
 			Error::_WrongBatchResponseId(ref v) => write!(f, "wrong RPC batch response ID: {}", v),
-			_ => write!(f, "{}", self),
+			_ => write!(f, "{:?}", self),
 		}
 	}
 }
@@ -228,27 +228,27 @@ pub fn _standard_error(code: StandardError, data: Option<serde_json::Value>) -> 
 		StandardError::ParseError => RpcError {
 			code: -32700,
 			message: "Parse error".to_string(),
-			data: data,
+			data,
 		},
 		StandardError::InvalidRequest => RpcError {
 			code: -32600,
 			message: "Invalid Request".to_string(),
-			data: data,
+			data,
 		},
 		StandardError::MethodNotFound => RpcError {
 			code: -32601,
 			message: "Method not found".to_string(),
-			data: data,
+			data,
 		},
 		StandardError::InvalidParams => RpcError {
 			code: -32602,
 			message: "Invalid params".to_string(),
-			data: data,
+			data,
 		},
 		StandardError::InternalError => RpcError {
 			code: -32603,
 			message: "Internal error".to_string(),
-			data: data,
+			data,
 		},
 	}
 }
@@ -262,14 +262,31 @@ pub fn _result_to_response(
 		Ok(data) => Response {
 			result: Some(data),
 			error: None,
-			id: id,
+			id,
 			jsonrpc: Some(String::from("2.0")),
 		},
 		Err(err) => Response {
 			result: None,
 			error: Some(err),
-			id: id,
+			id,
 			jsonrpc: Some(String::from("2.0")),
 		},
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::Error;
+
+	#[test]
+	fn display() {
+		for (error, expected) in [
+			(Error::_NonceMismatch, "_NonceMismatch"),
+			(Error::_VersionMismatch, "_VersionMismatch"),
+			(Error::_EmptyBatch, "_EmptyBatch"),
+			(Error::_WrongBatchResponseSize, "_WrongBatchResponseSize"),
+		] {
+			assert_eq!(error.to_string(), expected);
+		}
 	}
 }

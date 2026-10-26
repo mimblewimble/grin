@@ -72,7 +72,7 @@ impl Handler for BasicAuthMiddleware {
 			next_handler.call(req, handlers)
 		} else {
 			// Unauthorized 401
-			unauthorized_response(&self.basic_realm)
+			unauthorized_response(self.basic_realm)
 		}
 	}
 }
@@ -116,7 +116,7 @@ impl Handler for BasicAuthURIMiddleware {
 				next_handler.call(req, handlers)
 			} else {
 				// Unauthorized 401
-				unauthorized_response(&self.basic_realm)
+				unauthorized_response(self.basic_realm)
 			}
 		} else {
 			next_handler.call(req, handlers)

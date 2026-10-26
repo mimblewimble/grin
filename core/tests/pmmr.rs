@@ -76,8 +76,8 @@ fn first_100_mmr_heights() {
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 5 \
 	                     0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 0 0 1 0 0";
 	let first_100 = first_100_str.split(' ').map(|n| n.parse::<u64>().unwrap());
-	let mut count = 0;
-	for n in first_100 {
+	for (count, n) in first_100.enumerate() {
+		let count = count as u64;
 		assert_eq!(
 			n,
 			pmmr::bintree_postorder_height(count),
@@ -85,7 +85,6 @@ fn first_100_mmr_heights() {
 			n,
 			pmmr::bintree_postorder_height(count)
 		);
-		count += 1;
 	}
 }
 
@@ -154,13 +153,13 @@ fn test_bintree_pos_iter() {
 
 #[test]
 fn test_is_leaf() {
-	assert_eq!(pmmr::is_leaf(0), true);
-	assert_eq!(pmmr::is_leaf(1), true);
-	assert_eq!(pmmr::is_leaf(2), false);
-	assert_eq!(pmmr::is_leaf(3), true);
-	assert_eq!(pmmr::is_leaf(4), true);
-	assert_eq!(pmmr::is_leaf(5), false);
-	assert_eq!(pmmr::is_leaf(6), false);
+	assert!(pmmr::is_leaf(0));
+	assert!(pmmr::is_leaf(1));
+	assert!(!pmmr::is_leaf(2));
+	assert!(pmmr::is_leaf(3));
+	assert!(pmmr::is_leaf(4));
+	assert!(!pmmr::is_leaf(5));
+	assert!(!pmmr::is_leaf(6));
 }
 
 #[test]
@@ -243,9 +242,9 @@ fn various_families() {
 
 #[test]
 fn test_is_left_sibling() {
-	assert_eq!(pmmr::is_left_sibling(0), true);
-	assert_eq!(pmmr::is_left_sibling(1), false);
-	assert_eq!(pmmr::is_left_sibling(2), true);
+	assert!(pmmr::is_left_sibling(0));
+	assert!(!pmmr::is_left_sibling(1));
+	assert!(pmmr::is_left_sibling(2));
 }
 
 #[test]

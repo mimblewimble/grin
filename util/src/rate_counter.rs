@@ -53,6 +53,12 @@ pub struct RateCounter {
 	last_min_entries: Vec<Entry>,
 }
 
+impl Default for RateCounter {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl RateCounter {
 	/// Instantiate a new rate counter
 	pub fn new() -> RateCounter {

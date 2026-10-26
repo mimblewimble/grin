@@ -115,9 +115,9 @@ impl Writeable for CompactBlockBody {
 	}
 }
 
-impl Into<CompactBlockBody> for CompactBlock {
-	fn into(self) -> CompactBlockBody {
-		self.body
+impl From<CompactBlock> for CompactBlockBody {
+	fn from(val: CompactBlock) -> Self {
+		val.body
 	}
 }
 
@@ -178,7 +178,7 @@ impl From<Block> for CompactBlock {
 
 		for k in block.kernels() {
 			if k.is_coinbase() {
-				kern_full.push(k.clone());
+				kern_full.push(*k);
 			} else {
 				kern_ids.push(k.short_id(&header.hash(), nonce));
 			}

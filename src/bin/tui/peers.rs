@@ -110,7 +110,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => sort_by_addr(),
 			PeerColumn::State => self.state.cmp(&other.state).then(sort_by_addr()),
-			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other).then(sort_by_addr()),
+			PeerColumn::UsedBandwidth => cmp_used_bandwidth(self, other).then(sort_by_addr()),
 			PeerColumn::TotalDifficulty => self
 				.total_difficulty
 				.cmp(&other.total_difficulty)
@@ -162,12 +162,9 @@ impl TUIPeerView {
 		)
 		.with_name(VIEW_PEER_SYNC);
 
-		let peer_status_view =
-			OnEventView::new(peer_status_view).on_pre_event(Key::Esc, move |c| {
-				let _ = c.focus_name(MAIN_MENU);
-			});
-
-		peer_status_view
+		OnEventView::new(peer_status_view).on_pre_event(Key::Esc, move |c| {
+			let _ = c.focus_name(MAIN_MENU);
+		})
 	}
 }
 

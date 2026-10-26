@@ -61,7 +61,8 @@ impl ChainAdapter for StatusAdapter {
 fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<StatusAdapter>) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
-	let chain = chain::Chain::init(
+
+	chain::Chain::init(
 		dir_name.to_string(),
 		adapter,
 		genesis,
@@ -69,9 +70,7 @@ fn setup_with_status_adapter(dir_name: &str, genesis: Block, adapter: Arc<Status
 		false,
 		None,
 	)
-	.unwrap();
-
-	chain
+	.unwrap()
 }
 
 #[test]
@@ -512,7 +511,7 @@ fn mine_forks() {
 
 			// checking our new head
 			let head = chain.head().unwrap();
-			assert_eq!(head.height, (n + 1) as u64);
+			assert_eq!(head.height, (n + 1));
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
 
@@ -525,7 +524,7 @@ fn mine_forks() {
 
 			// checking head switch
 			let head = chain.head().unwrap();
-			assert_eq!(head.height, (n + 1) as u64);
+			assert_eq!(head.height, (n + 1));
 			assert_eq!(head.last_block_h, bhash);
 			assert_eq!(head.prev_block_h, prev.hash());
 		}
@@ -664,7 +663,7 @@ fn spend_rewind_spend() {
 		)
 		.unwrap();
 
-		let b = prepare_block_tx(&kc, &head, &chain, 6, &[tx1.clone()]);
+		let b = prepare_block_tx(&kc, &head, &chain, 6, std::slice::from_ref(&tx1));
 		head = b.header.clone();
 		chain
 			.process_block(b.clone(), chain::Options::SKIP_POW)
@@ -737,7 +736,7 @@ fn spend_in_fork_and_compact() {
 		)
 		.unwrap();
 
-		let next = prepare_block_tx(&kc, &fork_head, &chain, 7, &[tx1.clone()]);
+		let next = prepare_block_tx(&kc, &fork_head, &chain, 7, std::slice::from_ref(&tx1));
 		let prev_main = next.header.clone();
 		chain
 			.process_block(next.clone(), chain::Options::SKIP_POW)
@@ -755,7 +754,7 @@ fn spend_in_fork_and_compact() {
 		)
 		.unwrap();
 
-		let next = prepare_block_tx(&kc, &prev_main, &chain, 9, &[tx2.clone()]);
+		let next = prepare_block_tx(&kc, &prev_main, &chain, 9, std::slice::from_ref(&tx2));
 		let prev_main = next.header.clone();
 		chain.process_block(next, chain::Options::SKIP_POW).unwrap();
 
@@ -763,11 +762,11 @@ fn spend_in_fork_and_compact() {
 		chain.validate(false).unwrap();
 
 		// mine 2 forked blocks from the first
-		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, &[tx1.clone()]);
+		let fork = prepare_block_tx(&kc, &fork_head, &chain, 6, std::slice::from_ref(&tx1));
 		let prev_fork = fork.header.clone();
 		chain.process_block(fork, chain::Options::SKIP_POW).unwrap();
 
-		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, &[tx2.clone()]);
+		let fork_next = prepare_block_tx(&kc, &prev_fork, &chain, 8, std::slice::from_ref(&tx2));
 		let prev_fork = fork_next.header.clone();
 		chain
 			.process_block(fork_next, chain::Options::SKIP_POW)
@@ -857,7 +856,7 @@ fn output_header_mappings() {
 				false,
 			)
 			.unwrap();
-			reward_outputs.push(reward.0.clone());
+			reward_outputs.push(reward.0);
 			let mut b =
 				core::core::Block::new(&prev, &[], next_header_info.clone().difficulty, reward)
 					.unwrap();
@@ -997,7 +996,7 @@ fn test_overflow_cached_rangeproof() {
 		.unwrap();
 
 		// mine block with tx1
-		let next = prepare_block_tx(&kc, &head, &chain, 7, &[tx1.clone()]);
+		let next = prepare_block_tx(&kc, &head, &chain, 7, std::slice::from_ref(&tx1));
 		let prev_main = next.header.clone();
 		chain
 			.process_block(next.clone(), chain::Options::SKIP_POW)
@@ -1039,7 +1038,7 @@ fn test_overflow_cached_rangeproof() {
 			res.unwrap_err(),
 			chain::Error::InvalidBlockProof {
 				source: block::Error::Transaction(transaction::Error::Secp(
-					util::secp::Error::InvalidRangeProof
+					util::secp::Error::InvalidBulletproof
 				))
 			}
 		);

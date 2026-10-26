@@ -46,13 +46,13 @@ pub const PMMR_FILES: [&str; 4] = [
 /// handle writing, reading and pruning.
 ///
 /// * A main storage file appends Hash instances as they come.
-/// This AppendOnlyFile is also backed by a mmap for reads.
+///   This AppendOnlyFile is also backed by a mmap for reads.
 /// * An in-memory backend buffers the latest batch of writes to ensure the
-/// PMMR can always read recent values even if they haven't been flushed to
-/// disk yet.
+///   PMMR can always read recent values even if they haven't been flushed to
+///   disk yet.
 /// * A leaf_set tracks unpruned (unremoved) leaf positions in the MMR..
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
-/// MMR.
+///   MMR.
 pub struct PMMRBackend<T: PMMRable> {
 	data_dir: PathBuf,
 	prunable: bool,
@@ -296,7 +296,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		} else {
 			SizeInfo::VariableSize(Box::new(AppendOnlyFile::open(
 				data_dir.join(PMMR_SIZE_FILE),
-				SizeInfo::FixedSize(SizeEntry::LEN as u16),
+				SizeInfo::FixedSize(SizeEntry::LEN),
 				version,
 			)?))
 		};
@@ -304,8 +304,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Hash file is always "fixed size" and we use 32 bytes per hash.
 		let hash_size_info = SizeInfo::FixedSize(Hash::LEN.try_into().unwrap());
 
-		let hash_file = DataFile::open(&data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
-		let data_file = DataFile::open(&data_dir.join(PMMR_DATA_FILE), size_info, version)?;
+		let hash_file = DataFile::open(data_dir.join(PMMR_HASH_FILE), hash_size_info, version)?;
+		let data_file = DataFile::open(data_dir.join(PMMR_DATA_FILE), size_info, version)?;
 
 		let leaf_set_path = data_dir.join(PMMR_LEAF_FILE);
 
@@ -321,7 +321,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
-		let prune_list = PruneList::open(&data_dir.join(PMMR_PRUN_FILE))?;
+		let prune_list = PruneList::open(data_dir.join(PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir: data_dir.to_path_buf(),
@@ -556,7 +556,6 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 /// This function will return an error whenever the call to `std;:fs::read_dir`
 /// fails on the given path for any reason.
 ///
-
 pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	path: P,
 	prefix_to_delete: &str,

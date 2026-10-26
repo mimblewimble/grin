@@ -29,19 +29,6 @@ pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign + Hash {}
 impl EdgeType for u32 {}
 impl EdgeType for u64 {}
 
-/// An edge in the Cuckoo graph, simply references two u64 nodes.
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
-pub struct Edge {
-	pub u: u64,
-	pub v: u64,
-}
-
-impl fmt::Display for Edge {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "(u: {}, v: {})", self.u, self.v)
-	}
-}
-
 /// An element of an adjencency list
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Link {
@@ -63,12 +50,12 @@ pub fn set_header_nonce(header: &[u8], nonce: Option<u32>) -> Result<[u64; 4], E
 		header.write_u32::<LittleEndian>(n)?;
 		create_siphash_keys(&header)
 	} else {
-		create_siphash_keys(&header)
+		create_siphash_keys(header)
 	}
 }
 
 pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
-	let h = blake2b(32, &[], &header);
+	let h = blake2b(32, &[], header);
 	let hb = h.as_bytes();
 	let mut rdr = Cursor::new(hb);
 	Ok([

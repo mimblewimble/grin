@@ -73,6 +73,15 @@ pub struct OneTime<T> {
 	inner: Arc<RwLock<Option<T>>>,
 }
 
+impl<T> Default for OneTime<T>
+where
+	T: Clone,
+{
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<T> OneTime<T>
 where
 	T: Clone,
@@ -138,6 +147,12 @@ pub fn to_base64(s: &str) -> String {
 pub struct StopState {
 	stopped: AtomicBool,
 	paused: AtomicBool,
+}
+
+impl Default for StopState {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl StopState {

@@ -56,7 +56,7 @@ fn p2p_server(
 ) -> (SocketAddr, Arc<p2p::Server>) {
 	let p2p_config = p2p::P2PConfig {
 		host: "127.0.0.1".parse().unwrap(),
-		port: port.unwrap_or_else(|| open_port()),
+		port: port.unwrap_or_else(open_port),
 		peers_allow: if peers_allow.is_empty() {
 			None
 		} else {
@@ -76,7 +76,7 @@ fn p2p_server(
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
-			Hash::from_vec(&vec![]),
+			Hash::from_vec(&[]),
 			Arc::new(StopState::new()),
 		)
 		.unwrap(),

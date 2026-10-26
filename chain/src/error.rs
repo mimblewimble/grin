@@ -196,16 +196,16 @@ impl Error {
 	/// Whether the error is due to a block that was intrinsically wrong
 	pub fn is_bad_data(&self) -> bool {
 		// shorter to match on all the "not the block's fault" errors
-		match self {
+		!matches!(
+			self,
 			Error::Unfit(_)
-			| Error::Orphan
-			| Error::StoreErr(_, _)
-			| Error::SerErr { .. }
-			| Error::TxHashSetErr(_)
-			| Error::GenesisBlockRequired
-			| Error::Other(_) => false,
-			_ => true,
-		}
+				| Error::Orphan
+				| Error::StoreErr(_, _)
+				| Error::SerErr { .. }
+				| Error::TxHashSetErr(_)
+				| Error::GenesisBlockRequired
+				| Error::Other(_)
+		)
 	}
 }
 

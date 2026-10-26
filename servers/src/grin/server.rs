@@ -122,14 +122,15 @@ impl Server {
 	// This uses fs2 and should be safe cross-platform unless somebody abuses the file itself.
 	fn one_grin_at_a_time(config: &ServerConfig) -> Result<Arc<File>, Error> {
 		let path = Path::new(&config.db_root);
-		fs::create_dir_all(&path)?;
+		fs::create_dir_all(path)?;
 		let path = path.join("grin.lock");
 		let lock_file = fs::OpenOptions::new()
 			.read(true)
 			.write(true)
 			.create(true)
+			.truncate(false)
 			.open(&path)?;
-		lock_file.try_lock_exclusive().map_err(|e| {
+		lock_file.try_lock_exclusive().inspect_err(|_e| {
 			let mut stderr = std::io::stderr();
 			writeln!(
 				&mut stderr,
@@ -137,7 +138,6 @@ impl Server {
 				path
 			)
 			.expect("Could not write to stderr");
-			e
 		})?;
 		Ok(Arc::new(lock_file))
 	}
@@ -158,13 +158,9 @@ impl Server {
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
-		let archive_mode = config.archive_mode.unwrap_or_else(|| false);
+		let archive_mode = config.archive_mode.unwrap_or(false);
 
-		let stop_state = if stop_state.is_some() {
-			stop_state.unwrap()
-		} else {
-			Arc::new(StopState::new())
-		};
+		let stop_state = stop_state.unwrap_or_else(|| Arc::new(StopState::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
@@ -197,15 +193,12 @@ impl Server {
 		let (db_migration_prog_tx, db_migration_prog_rx) = std::sync::mpsc::channel::<i8>();
 		if let Some(ref server_tx) = server_tx {
 			let server_tx = server_tx.clone();
-			thread::spawn(move || loop {
-				match db_migration_prog_rx.recv() {
-					Ok(p) => {
-						if p == 100 {
-							break;
-						}
-						let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
+			thread::spawn(move || {
+				while let Ok(p) = db_migration_prog_rx.recv() {
+					if p == 100 {
+						break;
 					}
-					Err(_) => break,
+					let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
 				}
 			});
 		}
@@ -291,7 +284,7 @@ impl Server {
 			let _ = server_tx.send(ServerInitStatus::StartAPI);
 		}
 
-		info!("Starting rest apis at: {}", &config.api_http_addr);
+		info!("Starting rest apis at: {}", config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
@@ -321,7 +314,7 @@ impl Server {
 			stop_state.clone(),
 		)?;
 
-		info!("Starting dandelion monitor: {}", &config.api_http_addr);
+		info!("Starting dandelion monitor: {}", config.api_http_addr);
 		let dandelion_thread = dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
@@ -461,7 +454,7 @@ impl Server {
 					.collect();
 
 			let tip_height = self.head()?.height as i64;
-			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
+			let mut height = tip_height - last_blocks.len() as i64 + 1;
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)

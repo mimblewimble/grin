@@ -49,6 +49,12 @@ pub struct BitmapAccumulator {
 	backend: VecBackend<BitmapChunk>,
 }
 
+impl Default for BitmapAccumulator {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl BitmapAccumulator {
 	const NBITS: u64 = BitmapChunk::LEN_BITS as u64;
 
@@ -196,7 +202,7 @@ impl BitmapAccumulator {
 		let mut bitmap = Bitmap::new();
 		for (chunk_index, chunk_pos) in self.backend.leaf_pos_iter().enumerate() {
 			//TODO: Unwrap
-			let chunk = self.backend.get_data(chunk_pos as u64).unwrap();
+			let chunk = self.backend.get_data(chunk_pos).unwrap();
 			let additive = chunk.set_iter(chunk_index * 1024).collect::<Vec<u32>>();
 			bitmap.add_many(&additive);
 		}
@@ -208,6 +214,12 @@ impl BitmapAccumulator {
 /// The first 1024 bits belong in one chunk. The next 1024 bits in the next chunk, etc.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitmapChunk(BitVec);
+
+impl Default for BitmapChunk {
+	fn default() -> Self {
+		Self::new()
+	}
+}
 
 impl BitmapChunk {
 	const LEN_BITS: usize = 1024;
@@ -272,7 +284,7 @@ impl Readable for BitmapChunk {
 	}
 }
 
-///
+/// Bitmap blocks with their segment proof
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitmapSegment {
 	identifier: SegmentIdentifier,
@@ -396,8 +408,7 @@ impl Readable for BitmapSegment {
 		if n_blocks == 0 {
 			return Err(ser::Error::CorruptedData);
 		}
-		let max_blocks = (BitmapSegment::max_chunks(&identifier)? + BitmapBlock::NCHUNKS - 1)
-			/ BitmapBlock::NCHUNKS;
+		let max_blocks = BitmapSegment::max_chunks(&identifier)?.div_ceil(BitmapBlock::NCHUNKS);
 		if n_blocks > max_blocks {
 			return Err(ser::Error::TooLargeReadErr);
 		}
@@ -423,8 +434,7 @@ impl From<Segment<BitmapChunk>> for BitmapSegment {
 		let (identifier, _, _, _, leaf_data, proof) = segment.parts();
 
 		let mut chunks_left = leaf_data.len();
-		let mut blocks =
-			Vec::with_capacity((chunks_left + BitmapBlock::NCHUNKS - 1) / BitmapBlock::NCHUNKS);
+		let mut blocks = Vec::with_capacity(chunks_left.div_ceil(BitmapBlock::NCHUNKS));
 		while chunks_left > 0 {
 			let n_chunks = min(BitmapBlock::NCHUNKS, chunks_left);
 			chunks_left = chunks_left.saturating_sub(n_chunks);
@@ -480,7 +490,7 @@ impl BitmapBlock {
 
 	fn try_n_chunks(&self) -> Result<usize, ser::Error> {
 		let length = self.inner.len();
-		if length % BitmapChunk::LEN_BITS != 0 {
+		if !length.is_multiple_of(BitmapChunk::LEN_BITS) {
 			return Err(ser::Error::CorruptedData);
 		}
 		let n_chunks = length / BitmapChunk::LEN_BITS;
@@ -618,7 +628,7 @@ mod tests {
 			block.inner.negate();
 		}
 
-		let range_size = n_blocks * BitmapChunk::LEN_BITS as usize;
+		let range_size = n_blocks * BitmapChunk::LEN_BITS;
 
 		// Flip `entries` bits in random spots
 		let mut count = 0;

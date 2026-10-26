@@ -26,7 +26,7 @@ fn capabilities_contains() {
 	assert!(x.contains(Capabilities::UNKNOWN));
 
 	// capabilities do not contain other disjoint capabilities
-	assert_eq!(false, x.contains(Capabilities::PEER_LIST));
+	assert!(!x.contains(Capabilities::PEER_LIST));
 }
 
 #[test]

@@ -22,21 +22,23 @@
 //! This implementation is built in two major parts:
 //!
 //! 1. A set of low-level functions that allow navigation within an arbitrary
-//! sized binary tree traversed in postorder. To realize why this us useful,
-//! we start with the standard height sequence in a MMR: 0010012001... This is
-//! in fact identical to the postorder traversal (left-right-top) of a binary
-//! tree. In addition postorder traversal is independent of the height of the
-//! tree. This allows us, with a few primitive, to get the height of any node
-//! in the MMR from its position in the sequence, as well as calculate the
-//! position of siblings, parents, etc. As all those functions only rely on
-//! binary operations, they're extremely fast.
+//!    sized binary tree traversed in postorder. To realize why this us useful,
+//!    we start with the standard height sequence in a MMR: 0010012001... This is
+//!    in fact identical to the postorder traversal (left-right-top) of a binary
+//!    tree. In addition postorder traversal is independent of the height of the
+//!    tree. This allows us, with a few primitive, to get the height of any node
+//!    in the MMR from its position in the sequence, as well as calculate the
+//!    position of siblings, parents, etc. As all those functions only rely on
+//!    binary operations, they're extremely fast.
 //! 2. The implementation of a prunable MMR tree using the above. Each leaf
-//! is required to be Writeable (which implements Hashed). Tree roots can be
-//! trivially and efficiently calculated without materializing the full tree.
-//! The underlying Hashes are stored in a Backend implementation that can
-//! either be a simple Vec or a database.
+//!    is required to be Writeable (which implements Hashed). Tree roots can be
+//!    trivially and efficiently calculated without materializing the full tree.
+//!    The underlying Hashes are stored in a Backend implementation that can
+//!    either be a simple Vec or a database.
 
 mod backend;
+// Keep the existing module layout
+#[allow(clippy::module_inception)]
 mod pmmr;
 mod readonly_pmmr;
 mod rewindable_pmmr;

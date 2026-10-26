@@ -248,8 +248,7 @@ async fn send_request_async(req: Request<ApiBody>, timeout: TimeOut) -> Result<S
 			"Wrong response code: {} with data {:?}",
 			resp.status(),
 			resp.body()
-		))
-		.into());
+		)));
 	}
 	let body_resp = resp
 		.into_body()

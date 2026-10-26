@@ -25,7 +25,6 @@ pub enum UIMessage {
 
 /// Trait for a UI element that receives status update messages
 /// and updates itself
-
 pub trait TUIStatusListener {
 	/// Update according to status update contents
 	fn update(c: &mut Cursive, stats: &ServerStats);

@@ -24,7 +24,7 @@ const SIPHASH_BLOCK_MASK: u64 = SIPHASH_BLOCK_SIZE - 1;
 // helper macro for left rotation
 macro_rules! rotl {
 	($num:expr, $shift:expr) => {
-		$num = ($num << $shift) | ($num >> (64 - $shift));
+		$num = $num.rotate_left($shift as u32);
 	};
 }
 

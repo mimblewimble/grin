@@ -27,7 +27,7 @@ fn push_u64(bytes: &mut Vec<u8>, n: u64) {
 
 fn test_unprunable_size(height: u8, n_leaves: u32) {
 	let size = 1u64 << height;
-	let n_segments = (n_leaves as u64 + size - 1) / size;
+	let n_segments = (n_leaves as u64).div_ceil(size);
 
 	// Build an MMR with n_leaves leaves
 	let mut ba = pmmr::VecBackend::new();
@@ -46,7 +46,7 @@ fn test_unprunable_size(height: u8, n_leaves: u32) {
 			"\n\n>>>>>>> N_LEAVES = {}, LAST_POS = {}, SEGMENT = {}:\n{:#?}",
 			n_leaves, last_pos, idx, segment
 		);
-		if idx < n_segments - 1 || (n_leaves as u64) % size == 0 {
+		if idx < n_segments - 1 || (n_leaves as u64).is_multiple_of(size) {
 			// Check if the reconstructed subtree root matches with the hash stored in the mmr
 			let subtree_root = segment.root(last_pos, None).unwrap().unwrap();
 			let last = pmmr::insertion_to_pmmr_index((idx + 1) * size - 1) + (height as u64);

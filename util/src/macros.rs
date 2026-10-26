@@ -124,11 +124,10 @@ macro_rules! impl_array_newtype {
 			}
 		}
 
-		#[cfg_attr(feature = "clippy", allow(expl_impl_clone_on_copy))] // we don't define the `struct`, we have to explicitly impl
 		impl Clone for $thing {
 			#[inline]
 			fn clone(&self) -> $thing {
-				$thing::from(&self[..])
+				*self
 			}
 		}
 
