@@ -419,6 +419,13 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
+		if leaves_removed.is_empty() {
+			// Save metadata and clean up snapshots without rewriting unchanged files
+			self.prune_list.flush()?;
+			self.leaf_set.flush()?;
+			self.clean_rewind_files()?;
+			return Ok(false);
+		}
 
 		// Save compact copy of the hash file, skipping removed data.
 		{

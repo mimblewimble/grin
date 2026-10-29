@@ -20,7 +20,6 @@ use std::path::{Path, PathBuf};
 use croaring::{Bitmap, Portable};
 
 use crate::grin_core::core::hash::Hashed;
-use crate::grin_core::core::pmmr;
 use crate::grin_core::core::BlockHeader;
 use crate::prune_list::PruneList;
 use crate::{read_bitmap, save_via_temp_file};
@@ -95,8 +94,8 @@ impl LeafSet {
 	/// up to and including the cutoff_pos.
 	/// Only applicable for the output MMR.
 	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
-		(1..=cutoff_pos)
-			.filter(|&x| pmmr::is_leaf(x - 1) && !prune_list.is_pruned(x - 1))
+		prune_list
+			.unpruned_leaf_iter(cutoff_pos)
 			.map(|x| x as u32)
 			.collect()
 	}

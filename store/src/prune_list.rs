@@ -52,6 +52,8 @@ pub struct PruneList {
 	bitmap: Bitmap,
 	shift_cache: Vec<u64>,
 	leaf_shift_cache: Vec<u64>,
+	/// Changes not yet saved
+	dirty: bool,
 }
 
 impl PruneList {
@@ -64,6 +66,7 @@ impl PruneList {
 			bitmap: Bitmap::new(),
 			shift_cache: vec![],
 			leaf_shift_cache: vec![],
+			dirty: true,
 		};
 
 		for pos1 in bitmap.iter() {
@@ -91,6 +94,7 @@ impl PruneList {
 		assert!(!bitmap.contains(0));
 
 		let mut prune_list = PruneList::new(Some(file_path), bitmap);
+		prune_list.dirty = false;
 
 		// Now build the shift caches from the bitmap we read from disk
 		prune_list.init_caches();
@@ -124,6 +128,7 @@ impl PruneList {
 			save_via_temp_file(path, ".tmp", |file| {
 				file.write_all(&self.bitmap.serialize::<Portable>())
 			})?;
+			self.dirty = false;
 		}
 
 		Ok(())
@@ -131,6 +136,10 @@ impl PruneList {
 
 	/// Discard in-memory changes and restore the last flushed prune_list state.
 	pub fn discard(&mut self) -> io::Result<()> {
+		if !self.dirty {
+			return Ok(());
+		}
+
 		let path = match self.path.clone() {
 			Some(path) => path,
 			None => {
@@ -145,6 +154,7 @@ impl PruneList {
 			Bitmap::new()
 		};
 		*self = PruneList::new(Some(path), bitmap);
+		self.dirty = false;
 		Ok(())
 	}
 
@@ -297,6 +307,7 @@ impl PruneList {
 		);
 
 		// Add this pos to the bitmap (leaf or subtree root)
+		self.dirty = true;
 		self.bitmap.add(1 + pos0 as u32);
 
 		// Calculate shift and leaf_shift for this pos.
