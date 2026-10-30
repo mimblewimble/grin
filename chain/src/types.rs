@@ -445,8 +445,8 @@ impl SyncState {
 	pub fn update_pibd_leaf_progress(&self, completed_leaves: u64, archive_header: &BlockHeader) {
 		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
 			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
-		let status: &mut SyncStatus = &mut self.current.write();
-		match status {
+		let mut status = self.current.write();
+		match &mut *status {
 			SyncStatus::TxHashsetPibd {
 				completed_leaves: current_completed_leaves,
 				leaves_required: current_leaves_required,
@@ -458,8 +458,7 @@ impl SyncState {
 				*required_height = archive_header.height;
 			}
 			_ => {
-				self.clear_pihd_header_segments();
-				*status = SyncStatus::TxHashsetPibd {
+				let new_status = SyncStatus::TxHashsetPibd {
 					aborted: false,
 					errored: false,
 					completed_leaves,
@@ -467,6 +466,7 @@ impl SyncState {
 					completed_to_height: 0,
 					required_height: archive_header.height,
 				};
+				self.update_with_guard(new_status, status);
 			}
 		}
 	}
@@ -746,7 +746,7 @@ impl SyncState {
 	}
 
 	/// Track a pending PIHD header segment request.
-	pub fn add_pihd_header_segment(
+	fn add_pihd_header_segment(
 		&self,
 		id: SegmentIdentifier,
 		peer_addr: SocketAddr,
