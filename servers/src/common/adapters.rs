@@ -1081,6 +1081,10 @@ where
 						.complete_pihd_header_segment(&entry.request, head);
 				}
 				Err(e) => {
+					debug!(
+						"PIHD header segment {:?} from {} did not connect cleanly: {:?}",
+						entry.id, entry.peer_info.addr, e
+					);
 					if !self
 						.sync_state
 						.reject_pihd_header_segment_from(&entry.request)
@@ -1090,10 +1094,6 @@ where
 						}
 						continue;
 					}
-					debug!(
-						"PIHD header segment {:?} from {} did not connect cleanly: {:?}",
-						entry.id, entry.peer_info.addr, e
-					);
 					if e.is_bad_data() {
 						return Ok(Some(entry.peer_info));
 					}
