@@ -1085,6 +1085,9 @@ where
 						.sync_state
 						.reject_pihd_header_segment_from(&entry.request)
 					{
+						if !e.is_bad_data() {
+							return Err(e);
+						}
 						continue;
 					}
 					debug!(
