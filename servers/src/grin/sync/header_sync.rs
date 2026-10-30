@@ -180,6 +180,11 @@ impl HeaderSync {
 		let peers = self.peers.clone();
 		if header_head.height > self.prev_header_sync.1 {
 			self.pihd_failure_count = 0;
+			self.pihd_stalling_ts = Some(now);
+		}
+		if self.pihd_active() {
+			self.pihd_stalling_ts.get_or_insert(now);
+		} else {
 			self.pihd_stalling_ts = None;
 		}
 
@@ -226,14 +231,14 @@ impl HeaderSync {
 				self.pihd_stalling_ts = Some(now);
 			}
 		}
-		if self.pihd_failure_count > 0 {
+		if self.pihd_active() {
 			let pihd_stalled = self
 				.pihd_stalling_ts
 				.map(|stalling_ts| {
 					now > stalling_ts + Duration::seconds(pihd_params::STALL_FALLBACK_SECS)
 				})
 				.unwrap_or(false);
-			if self.pihd_failure_count >= pihd_params::MAX_TIMED_OUT_SEGMENTS && pihd_stalled {
+			if pihd_stalled {
 				info!(
 					"sync: disabling PIHD for {} seconds after {} failed header segment request(s) and {} seconds without header progress",
 					pihd_params::DISABLE_SECS,
@@ -487,18 +492,19 @@ impl HeaderSync {
 		} else {
 			preferred_peers
 		};
-		let peers = if available_peers.is_empty() {
+		let mut peers = if available_peers.is_empty() {
 			peers
 		} else {
 			available_peers
 		};
+		self.pihd_stalling_ts.get_or_insert(now);
 		if self.sync_state.pending_pihd_segments_count() >= pihd_params::MAX_IN_FLIGHT_SEGMENTS {
 			return;
 		}
-		let mut sent = 0;
+		let mut attempts = 0;
 		let mut segment_idx = p2p::types::next_pihd_header_segment_idx(sync_head.height);
 		while self.sync_state.pending_pihd_segments_count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
-			&& sent < pihd_params::MAX_REQUESTS_PER_TICK
+			&& attempts < pihd_params::MAX_REQUESTS_PER_TICK
 		{
 			let identifier = SegmentIdentifier {
 				height: PIHD_HEADER_SEGMENT_HEIGHT,
@@ -559,14 +565,20 @@ impl HeaderSync {
 				"Ask header segment {:?} from {}",
 				identifier, peer.info.addr
 			);
-			if peer.send_header_segment_request(identifier).is_ok() {
-				let target_height = peer.info.height();
-				self.sync_state.add_pihd_header_segment(
-					identifier,
-					peer.info.addr.0,
-					target_height,
-				);
-				sent += 1;
+			let request = match self.sync_state.request_pihd_header_segment(
+				identifier,
+				peer.info.addr.0,
+				peer.info.height(),
+			) {
+				Some(request) => request,
+				None => return,
+			};
+			attempts += 1;
+			if let Err(e) = peer.send_header_segment_request(identifier) {
+				self.sync_state.reject_pihd_header_segment_from(&request);
+				debug!("PIHD header request to {} failed: {:?}", peer.info.addr, e);
+				peers.retain(|p| p.info.addr != peer.info.addr);
+				continue;
 			}
 			segment_idx += 1;
 		}

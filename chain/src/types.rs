@@ -274,6 +274,8 @@ const REJECTED_PIBD_PEER_THRESHOLD: u32 = 3;
 /// Container for pending PIHD header segment requests.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct PIHDHeaderSegmentContainer {
+	/// Unique request attempt ID
+	pub request_id: u64,
 	/// Header segment identifier
 	pub identifier: SegmentIdentifier,
 	/// Time at which this request was made
@@ -289,7 +291,9 @@ pub struct PIHDHeaderSegmentContainer {
 impl PIHDHeaderSegmentContainer {
 	/// Return container with timestamp
 	pub fn new(identifier: SegmentIdentifier, peer_addr: SocketAddr, target_height: u64) -> Self {
+		static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(0);
 		Self {
+			request_id: NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed),
 			identifier,
 			request_time: Utc::now(),
 			responded: false,
@@ -370,6 +374,21 @@ impl SyncState {
 			return false;
 		}
 
+		if matches!(
+			*status,
+			SyncStatus::HeaderSync {
+				sync_mode: HeaderSyncMode::Pihd,
+				..
+			}
+		) && !matches!(
+			new_status,
+			SyncStatus::HeaderSync {
+				sync_mode: HeaderSyncMode::Pihd,
+				..
+			}
+		) {
+			self.clear_pihd_header_segments();
+		}
 		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
 		*status = new_status;
 		true
@@ -398,7 +417,7 @@ impl SyncState {
 
 	/// Update txhashset downloading progress
 	pub fn update_txhashset_download(&self, stats: TxHashsetDownloadStats) {
-		*self.current.write() = SyncStatus::TxHashsetDownload(stats);
+		self.update(SyncStatus::TxHashsetDownload(stats));
 	}
 
 	/// Update PIBD progress
@@ -412,14 +431,14 @@ impl SyncState {
 	) {
 		let leaves_required = pmmr::n_leaves(archive_header.output_mmr_size) * 2
 			+ pmmr::n_leaves(archive_header.kernel_mmr_size);
-		*self.current.write() = SyncStatus::TxHashsetPibd {
+		self.update(SyncStatus::TxHashsetPibd {
 			aborted,
 			errored,
 			completed_leaves,
 			leaves_required,
 			completed_to_height,
 			required_height: archive_header.height,
-		};
+		});
 	}
 
 	/// Update lightweight PIBD leaf progress for TUI/API display.
@@ -439,6 +458,7 @@ impl SyncState {
 				*required_height = archive_header.height;
 			}
 			_ => {
+				self.clear_pihd_header_segments();
 				*status = SyncStatus::TxHashsetPibd {
 					aborted: false,
 					errored: false,
@@ -704,56 +724,111 @@ impl SyncState {
 		self.requested_pihd_header_segments.read().len()
 	}
 
+	/// Register within the current PIHD epoch
+	pub fn request_pihd_header_segment(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+		target_height: u64,
+	) -> Option<PIHDHeaderSegmentContainer> {
+		let status = self.current.read();
+		if matches!(
+			*status,
+			SyncStatus::HeaderSync {
+				sync_mode: HeaderSyncMode::Pihd,
+				..
+			}
+		) {
+			Some(self.add_pihd_header_segment(id, peer_addr, target_height))
+		} else {
+			None
+		}
+	}
+
 	/// Track a pending PIHD header segment request.
 	pub fn add_pihd_header_segment(
 		&self,
 		id: SegmentIdentifier,
 		peer_addr: SocketAddr,
 		target_height: u64,
-	) {
+	) -> PIHDHeaderSegmentContainer {
+		let request = PIHDHeaderSegmentContainer::new(id, peer_addr, target_height);
 		let mut requested_segments = self.requested_pihd_header_segments.write();
 		if let Some(existing) = requested_segments
 			.iter_mut()
 			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
 		{
-			existing.request_time = Utc::now();
-			existing.responded = false;
-			existing.target_height = target_height;
+			*existing = request.clone();
 		} else {
-			requested_segments.push(PIHDHeaderSegmentContainer::new(
-				id,
-				peer_addr,
-				target_height,
-			));
+			requested_segments.push(request.clone());
 		}
+		request
 	}
 
 	/// Mark a pending PIHD header segment request as having received a response.
-	pub fn mark_pihd_header_segment_responded(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+	pub fn mark_pihd_header_segment_responded(&self, request: &PIHDHeaderSegmentContainer) -> bool {
 		if let Some(existing) = self
 			.requested_pihd_header_segments
 			.write()
 			.iter_mut()
-			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
+			.find(|i| i.request_id == request.request_id && !i.responded)
 		{
 			existing.responded = true;
+			true
+		} else {
+			false
 		}
 	}
 
 	/// Remove a pending PIHD header segment request.
-	pub fn remove_pihd_header_segment(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
+	pub fn remove_pihd_header_segment(&self, request: &PIHDHeaderSegmentContainer) {
 		self.requested_pihd_header_segments
 			.write()
-			.retain(|i| i.identifier != id || i.peer_addr != peer_addr);
+			.retain(|i| i.request_id != request.request_id);
 	}
 
-	/// Mark a PIHD header segment request as failed for this peer.
-	pub fn reject_pihd_header_segment_from(&self, id: SegmentIdentifier, peer_addr: SocketAddr) {
-		self.remove_pihd_header_segment(id, peer_addr);
+	/// Reject only if attempt and response state match
+	pub fn reject_pihd_header_segment_from(&self, request: &PIHDHeaderSegmentContainer) -> bool {
+		let mut requested = self.requested_pihd_header_segments.write();
+		let pos = match requested
+			.iter()
+			.position(|r| r.request_id == request.request_id && r.responded == request.responded)
+		{
+			Some(pos) => pos,
+			None => return false,
+		};
+		requested.remove(pos);
 		let mut rejected = self.rejected_pihd_peers.write();
-		rejected.push(peer_addr);
+		rejected.push(request.peer_addr);
 		if rejected.len() > MAX_REJECTED_PIHD_PEERS {
 			rejected.remove(0);
+		}
+		true
+	}
+
+	/// Apply progress only for the current attempt
+	pub fn complete_pihd_header_segment(
+		&self,
+		request: &PIHDHeaderSegmentContainer,
+		new_head: Option<Tip>,
+	) {
+		let mut status = self.current.write();
+		if let SyncStatus::HeaderSync {
+			sync_head,
+			sync_mode: HeaderSyncMode::Pihd,
+			..
+		} = &mut *status
+		{
+			let mut requested = self.requested_pihd_header_segments.write();
+			if let Some(pos) = requested
+				.iter()
+				.position(|r| r.request_id == request.request_id)
+			{
+				requested.remove(pos);
+				if let Some(head) = new_head {
+					*sync_head = head;
+				}
+			}
 		}
 	}
 
@@ -786,11 +861,21 @@ impl SyncState {
 		id: SegmentIdentifier,
 		peer_addr: SocketAddr,
 	) -> Option<u64> {
+		self.pihd_header_segment_request(id, peer_addr)
+			.map(|r| r.target_height)
+	}
+
+	/// Snapshot a pending request
+	pub fn pihd_header_segment_request(
+		&self,
+		id: SegmentIdentifier,
+		peer_addr: SocketAddr,
+	) -> Option<PIHDHeaderSegmentContainer> {
 		self.requested_pihd_header_segments
 			.read()
 			.iter()
 			.find(|i| i.identifier == id && i.peer_addr == peer_addr)
-			.map(|i| i.target_height)
+			.cloned()
 	}
 
 	/// Remove completed or stale PIHD header segment requests.
@@ -805,8 +890,10 @@ impl SyncState {
 
 	/// Clear PIHD header requests and invalidate cached received segments
 	pub fn clear_pihd_header_segments(&self) {
-		self.requested_pihd_header_segments.write().clear();
-		// Relaxed is enough here; this only nudges receive caches to drop stale entries.
+		let mut requested = self.requested_pihd_header_segments.write();
+		requested.clear();
+		self.rejected_pihd_peers.write().clear();
+		// Invalidate before releasing the requests lock
 		self.pihd_header_cache_generation
 			.fetch_add(1, Ordering::Relaxed);
 	}
@@ -1236,8 +1323,8 @@ mod tests {
 		let id = SegmentIdentifier { height: 9, idx: 1 };
 		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
 
-		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
-		sync_state.mark_pihd_header_segment_responded(id, peer_addr);
+		let request = sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.mark_pihd_header_segment_responded(&request);
 		assert!(sync_state
 			.requested_pihd_header_segments
 			.read()
@@ -1298,8 +1385,8 @@ mod tests {
 		let id = SegmentIdentifier { height: 9, idx: 1 };
 		let peer_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 10_000);
 
-		sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
-		sync_state.reject_pihd_header_segment_from(id, peer_addr);
+		let request = sync_state.add_pihd_header_segment(id, peer_addr, 1_024);
+		sync_state.reject_pihd_header_segment_from(&request);
 
 		assert_eq!(
 			sync_state.pihd_header_segment_target_height(id, peer_addr),
