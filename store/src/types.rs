@@ -507,7 +507,7 @@ where
 		let mut current_pos = 0;
 		let mut prune_pos = prune_pos;
 		while let Ok(elmt) = T::read(&mut streaming_reader) {
-			if prune_pos.contains(&current_pos) {
+			if prune_pos.binary_search(&current_pos).is_ok() {
 				// Pruned pos, moving on.
 				prune_pos = &prune_pos[1..];
 			} else {
