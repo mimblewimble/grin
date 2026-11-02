@@ -979,6 +979,8 @@ where
 		headers: &[BlockHeader],
 		peer_info: &PeerInfo,
 	) {
+		let received = Utc::now();
+		let response_ms = (received - request.request_time).num_milliseconds();
 		let mut cache = self.pihd_header_cache.write();
 		let sync_head = match self.sync_state.status() {
 			SyncStatus::HeaderSync {
@@ -991,6 +993,10 @@ where
 		// Check request ownership under the cache lock
 		if !self.sync_state.mark_pihd_header_segment_responded(&request) {
 			return;
+		}
+		// Ignore negative times after clock adjustments
+		if response_ms >= 0 {
+			peer_info.live_info.write().pihd_response = Some((response_ms, received));
 		}
 		request.responded = true;
 		let id = request.identifier;

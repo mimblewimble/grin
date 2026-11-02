@@ -14,7 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use rand::seq::{IteratorRandom, SliceRandom};
+use rand::seq::SliceRandom;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -496,7 +496,6 @@ impl HeaderSync {
 
 	fn pihd_header_sync(&mut self, sync_head: chain::Tip, peers: Vec<Arc<Peer>>) {
 		let now = Utc::now();
-		let mut rng = rand::thread_rng();
 		self.pihd_peer_failures
 			.retain(|failure| retain_pihd_peer_failure(failure, now));
 		let preferred_peers = peers
@@ -542,52 +541,26 @@ impl HeaderSync {
 				segment_idx += 1;
 				continue;
 			}
-			let can_request = |peer: &&Arc<Peer>, max_in_flight| {
-				peer.info.height() >= start_height
-					&& self
-						.sync_state
-						.pending_pihd_segments_count_from(peer.info.addr.0)
-						< max_in_flight
-			};
 			let peer = peers
 				.iter()
-				.filter(|peer| peer.info.is_outbound())
-				.filter(|peer| can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER))
-				.choose(&mut rng)
-				.cloned()
-				.or_else(|| {
-					peers
-						.iter()
-						.filter(|peer| peer.info.is_inbound())
-						.filter(|peer| {
-							can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER)
-						})
-						.choose(&mut rng)
-						.cloned()
+				.filter(|peer| peer.info.height() >= start_height)
+				.min_by_key(|peer| {
+					let response = peer.info.live_info.read().pihd_response;
+					let pending = self
+						.sync_state
+						.pending_pihd_segments_count_from(peer.info.addr.0);
+					pihd_peer_key(response, pending, peer.info.is_outbound(), now)
 				})
-				.or_else(|| {
-					peers
-						.iter()
-						.filter(|peer| peer.info.is_outbound())
-						.filter(|peer| can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS))
-						.choose(&mut rng)
-						.cloned()
-				})
-				.or_else(|| {
-					peers
-						.iter()
-						.filter(|peer| peer.info.is_inbound())
-						.filter(|peer| can_request(peer, pihd_params::MAX_IN_FLIGHT_SEGMENTS))
-						.choose(&mut rng)
-						.cloned()
-				});
+				.cloned();
 			let peer = match peer {
 				Some(peer) => peer,
 				None => return,
 			};
 			debug!(
-				"Ask header segment {:?} from {}",
-				identifier, peer.info.addr
+				"Ask header segment {:?} from {} (response_ms: {:?})",
+				identifier,
+				peer.info.addr,
+				peer.info.live_info.read().pihd_response.map(|(ms, _)| ms)
 			);
 			let request = match self.sync_state.request_pihd_header_segment(
 				identifier,
@@ -654,6 +627,24 @@ impl HeaderSync {
 	}
 }
 
+fn pihd_peer_key(
+	response: Option<(i64, DateTime<Utc>)>,
+	pending: usize,
+	outbound: bool,
+	now: DateTime<Utc>,
+) -> (i64, bool, bool) {
+	let response = response.filter(|(_, received)| {
+		*received + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS) > now
+	});
+	(
+		response
+			.map(|(ms, _)| ms.max(1).saturating_mul(pending as i64 + 1))
+			.unwrap_or(if pending == 0 { 0 } else { i64::MAX }),
+		pending >= pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER,
+		!outbound,
+	)
+}
+
 fn retain_pihd_peer_failure(failure: &PIHDPeerFailure, now: DateTime<Utc>) -> bool {
 	failure.last_failure + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS) > now
 		|| failure.cooldown_until > now
@@ -704,6 +695,21 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 #[cfg(test)]
 mod test {
 	use super::*;
+
+	#[test]
+	fn test_pihd_peer_order() {
+		let now = Utc::now();
+		let key = |ms, pending, outbound| pihd_peer_key(Some((ms, now)), pending, outbound, now);
+		let fast = key(100, 2, false);
+		assert!(fast < key(15_000, 0, true));
+		assert!(key(120, 0, true) < fast);
+		assert!(key(100, 2, true) < fast);
+		assert!(pihd_peer_key(None, 0, false, now) < fast);
+		assert!(pihd_peer_key(None, 0, false, now) < key(0, 0, true));
+		assert!(fast < pihd_peer_key(None, 1, true, now));
+		let later = now + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS);
+		assert!(pihd_peer_key(Some((15_000, now)), 0, true, later) < fast);
+	}
 
 	#[test]
 	fn test_pihd_retry() {
