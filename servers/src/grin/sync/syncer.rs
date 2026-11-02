@@ -244,15 +244,16 @@ impl SyncRunner {
 		// Consider all peers, both inbound and outbound.
 		// We will prioritize syncing against outbound peers exclusively when possible.
 		// But we do support syncing against an inbound peer if greater work than any outbound peers.
-		let max_diff = self
+		let peers = self
 			.peers
-			.iter()
+			.try_iter()
+			.map_err(|e| chain::Error::SyncError(format!("peer snapshot: {:?}", e)))?;
+		let max_diff = peers
+			.clone()
 			.connected()
 			.max_difficulty()
 			.unwrap_or(Difficulty::zero());
-		let peer = self
-			.peers
-			.iter()
+		let peer = peers
 			.with_difficulty(|x| x >= max_diff)
 			.connected()
 			.choose_random();

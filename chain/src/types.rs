@@ -407,12 +407,47 @@ impl SyncState {
 		}
 	}
 
-	/// Update sync_head if state is currently HeaderSync.
-	pub fn update_header_sync(&self, new_sync_head: Tip) {
-		let status: &mut SyncStatus = &mut self.current.write();
-		if let SyncStatus::HeaderSync { sync_head, .. } = status {
-			*sync_head = new_sync_head;
+	/// Update the legacy head only if it still matches
+	pub fn update_header_sync(&self, expected: Tip, new_sync_head: Tip) {
+		let mut status = self.current.write();
+		if let SyncStatus::HeaderSync {
+			sync_head,
+			sync_mode: HeaderSyncMode::Legacy,
+			..
+		} = &mut *status
+		{
+			if *sync_head == expected {
+				*sync_head = new_sync_head;
+			}
 		}
+	}
+
+	/// Update the mode and target, keeping the latest head
+	pub fn set_header_sync(
+		&self,
+		mut sync_head: Tip,
+		sync_mode: HeaderSyncMode,
+		highest_height: u64,
+		highest_diff: Difficulty,
+	) -> Tip {
+		let status = self.current.write();
+		if let SyncStatus::HeaderSync {
+			sync_head: current_head,
+			..
+		} = *status
+		{
+			sync_head = current_head;
+		}
+		self.update_with_guard(
+			SyncStatus::HeaderSync {
+				sync_head,
+				sync_mode,
+				highest_height,
+				highest_diff,
+			},
+			status,
+		);
+		sync_head
 	}
 
 	/// Update txhashset downloading progress
@@ -1230,6 +1265,69 @@ mod tests {
 	use super::*;
 	use crate::core::core::{SegmentIdentifier, SegmentType};
 	use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+	fn header_status(height: u64, sync_mode: HeaderSyncMode) -> SyncStatus {
+		crate::core::global::set_local_chain_type(crate::core::global::ChainTypes::Mainnet);
+		let mut sync_head = Tip::from_header(&crate::core::genesis::genesis_main().header);
+		sync_head.height = height;
+		SyncStatus::HeaderSync {
+			sync_head,
+			sync_mode,
+			highest_height: 4096,
+			highest_diff: Difficulty::zero(),
+		}
+	}
+
+	#[test]
+	fn header_sync_progress() {
+		let state = SyncState::new();
+		let legacy = header_status(512, HeaderSyncMode::Legacy);
+		let SyncStatus::HeaderSync { sync_head, .. } = legacy else {
+			unreachable!()
+		};
+		let fork = Tip {
+			height: 256,
+			..sync_head
+		};
+		state.update(legacy);
+		state.update_header_sync(sync_head, fork);
+		assert_eq!(state.status(), header_status(256, HeaderSyncMode::Legacy));
+		state.update_header_sync(sync_head, sync_head);
+		assert_eq!(state.status(), header_status(256, HeaderSyncMode::Legacy));
+
+		state.update(header_status(256, HeaderSyncMode::Pihd));
+		state.update_header_sync(fork, sync_head);
+		assert_eq!(state.status(), header_status(256, HeaderSyncMode::Pihd));
+		let head = state.set_header_sync(sync_head, HeaderSyncMode::Pihd, 8192, Difficulty::zero());
+		assert_eq!(head, fork);
+		assert_eq!(
+			state.status(),
+			SyncStatus::HeaderSync {
+				sync_head: head,
+				sync_mode: HeaderSyncMode::Pihd,
+				highest_height: 8192,
+				highest_diff: Difficulty::zero(),
+			}
+		);
+	}
+
+	#[test]
+	fn pihd_restart() {
+		let state = SyncState::new();
+		let id = SegmentIdentifier { height: 9, idx: 1 };
+		let peer = "127.0.0.1:13414".parse().unwrap();
+		state.update(header_status(512, HeaderSyncMode::Pihd));
+		let old = state.request_pihd_header_segment(id, peer, 4096).unwrap();
+		assert!(state.mark_pihd_header_segment_responded(&old));
+		state.update(SyncStatus::NoSync);
+		assert_eq!(state.pending_pihd_segments_count(), 0);
+		state.update(header_status(512, HeaderSyncMode::Pihd));
+		let fresh = state.request_pihd_header_segment(id, peer, 4096).unwrap();
+		assert!(!state.mark_pihd_header_segment_responded(&old));
+		state.remove_pihd_header_segment(&old);
+		assert!(state.pihd_header_segment_request(id, peer).is_some());
+		assert!(state.mark_pihd_header_segment_responded(&fresh));
+	}
 
 	#[test]
 	fn rejected_pibd_segment_tracking_is_bounded() {

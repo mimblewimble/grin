@@ -339,12 +339,14 @@ where
 			return Ok(false);
 		}
 
-		// Read our sync_head if we are in header_sync.
-		// If not then we can ignore this batch of headers.
 		let sync_head = match self.sync_state.status() {
-			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+			SyncStatus::HeaderSync {
+				sync_head,
+				sync_mode: HeaderSyncMode::Legacy,
+				..
+			} => sync_head,
 			_ => {
-				debug!("headers_received: ignoring as not in header_sync");
+				debug!("headers_received: ignoring as not in legacy header_sync");
 				return Ok(true);
 			}
 		};
@@ -954,9 +956,9 @@ where
 			.chain()
 			.sync_block_headers(headers, sync_head, chain::Options::SYNC)
 		{
-			Ok(sync_head) => {
-				if let Some(sync_head) = sync_head {
-					self.sync_state.update_header_sync(sync_head);
+			Ok(new_head) => {
+				if let Some(new_head) = new_head {
+					self.sync_state.update_header_sync(sync_head, new_head);
 				}
 				Ok(true)
 			}
