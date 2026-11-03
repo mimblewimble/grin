@@ -46,18 +46,18 @@ impl TUIStatusView {
 				highest_height,
 				..
 			} => {
-				let percent = if highest_height == 0 {
-					0
+				let progress = if highest_height == 0 {
+					"target height unknown".to_owned()
 				} else {
-					sync_head.height * 100 / highest_height
+					format!("{}%", sync_head.height * 100 / highest_height)
 				};
 				let sync_mode = match sync_mode {
 					HeaderSyncMode::Legacy => "Legacy",
 					HeaderSyncMode::Pihd => "PIHD",
 				};
 				Cow::Owned(format!(
-					"Sync step 1/7: Downloading headers ({}) - {}%",
-					sync_mode, percent
+					"Sync step 1/7: Downloading headers ({}) - {}",
+					sync_mode, progress
 				))
 			}
 			SyncStatus::TxHashsetPibd {
@@ -366,4 +366,21 @@ fn test_status_txhashset_rproofs() {
 	};
 	let basic_status = TUIStatusView::update_sync_status(status);
 	assert!(basic_status.contains("64%"), "{}", basic_status);
+}
+
+#[test]
+fn test_status_header_target() {
+	crate::core::global::set_local_chain_type(crate::core::global::ChainTypes::Mainnet);
+	let mut head = crate::chain::Tip::from_header(&crate::core::genesis::genesis_main().header);
+	head.height = 512;
+	for sync_mode in [HeaderSyncMode::Legacy, HeaderSyncMode::Pihd] {
+		let status = |highest_height| SyncStatus::HeaderSync {
+			sync_head: head,
+			sync_mode,
+			highest_height,
+			highest_diff: head.total_difficulty,
+		};
+		assert!(TUIStatusView::update_sync_status(status(0)).ends_with("target height unknown"));
+		assert!(TUIStatusView::update_sync_status(status(1024)).ends_with("50%"));
+	}
 }

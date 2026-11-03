@@ -146,16 +146,24 @@ impl Peers {
 	/// This allows us to hide try_read_for() behind a cleaner interface.
 	/// PeersIter lets us chain various adaptors for convenience.
 	pub fn iter(&self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
-		let peers = match self.peers.try_read_for(LOCK_TIMEOUT) {
-			Some(peers) => peers.values().cloned().collect(),
-			None => {
-				error!("connected_peers: failed to get peers lock");
-				vec![]
+		self.try_iter().unwrap_or_else(|_| {
+			error!("connected_peers: failed to get peers lock");
+			PeersIter {
+				iter: vec![].into_iter(),
 			}
-		};
-		PeersIter {
+		})
+	}
+
+	/// Return an error if the peer lock is busy
+	pub fn try_iter(&self) -> Result<PeersIter<std::vec::IntoIter<Arc<Peer>>>, Error> {
+		let peers = self
+			.peers
+			.try_read_for(LOCK_TIMEOUT)
+			.ok_or(Error::Internal)?;
+		let peers: Vec<_> = peers.values().cloned().collect();
+		Ok(PeersIter {
 			iter: peers.into_iter(),
-		}
+		})
 	}
 
 	/// Get a peer we're connected to by address.
@@ -936,6 +944,7 @@ impl NetAdapter for Peers {
 	}
 }
 
+#[derive(Clone)]
 pub struct PeersIter<I> {
 	iter: I,
 }
@@ -1033,5 +1042,24 @@ impl<I: Iterator<Item = Arc<Peer>>> PeersIter<I> {
 	/// Count the current (filtered) peers.
 	pub fn count(self) -> usize {
 		self.iter.count()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn peer_lock_timeout() {
+		crate::core::global::set_local_chain_type(crate::core::global::ChainTypes::Mainnet);
+		let dir = tempfile::tempdir().unwrap();
+		let peers = Peers::new(
+			PeerStore::new(dir.path().to_str().unwrap()).unwrap(),
+			Arc::new(crate::DummyAdapter {}),
+			P2PConfig::default(),
+		);
+		assert_eq!(peers.try_iter().unwrap().count(), 0);
+		let _guard = peers.peers.write();
+		assert!(peers.try_iter().is_err());
 	}
 }
