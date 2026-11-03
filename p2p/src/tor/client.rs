@@ -55,11 +55,10 @@ where
 				.map_err(|e| Error::Generic(format!("Unable to create Tor POST request {}", e)))?;
 			if let Some(headers) = headers {
 				for (name, value) in headers {
-					let header_name = HeaderName::from_str(name).map_err(|e| {
-						Error::Generic(format!("Can not parse header name: {}", e.to_string()))
-					})?;
+					let header_name = HeaderName::from_str(name)
+						.map_err(|e| Error::Generic(format!("Can not parse header name: {}", e)))?;
 					let header_value = HeaderValue::from_str(value).map_err(|e| {
-						Error::Generic(format!("Can not parse header value: {}", e.to_string()))
+						Error::Generic(format!("Can not parse header value: {}", e))
 					})?;
 					req.headers_mut().insert(header_name, header_value);
 				}
@@ -81,7 +80,7 @@ where
 					Ok(body)
 				})
 		} else {
-			tor_post(self.tor_config(), body, headers, url).map_err(|e| Error::Post(e))
+			tor_post(self.tor_config(), body, headers, url).map_err(Error::Post)
 		}
 	}
 }
