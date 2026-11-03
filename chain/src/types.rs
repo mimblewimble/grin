@@ -389,7 +389,26 @@ impl SyncState {
 		) {
 			self.clear_pihd_header_segments();
 		}
-		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
+		if !matches!(
+			(*status, new_status),
+			(
+				SyncStatus::TxHashsetDownload(_),
+				SyncStatus::TxHashsetDownload(_)
+			) | (
+				SyncStatus::TxHashsetPibd {
+					aborted: false,
+					errored: false,
+					..
+				},
+				SyncStatus::TxHashsetPibd {
+					aborted: false,
+					errored: false,
+					..
+				}
+			)
+		) {
+			debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status);
+		}
 		*status = new_status;
 		true
 	}
@@ -1317,14 +1336,20 @@ mod tests {
 		let id = SegmentIdentifier { height: 9, idx: 1 };
 		let peer = "127.0.0.1:13414".parse().unwrap();
 		state.update(header_status(512, HeaderSyncMode::Pihd));
+		let mut head = Tip::from_header(&crate::core::genesis::genesis_main().header);
+		head.height = 1024;
 		let old = state.request_pihd_header_segment(id, peer, 4096).unwrap();
 		assert!(state.mark_pihd_header_segment_responded(&old));
 		state.update(SyncStatus::NoSync);
 		assert_eq!(state.pending_pihd_segments_count(), 0);
+		state.complete_pihd_header_segment(&old, Some(head));
+		assert_eq!(state.status(), SyncStatus::NoSync);
 		state.update(header_status(512, HeaderSyncMode::Pihd));
 		let fresh = state.request_pihd_header_segment(id, peer, 4096).unwrap();
 		assert!(!state.mark_pihd_header_segment_responded(&old));
 		state.remove_pihd_header_segment(&old);
+		state.complete_pihd_header_segment(&old, Some(head));
+		assert_eq!(state.status(), header_status(512, HeaderSyncMode::Pihd));
 		assert!(state.pihd_header_segment_request(id, peer).is_some());
 		assert!(state.mark_pihd_header_segment_responded(&fresh));
 	}

@@ -50,7 +50,6 @@ pub struct HeaderSync {
 	syncing_peer: Option<Arc<Peer>>,
 	stalling_ts: Option<DateTime<Utc>>,
 	pending_legacy: Option<LegacyHeaderRequest>,
-	pihd_failure_count: usize,
 	pihd_peer_failures: Vec<PIHDPeerFailure>,
 	pihd_stalling_ts: Option<DateTime<Utc>>,
 	pihd_disabled_until: Option<DateTime<Utc>>,
@@ -70,7 +69,6 @@ impl HeaderSync {
 			syncing_peer: None,
 			stalling_ts: None,
 			pending_legacy: None,
-			pihd_failure_count: 0,
 			pihd_peer_failures: vec![],
 			pihd_stalling_ts: None,
 			pihd_disabled_until: None,
@@ -192,7 +190,6 @@ impl HeaderSync {
 	) -> bool {
 		let mut retry = false;
 		if header_head.height > self.prev_header_sync.1 {
-			self.pihd_failure_count = 0;
 			self.pihd_stalling_ts = Some(now);
 		}
 		if self.pihd_active() {
@@ -234,7 +231,6 @@ impl HeaderSync {
 		}
 		if !failed_peers.is_empty() {
 			retry = true;
-			self.pihd_failure_count += failed_peers.len();
 			for peer_addr in failed_peers {
 				let failure_count = self.note_pihd_peer_failure(peer_addr, now);
 				if failure_count >= pihd_params::MAX_PEER_FAILURES_BEFORE_BLOCK {
@@ -254,20 +250,11 @@ impl HeaderSync {
 				.unwrap_or(false);
 			if pihd_stalled {
 				info!(
-					"sync: disabling PIHD for {} seconds after {} failed header segment request(s) and {} seconds without header progress",
-					pihd_params::DISABLE_SECS,
-					self.pihd_failure_count,
-					pihd_params::STALL_FALLBACK_SECS
+					"sync: PIHD stalled at height {}, using legacy for {} seconds",
+					header_head.height,
+					pihd_params::DISABLE_SECS
 				);
-				if self.pihd_active() {
-					info!(
-							"sync: PIHD header sync aborted at height {}; failed {} header segment request(s), falling back to legacy header sync",
-							header_head.height,
-							self.pihd_failure_count
-						);
-				}
 				self.sync_state.clear_pihd_header_segments();
-				self.pihd_failure_count = 0;
 				self.pihd_stalling_ts = None;
 				self.pihd_disabled_until = Some(now + Duration::seconds(pihd_params::DISABLE_SECS));
 				retry = true;
@@ -632,16 +619,16 @@ fn pihd_peer_key(
 	pending: usize,
 	outbound: bool,
 	now: DateTime<Utc>,
-) -> (i64, bool, bool) {
+) -> (bool, bool, i64) {
 	let response = response.filter(|(_, received)| {
 		*received + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS) > now
 	});
 	(
+		pending >= pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER,
+		!outbound,
 		response
 			.map(|(ms, _)| ms.max(1).saturating_mul(pending as i64 + 1))
 			.unwrap_or(if pending == 0 { 0 } else { i64::MAX }),
-		pending >= pihd_params::MAX_IN_FLIGHT_SEGMENTS_PER_PEER,
-		!outbound,
 	)
 }
 
@@ -700,12 +687,14 @@ mod test {
 	fn test_pihd_peer_order() {
 		let now = Utc::now();
 		let key = |ms, pending, outbound| pihd_peer_key(Some((ms, now)), pending, outbound, now);
-		let fast = key(100, 2, false);
+		assert!(key(15_000, 0, true) < key(100, 0, false));
+		assert!(key(15_000, 0, false) < key(100, 2, true));
+		assert!(key(15_000, 2, true) < key(100, 2, false));
+		assert!(key(15_000, 0, true) < pihd_peer_key(None, 0, false, now));
+		let fast = key(100, 1, true);
 		assert!(fast < key(15_000, 0, true));
 		assert!(key(120, 0, true) < fast);
-		assert!(key(100, 2, true) < fast);
-		assert!(pihd_peer_key(None, 0, false, now) < fast);
-		assert!(pihd_peer_key(None, 0, false, now) < key(0, 0, true));
+		assert!(pihd_peer_key(None, 0, true, now) < key(0, 0, true));
 		assert!(fast < pihd_peer_key(None, 1, true, now));
 		let later = now + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS);
 		assert!(pihd_peer_key(Some((15_000, now)), 0, true, later) < fast);
@@ -766,6 +755,17 @@ mod test {
 			deadline + Duration::seconds(1)
 		));
 		assert_eq!(state.pending_pihd_segments_count(), 1);
+		sync.pihd_peer_failures.clear();
+		let stalled =
+			sync.pihd_stalling_ts.unwrap() + Duration::seconds(pihd_params::STALL_FALLBACK_SECS);
+		assert!(!sync.cleanup_pending_requests(head, &connected, stalled));
+		assert!(sync.cleanup_pending_requests(head, &connected, stalled + Duration::seconds(1)));
+		assert_eq!(state.pending_pihd_segments_count(), 0);
+		assert!(sync.pihd_peer_failures.is_empty());
+		assert_eq!(
+			sync.pihd_disabled_until,
+			Some(stalled + Duration::seconds(1 + pihd_params::DISABLE_SECS))
+		);
 		drop(sync);
 		std::fs::remove_dir_all(dir).unwrap();
 	}

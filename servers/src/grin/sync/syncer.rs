@@ -214,7 +214,7 @@ impl SyncRunner {
 				| SyncStatus::TxHashsetDone => check_state_sync = true,
 				_ => {
 					// skip body sync if header chain is not synced.
-					if sync_head.height < highest_height {
+					if highest_height == 0 || sync_head.height < highest_height {
 						continue;
 					}
 

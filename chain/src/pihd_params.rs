@@ -22,7 +22,7 @@ pub const MAX_IN_FLIGHT_SEGMENTS: usize = 8;
 /// Maximum number of header segment requests to send per sync tick.
 pub const MAX_REQUESTS_PER_TICK: usize = 8;
 
-/// Preferred number of in-flight header segment requests per peer when scores are tied.
+/// Preferred number of in-flight header segment requests per peer.
 pub const MAX_IN_FLIGHT_SEGMENTS_PER_PEER: usize = 2;
 
 /// Number of seconds before treating a PIHD header segment request as timed out.
