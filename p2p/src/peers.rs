@@ -146,17 +146,20 @@ impl Peers {
 	/// This allows us to hide try_read_for() behind a cleaner interface.
 	/// PeersIter lets us chain various adaptors for convenience.
 	pub fn iter(&self) -> PeersIter<impl Iterator<Item = Arc<Peer>>> {
-		self.try_iter().unwrap_or_else(|_| PeersIter {
-			iter: vec![].into_iter(),
+		self.try_iter().unwrap_or_else(|_| {
+			error!("connected_peers: failed to get peers lock");
+			PeersIter {
+				iter: vec![].into_iter(),
+			}
 		})
 	}
 
 	/// Return an error if the peer lock is busy
 	pub fn try_iter(&self) -> Result<PeersIter<std::vec::IntoIter<Arc<Peer>>>, Error> {
-		let peers = self.peers.try_read_for(LOCK_TIMEOUT).ok_or_else(|| {
-			error!("connected_peers: failed to get peers lock");
-			Error::Internal
-		})?;
+		let peers = self
+			.peers
+			.try_read_for(LOCK_TIMEOUT)
+			.ok_or(Error::Internal)?;
 		let peers: Vec<_> = peers.values().cloned().collect();
 		Ok(PeersIter {
 			iter: peers.into_iter(),

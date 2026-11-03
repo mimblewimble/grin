@@ -512,7 +512,8 @@ impl HeaderSync {
 			return;
 		}
 		let mut attempts = 0;
-		let mut segment_idx = p2p::types::next_pihd_header_segment_idx(sync_head.height);
+		let next_idx = p2p::types::next_pihd_header_segment_idx(sync_head.height);
+		let mut segment_idx = next_idx;
 		while self.sync_state.pending_pihd_segments_count() < pihd_params::MAX_IN_FLIGHT_SEGMENTS
 			&& attempts < pihd_params::MAX_REQUESTS_PER_TICK
 		{
@@ -528,6 +529,7 @@ impl HeaderSync {
 				segment_idx += 1;
 				continue;
 			}
+			let lookahead = segment_idx > next_idx;
 			let peer = peers
 				.iter()
 				.filter(|peer| peer.info.height() >= start_height)
@@ -536,7 +538,7 @@ impl HeaderSync {
 					let pending = self
 						.sync_state
 						.pending_pihd_segments_count_from(peer.info.addr.0);
-					pihd_peer_key(response, pending, peer.info.is_outbound(), now)
+					pihd_peer_key(response, pending, peer.info.is_outbound(), lookahead, now)
 				})
 				.cloned();
 			let peer = match peer {
@@ -618,6 +620,7 @@ fn pihd_peer_key(
 	response: Option<(i64, DateTime<Utc>)>,
 	pending: usize,
 	outbound: bool,
+	lookahead: bool,
 	now: DateTime<Utc>,
 ) -> (bool, bool, i64) {
 	let response = response.filter(|(_, received)| {
@@ -628,7 +631,11 @@ fn pihd_peer_key(
 		!outbound,
 		response
 			.map(|(ms, _)| ms.max(1).saturating_mul(pending as i64 + 1))
-			.unwrap_or(if pending == 0 { 0 } else { i64::MAX }),
+			.unwrap_or(if lookahead && pending == 0 {
+				0
+			} else {
+				i64::MAX
+			}),
 	)
 }
 
@@ -686,18 +693,21 @@ mod test {
 	#[test]
 	fn test_pihd_peer_order() {
 		let now = Utc::now();
-		let key = |ms, pending, outbound| pihd_peer_key(Some((ms, now)), pending, outbound, now);
+		let key =
+			|ms, pending, outbound| pihd_peer_key(Some((ms, now)), pending, outbound, true, now);
 		assert!(key(15_000, 0, true) < key(100, 0, false));
 		assert!(key(15_000, 0, false) < key(100, 2, true));
 		assert!(key(15_000, 2, true) < key(100, 2, false));
-		assert!(key(15_000, 0, true) < pihd_peer_key(None, 0, false, now));
+		assert!(key(15_000, 0, true) < pihd_peer_key(None, 0, false, true, now));
 		let fast = key(100, 1, true);
 		assert!(fast < key(15_000, 0, true));
 		assert!(key(120, 0, true) < fast);
-		assert!(pihd_peer_key(None, 0, true, now) < key(0, 0, true));
-		assert!(fast < pihd_peer_key(None, 1, true, now));
+		assert!(pihd_peer_key(None, 0, true, true, now) < key(0, 0, true));
+		assert!(fast < pihd_peer_key(None, 0, true, false, now));
+		assert!(fast < pihd_peer_key(None, 1, true, true, now));
 		let later = now + Duration::seconds(pihd_params::PEER_FAILURE_WINDOW_SECS);
-		assert!(pihd_peer_key(Some((15_000, now)), 0, true, later) < fast);
+		assert!(pihd_peer_key(Some((15_000, now)), 0, true, true, later) < fast);
+		assert!(fast < pihd_peer_key(Some((15_000, now)), 0, true, false, later));
 	}
 
 	#[test]
