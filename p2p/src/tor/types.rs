@@ -100,13 +100,22 @@ where
 	if config.use_integrated() {
 		start_tor_client(config)?;
 	} else {
+		let data_dir = config
+			.data_dir()
+			.join("sender")
+			.to_str()
+			.unwrap()
+			.to_string();
 		let running = {
 			let running_process_dir = RUNNING_PROCESS_DIR.lock().unwrap();
-			running_process_dir.as_ref() == Some(&config.data_dir().to_str().unwrap().to_string())
+			running_process_dir.as_ref() == Some(&data_dir)
 		};
 		if running {
 			return Ok(());
 		}
+
+		RUNNING_PROCESS_DIR.lock().unwrap().replace(data_dir);
+
 		let p = TorProcess::start_sender(config)?;
 		thread::spawn(move || {
 			let p = p;
