@@ -16,7 +16,7 @@ use crate::tor::{Error, ServiceStatus, SERVICE_STATUS};
 
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState};
+use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState, State};
 use tor_hsservice::RunningOnionService;
 use tor_rtcompat::{Runtime, SleepProviderExt, SpawnExt};
 
@@ -117,6 +117,10 @@ where
 					Ok(Some(next)) => {
 						if next.state().is_fully_reachable() {
 							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Running);
+						} else if next.state() == State::Recovering || next.state() == State::Bootstrapping {
+							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Starting);
+						} else if next.state() == State::Broken || next.state() == State::DegradedUnreachable {
+							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Errored(Error::Generic(format!("Service {} is broken or unreachable", onion_address))));
 						}
 						if format!("{next:?}") != format!("{status:?}") {
 							debug!("Onion service status at http://{onion_address}.onion: {next:?}");
