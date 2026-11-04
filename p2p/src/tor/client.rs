@@ -16,6 +16,7 @@ use crate::tor::arti::tor_post;
 use crate::tor::config::{TorConfig, REQUEST_TIMEOUT_SECS};
 use crate::tor::{Error, PostError};
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use http_body_util::BodyExt;
 use http_body_util::Full;
@@ -32,13 +33,14 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 /// Tor powered HTTP client to send requests.
-pub trait TorHttpClient<T>
+#[async_trait]
+pub trait TorHttpClient<T>: Send + Sync
 where
-	T: TorConfig,
+	T: TorConfig + Sync,
 {
 	fn tor_config(&self) -> &T;
 
-	fn post(
+	async fn post(
 		&self,
 		url: &str,
 		headers: Option<HashMap<&str, &str>>,
@@ -60,22 +62,15 @@ where
 					req.headers_mut().insert(header_name, header_value);
 				}
 			}
-			tokio::runtime::Builder::new_current_thread()
-				.enable_all()
-				.build()
-				.unwrap()
-				.block_on(async {
-					let res = send_socks_proxy(self.tor_config(), req).await?;
-					let resp_body = res
-						.into_body()
-						.collect()
-						.await
-						.map_err(|e| Error::Generic(e.to_string()))?;
-					let body_bytes = resp_body.to_bytes().into();
-					let body =
-						String::from_utf8(body_bytes).map_err(|e| Error::Generic(e.to_string()))?;
-					Ok(body)
-				})
+			let res = send_socks_proxy(self.tor_config(), req).await?;
+			let resp_body = res
+				.into_body()
+				.collect()
+				.await
+				.map_err(|e| Error::Generic(e.to_string()))?;
+			let body_bytes = resp_body.to_bytes().into();
+			let body = String::from_utf8(body_bytes).map_err(|e| Error::Generic(e.to_string()))?;
+			Ok(body)
 		} else {
 			tor_post(self.tor_config(), body, headers, url).map_err(Error::Post)
 		}

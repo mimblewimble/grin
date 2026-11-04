@@ -52,6 +52,7 @@ serde_json = { version = "1", optional = true }
 futures = { version = "0.3", optional = true }
 tokio = { version = "1.52.3", features = ["full"], optional = true }
 tracing = { version = "0.1", features = ["log"], optional = true }
+async-trait = { version = "0.1.92", optional = true }
 
 grin_core = { path = "../core", version = "5.5.2" }
 grin_store = { path = "../store", version = "5.5.2" }
@@ -62,4 +63,4 @@ grin_chain = { path = "../chain", version = "5.5.2" }
 built = { version = "0.8.0", features = ["git2"]}
 
 [features]
-tor = ["arti-client", "tor-rtcompat", "fs-mistrust", "fslock-guard", "tor-hsservice", "tor-hsrproxy", "tor-keymgr", "tor-llcrypto", "tor-hscrypto", "sha2", "hyper", "hyper-util", "hyper-socks2", "hyper-tls", "http-body-util", "ed25519-dalek", "regex", "sysinfo", "timer", "thiserror", "data-encoding", "sha3", "lazy_static", "base64", "url", "serde_json", "futures", "tokio", "tracing"]
+tor = ["arti-client", "tor-rtcompat", "fs-mistrust", "fslock-guard", "tor-hsservice", "tor-hsrproxy", "tor-keymgr", "tor-llcrypto", "tor-hscrypto", "sha2", "hyper", "hyper-util", "hyper-socks2", "hyper-tls", "http-body-util", "ed25519-dalek", "regex", "sysinfo", "timer", "thiserror", "data-encoding", "sha3", "lazy_static", "base64", "url", "serde_json", "futures", "tokio", "tracing", "async-trait"]
