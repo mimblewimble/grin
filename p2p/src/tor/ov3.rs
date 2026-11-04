@@ -177,7 +177,7 @@ pub fn complete_tor_address(input: &str) -> Result<String, OnionV3Error> {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use crate::tor::process::types::Error;
+	use crate::tor::Error;
 	use std::convert::TryInto;
 
 	#[test]

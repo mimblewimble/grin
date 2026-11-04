@@ -43,7 +43,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //! Tor process control
-//! Derived from from from https://github.com/Dhole/rust-tor-controller.git
+//! Derived from https://github.com/Dhole/rust-tor-controller.git
 
 extern crate chrono;
 extern crate regex;
@@ -91,9 +91,7 @@ pub enum Error {
 	OnionError(OnionV3Error),
 }
 
-pub struct TorProcess {
-	tor_cmd: String,
-	args: Vec<String>,
+pub(crate) struct TorProcess {
 	torrc_path: Option<String>,
 	completion_percent: u8,
 	timeout: u64,
@@ -107,8 +105,6 @@ pub struct TorProcess {
 impl Default for TorProcess {
 	fn default() -> Self {
 		Self {
-			tor_cmd: TOR_EXE_NAME.to_string(),
-			args: vec![],
 			torrc_path: None,
 			completion_percent: 100,
 			timeout: 0,
@@ -197,25 +193,8 @@ impl TorProcess {
 		self.sys.process((pid as usize).into())
 	}
 
-	pub fn tor_cmd(&mut self, tor_cmd: &str) -> &mut Self {
-		self.tor_cmd = tor_cmd.to_string();
-		self
-	}
-
 	pub fn torrc_path(&mut self, torrc_path: &str) -> &mut Self {
 		self.torrc_path = Some(torrc_path.to_string());
-		self
-	}
-
-	pub fn arg(&mut self, arg: String) -> &mut Self {
-		self.args.push(arg);
-		self
-	}
-
-	pub fn args(&mut self, args: Vec<String>) -> &mut Self {
-		for arg in args {
-			self.arg(arg);
-		}
 		self
 	}
 
@@ -237,7 +216,7 @@ impl TorProcess {
 	// The tor process will have its stdout piped, so if the stdout lines are not consumed they
 	// will keep accumulating over time, increasing the consumed memory.
 	pub fn launch(&mut self) -> Result<&mut Self, Error> {
-		let mut tor = Command::new(&self.tor_cmd);
+		let mut tor = Command::new(TOR_EXE_NAME);
 
 		if let Some(ref d) = self.working_dir {
 			tor.current_dir(d);
@@ -257,7 +236,6 @@ impl TorProcess {
 			tor.args(vec!["-f", torrc_path]);
 		}
 		let mut tor_process = tor
-			.args(&self.args)
 			.stdin(Stdio::piped())
 			.stdout(Stdio::piped())
 			.stderr(Stdio::piped())
