@@ -91,9 +91,18 @@ where
 	B::Data: Send,
 	B::Error: Into<Box<dyn StdError + Send + Sync>>,
 {
+	let mut addr = config.socks_proxy_addr();
+	let socks_prefix = "socks5://";
+	if addr.starts_with("http://") {
+		addr = addr.replace("http://", socks_prefix);
+	} else if addr.starts_with("https://") {
+		addr = addr.replace("https://", socks_prefix);
+	} else if !addr.starts_with(socks_prefix) {
+		addr = format!("{}{}", socks_prefix, addr);
+	}
+
 	let connector = HttpsConnector::new();
-	let uri = config
-		.socks_proxy_addr()
+	let uri = addr
 		.parse()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let proxy = hyper_socks2::SocksConnector {
@@ -103,6 +112,9 @@ where
 	}
 	.with_tls()
 	.map_err(|err| Error::Generic(format!("Unable to create socks connector: {}", err)))?;
+
+	debug!("socks_proxy: {:?}", proxy);
+
 	let client = Client::builder(TokioExecutor::new()).build::<_, B>(proxy);
 	let req_timeout = Duration::from_secs(
 		config
