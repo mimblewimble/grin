@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::arti::{start_tor_client, start_tor_service};
+use crate::tor::arti::{start_tor_client, start_tor_service, stop_tor_service};
 use crate::tor::config::TorConfig;
 use crate::tor::ov3::OnionV3Address;
 use crate::tor::process::types::TorProcess;
@@ -20,11 +20,14 @@ use crate::tor::process::types::TorProcess;
 use grin_util::secp::SecretKey;
 
 use ed25519_dalek::hazmat::ExpandedSecretKey;
+use grin_util::StopState;
 use hyper::StatusCode;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
+use std::thread;
+use std::time::Duration;
 
 #[derive(Debug, thiserror::Error, Clone)]
 pub enum Error {
@@ -75,25 +78,62 @@ pub fn service_address(key: &SecretKey) -> Result<String, Error> {
 	Ok(onion_address.to_string())
 }
 
-/// Start integrated Tor client or external process to send. Integrated Tor will reuse same client.
-pub fn start_tor<T>(config: &T) -> Result<Option<TorProcess>, Error>
+lazy_static! {
+	/// Statuses on onion services, where key is onion address.
+	pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, ServiceStatus>>> =
+		LazyLock::new(|| Mutex::new(HashMap::new()));
+	/// Running Tor sender process data dir.
+	static ref RUNNING_PROCESS_DIR: LazyLock<Mutex<Option<String>>> =
+		LazyLock::new(|| Mutex::new(None));
+	/// Running Tor process services states, where key is onion address.
+	static ref RUNNING_PROCESS_SERVICES: LazyLock<Mutex<HashMap<String, StopState>>> =
+		LazyLock::new(|| Mutex::new(HashMap::new()));
+}
+
+/// Start integrated Tor client or external process to send.
+/// Integrated Tor will reuse same client.
+/// Process will be reused if same data dir passed in config.
+pub fn start_tor<T>(config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
-	let tor = if config.use_integrated() {
+	if config.use_integrated() {
 		start_tor_client(config)?;
-		None
 	} else {
+		let running = {
+			let running_process_dir = RUNNING_PROCESS_DIR.lock().unwrap();
+			running_process_dir.as_ref() == Some(&config.data_dir().to_str().unwrap().to_string())
+		};
+		if running {
+			return Ok(());
+		}
 		let p = TorProcess::start_sender(config)?;
-		Some(p)
+		thread::spawn(move || {
+			let p = p;
+			loop {
+				let stop_needed = {
+					let running_process_dir = RUNNING_PROCESS_DIR.lock().unwrap();
+					running_process_dir.as_ref() != p.working_dir.as_ref()
+				};
+				if stop_needed {
+					drop(p);
+					break;
+				}
+				thread::sleep(Duration::from_millis(1000));
+			}
+		});
 	};
-	Ok(tor)
+	Ok(())
 }
 
-lazy_static! {
-		/// Statuses on onion services, where key is onion address.
-		pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, ServiceStatus>>> =
-		LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Stop running Tor service with provided address.
+pub fn stop_onion_service(onion_addr: String) -> Result<(), Error> {
+	if let Some(stop_state) = RUNNING_PROCESS_SERVICES.lock().unwrap().get(&onion_addr) {
+		stop_state.stop();
+	} else {
+		stop_tor_service(onion_addr)?;
+	}
+	Ok(())
 }
 
 /// Start Tor service from provided key to forward requests to
@@ -103,7 +143,7 @@ pub fn start_onion_service<T>(
 	addr: &str,
 	dir: PathBuf,
 	config: &T,
-) -> Result<Option<TorProcess>, Error>
+) -> Result<(), Error>
 where
 	T: TorConfig,
 {
@@ -126,9 +166,9 @@ where
 			},
 		}
 	}
-	let res: Result<Option<TorProcess>, Error> = if config.use_integrated() {
+	let res: Result<(), Error> = if config.use_integrated() {
 		match start_tor_service(sec_key, addr, config) {
-			Ok(_) => Ok(None),
+			Ok(_) => Ok(()),
 			Err(e) => {
 				error!("Error starting Tor service with integrated client: {}", e);
 				Err(e)
@@ -136,7 +176,29 @@ where
 		}
 	} else {
 		match TorProcess::start_listener(sec_key, dir, addr, config) {
-			Ok(p) => Ok(Some(p)),
+			Ok(p) => {
+				let address = onion_address.clone();
+				thread::spawn(move || {
+					let p = p;
+					loop {
+						let stopped = {
+							if let Some(state) =
+								RUNNING_PROCESS_SERVICES.lock().unwrap().get(&address)
+							{
+								state.is_stopped()
+							} else {
+								false
+							}
+						};
+						if stopped {
+							drop(p);
+							break;
+						}
+						thread::sleep(Duration::from_millis(1000));
+					}
+				});
+				Ok(())
+			}
 			Err(e) => {
 				error!("Error starting Tor service with external process: {}", e);
 				Err(e)

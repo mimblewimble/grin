@@ -97,7 +97,7 @@ pub struct TorProcess {
 	torrc_path: Option<String>,
 	completion_percent: u8,
 	timeout: u64,
-	working_dir: Option<String>,
+	pub working_dir: Option<String>,
 	pub stdout: Option<BufReader<ChildStdout>>,
 	pub process: Option<Child>,
 	sys: System,

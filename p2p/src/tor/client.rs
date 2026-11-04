@@ -14,7 +14,6 @@
 
 use crate::tor::arti::tor_post;
 use crate::tor::config::{TorConfig, REQUEST_TIMEOUT_SECS};
-use crate::tor::process::types::TorProcess;
 use crate::tor::{Error, PostError};
 
 use bytes::Bytes;
@@ -39,15 +38,13 @@ where
 {
 	fn tor_config(&self) -> &T;
 
-	fn tor_process(&self) -> Option<&TorProcess>;
-
 	fn post(
 		&self,
 		url: &str,
 		headers: Option<HashMap<&str, &str>>,
 		body: String,
 	) -> Result<String, Error> {
-		if self.tor_process().is_some() {
+		if !self.tor_config().use_integrated() {
 			let mut req: Request<Full<Bytes>> = Request::builder()
 				.method(hyper::Method::POST)
 				.uri(url)

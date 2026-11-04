@@ -102,7 +102,7 @@ fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
 }
 
 /// Stop running Tor service by onion address as key.
-pub fn stop_tor_service(onion_addr: String) -> Result<(), Error> {
+pub(crate) fn stop_tor_service(onion_addr: String) -> Result<(), Error> {
 	let service = ARTI_PROXY_SERVICES.lock().unwrap().remove(&onion_addr);
 	let Some(service) = service else {
 		error!("Service {} to stop was not found", onion_addr);
@@ -142,7 +142,7 @@ where
 }
 
 /// Start Tor service from provided key.
-pub fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
+pub(crate) fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
@@ -219,7 +219,7 @@ where
 }
 
 /// Start Tor client to send requests.
-pub fn start_tor_client<T>(config: &T) -> Result<(), Error>
+pub(crate) fn start_tor_client<T>(config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
