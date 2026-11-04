@@ -255,7 +255,7 @@ fn build_post_request(
 }
 
 /// Make POST request.
-pub fn tor_post<T>(
+pub(crate) fn tor_post<T>(
 	config: &T,
 	body: String,
 	headers: Option<HashMap<&str, &str>>,
