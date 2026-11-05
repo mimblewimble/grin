@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::tor::arti::tor_post;
-use crate::tor::config::{TorConfig, REQUEST_TIMEOUT_SECS};
+use crate::tor::config::{request_timeout, TorConfig};
 use crate::tor::{Error, PostError};
 
 use async_trait::async_trait;
@@ -26,7 +26,6 @@ use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use serde::de::StdError;
 use std::collections::HashMap;
-use std::time::Duration;
 use tokio::time::timeout;
 
 /// Tor powered HTTP client to send requests.
@@ -38,7 +37,7 @@ where
 	fn tor_config(&self) -> &T;
 
 	/// POST with a response body limit in bytes
-	/// Request timeout includes the body; bootstrap has a separate timeout
+	/// Request timeout includes client startup, connection and body
 	async fn post_tor(
 		&self,
 		url: &str,
@@ -58,7 +57,9 @@ where
 			})?;
 			send_socks_proxy(self.tor_config(), req, response_limit).await
 		} else {
-			tor_post(self.tor_config(), body, headers, url, response_limit).map_err(Error::Post)
+			tor_post(self.tor_config(), body, headers, url, response_limit)
+				.await
+				.map_err(Error::Post)
 		}
 	}
 }
@@ -103,14 +104,8 @@ where
 	let client = Client::builder(TokioExecutor::new())
 		.retry_canceled_requests(false)
 		.build::<_, B>(proxy);
-	let req_timeout = Duration::from_secs(
-		config
-			.request_timeout_secs()
-			.filter(|s| *s > 0)
-			.unwrap_or(REQUEST_TIMEOUT_SECS),
-	);
 	let mut status = None;
-	timeout(req_timeout, async {
+	timeout(request_timeout(config), async {
 		let response = client.request(req).await.map_err(|e| {
 			let message = format!("Unable to send request over socks proxy: {:?}", e);
 			if e.is_connect() {

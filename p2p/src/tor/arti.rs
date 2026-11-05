@@ -14,7 +14,7 @@
 
 use crate::tor::client::read_response;
 use crate::tor::config::{
-	TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS, REQUEST_TIMEOUT_SECS,
+	request_timeout, TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
 };
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
 use crate::tor::{service_address, spawn_status_logger, SERVICE_STATUS};
@@ -22,7 +22,7 @@ use crate::tor::{service_address, spawn_status_logger, SERVICE_STATUS};
 use grin_util::secp::SecretKey;
 
 use arti_client::config::pt::TransportConfigBuilder;
-use arti_client::config::{BridgeConfigBuilder, TorClientConfigBuilder};
+use arti_client::config::{BridgeConfigBuilder, Reconfigure, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
 use bytes::Bytes;
 use ed25519_dalek::hazmat::ExpandedSecretKey;
@@ -40,6 +40,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::time::{timeout_at, Instant};
 use tor_hscrypto::pk::{HsIdKey, HsIdKeypair};
 use tor_hsrproxy::config::{
 	Encapsulation, ProxyAction, ProxyConfigBuilder, ProxyPattern, ProxyRule, TargetAddr,
@@ -53,7 +56,7 @@ use tor_keymgr::config::CfgPath;
 use tor_keymgr::{ArtiNativeKeystore, KeyMgrBuilder, KeystoreSelector};
 use tor_llcrypto::pk::ed25519::ExpandedKeypair;
 use tor_rtcompat::tokio::TokioNativeTlsRuntime;
-use tor_rtcompat::{SleepProviderExt, ToplevelBlockOn};
+use tor_rtcompat::ToplevelBlockOn;
 
 struct TorService {
 	service: Arc<RunningOnionService>,
@@ -62,15 +65,19 @@ struct TorService {
 	state_lock: PathBuf,
 }
 
-type ArtiClientConfig = (Arc<TorClient<TokioNativeTlsRuntime>>, TorClientConfig);
+type ArtiClientConfig = (
+	Arc<TorClient<TokioNativeTlsRuntime>>,
+	TorClientConfig,
+	Duration,
+);
 
 lazy_static! {
 	/// Arti Tokio runtime.
 	static ref ARTI_RUNTIME: LazyLock<Mutex<Option<ArtiRuntimeWrapper>>> =
 		LazyLock::new(|| Mutex::new(ArtiRuntimeWrapper::create().ok()));
 	/// Arti client and config.
-	static ref ARTI_CLIENT_CONFIG: LazyLock<Mutex<Option<ArtiClientConfig>>> =
-		LazyLock::new(|| Mutex::new(None));
+	static ref ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<Option<ArtiClientConfig>>> =
+		LazyLock::new(|| AsyncMutex::new(None));
 	/// Running services, where key is onion address.
 	static ref ARTI_PROXY_SERVICES: LazyLock<Mutex<HashMap<String, TorService>>> =
 		LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -149,7 +156,7 @@ where
 	info!("Starting integrated Tor listener.");
 
 	let (state_path, cache_path) = state_cache_paths(config);
-	let (client, config) = init_client(&state_path, &cache_path, config)?;
+	let (client, config) = runtime()?.block_on(init_client(&state_path, &cache_path, config))?;
 
 	// Add service key to keystore.
 	let onion_address = service_address(&key)?;
@@ -225,7 +232,7 @@ where
 {
 	info!("Starting integrated Tor client");
 	let (state_path, cache_path) = state_cache_paths(config);
-	let (_, _) = init_client(&state_path, &cache_path, config)?;
+	let (_, _) = runtime()?.block_on(init_client(&state_path, &cache_path, config))?;
 	Ok(())
 }
 
@@ -255,7 +262,7 @@ fn build_post_request(
 }
 
 /// Make POST request.
-pub(crate) fn tor_post<T>(
+pub(crate) async fn tor_post<T>(
 	config: &T,
 	body: String,
 	headers: Option<HashMap<&str, &str>>,
@@ -284,65 +291,62 @@ where
 	let port = url.port_u16().unwrap_or(80);
 	let request = build_post_request(body, headers, &url)
 		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
-	let timeout = Duration::from_secs(
-		config
-			.request_timeout_secs()
-			.filter(|s| *s > 0)
-			.unwrap_or(REQUEST_TIMEOUT_SECS),
-	);
-	let (state_path, cache_path) = state_cache_paths(config);
-	let (client, _) = init_client(&state_path, &cache_path, config)
-		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
-	let res: Result<Response<String>, PostError> = thread::spawn(move || {
-		let c = client.clone();
-		client.runtime().block_on(async move {
-			let mut send_started = false;
-			let mut status = None;
-			let runtime = c.runtime().clone();
-			let res = runtime
-				.timeout(timeout, async {
-					let stream = c
-						.connect((host, port))
-						.await
-						.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
-					let (mut request_sender, connection) =
-						hyper::client::conn::http1::handshake(TokioIo::new(stream))
-							.await
-							.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
-
-					// Spawn a task to poll the connection and drive the HTTP state.
-					tokio::spawn(async move {
-						if let Err(e) = connection.await {
-							error!("Tor connection error: {}", e);
-						}
-					});
-
-					send_started = true;
-					let resp = request_sender
-						.send_request(request)
-						.await
-						.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
-
-					status = Some(resp.status());
-					read_response(resp, response_limit).await
-				})
-				.await;
-			match res {
-				Err(e) if send_started => {
-					Err(PostError::PossiblySent(format!("{:?}", e), status, None))
-				}
-				Err(e) => Err(PostError::NotSent(format!("{:?}", e))),
-				Ok(body) => Ok(body),
-			}
-		})
+	let deadline = Instant::now() + request_timeout(config);
+	let stream = timeout_at(deadline, async {
+		let (state_path, cache_path) = state_cache_paths(config);
+		let (client, _) = init_client(&state_path, &cache_path, config)
+			.await
+			.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
+		client
+			.connect((host, port))
+			.await
+			.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))
 	})
-	.join()
-	.unwrap_or_else(|e| Err(PostError::PossiblySent(format!("{:?}", e), None, None)))?;
-	res
+	.await
+	.map_err(|_| PostError::NotSent("Tor request timed out".into()))??;
+	post_request(stream, request, response_limit, deadline).await
+}
+
+async fn post_request<S>(
+	stream: S,
+	request: Request<Full<Bytes>>,
+	response_limit: usize,
+	deadline: Instant,
+) -> Result<Response<String>, PostError>
+where
+	S: AsyncRead + AsyncWrite + Unpin,
+{
+	let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+		.await
+		.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
+	let mut status = None;
+	let response = async {
+		let response = sender
+			.send_request(request)
+			.await
+			.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
+		status = Some(response.status());
+		read_response(response, response_limit).await
+	};
+	timeout_at(deadline, async {
+		tokio::pin!(response);
+		// Keep the connection scoped to the request
+		tokio::select! {
+			result = &mut response => result,
+			result = connection => {
+				if let Err(e) = result {
+					error!("Tor connection error: {}", e);
+				}
+				response.await
+			}
+		}
+	})
+	.await
+	.map_err(|_| PostError::PossiblySent("Tor request timed out".into(), status, None))?
 }
 
 /// Create Tor client.
-fn init_client<T>(
+async fn init_client<T>(
 	state_path: &PathBuf,
 	cache_path: &PathBuf,
 	config: &T,
@@ -399,9 +403,21 @@ where
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 
 	// Return existing client if config was not changed.
-	let mut cached_client_config = ARTI_CLIENT_CONFIG.lock().unwrap();
-	if let Some((client, c)) = cached_client_config.as_ref() {
+	let mut cached_client_config = ARTI_CLIENT_CONFIG.lock().await;
+	let connect_timeout = request_timeout(config);
+	builder.stream_timeouts().connect_timeout(connect_timeout);
+	let client_config = builder
+		.build()
+		.map_err(|e| Error::Config(format!("{:?}", e)))?;
+	if let Some((client, c, timeout)) = cached_client_config.as_mut() {
 		if c == &arti_config {
+			// A shorter request must not shorten another request's connect budget
+			if connect_timeout > *timeout {
+				client
+					.reconfigure(&client_config, Reconfigure::AllOrNothing)
+					.map_err(|e| Error::Config(format!("{:?}", e)))?;
+				*timeout = connect_timeout;
+			}
 			debug!("Reusing Arti Tor client from global state.");
 			return Ok((client.clone(), c.clone()));
 		} else {
@@ -409,65 +425,44 @@ where
 			*cached_client_config = None;
 		}
 	}
-	let res = launch_client(arti_config.clone(), config);
-	match res {
-		Ok(client) => {
-			cached_client_config.replace((client.clone(), arti_config.clone()));
-			Ok((client, arti_config))
-		}
-		Err(e) => Err(e),
-	}
+	let client = launch_client(client_config, config).await?;
+	cached_client_config.replace((client.clone(), arti_config.clone(), connect_timeout));
+	Ok((client, arti_config))
 }
 
 /// Launch tor client from provided configuration.
-fn launch_client<T>(
+async fn launch_client<T>(
 	client_config: TorClientConfig,
 	config: &T,
 ) -> Result<Arc<TorClient<TokioNativeTlsRuntime>>, Error>
 where
 	T: TorConfig,
 {
-	let r = runtime()?;
-	let client = TorClient::with_runtime(r)
-		.config(client_config)
-		.create_unbootstrapped()
-		.map_err(|e| Error::Generic(format!("{:?}", e)))?;
-	let c = client.clone();
 	let timeout = Duration::from_secs(
 		config
 			.bootstrap_timeout_secs()
 			.filter(|s| *s > 0)
 			.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
 	);
-	let res = client.runtime().block_on(async move {
-		let bootstrap = async || {
-			return match c.bootstrap().await {
-				Ok(_) => {
-					let mut percent = 0.0;
-					let mut prev_percent = 0.0;
-					while percent < 1.0 {
-						percent = c.bootstrap_status().as_frac();
-						if percent != prev_percent {
-							info!("Starting Tor {}%", percent * 100.0);
-						}
-						prev_percent = percent;
-						tokio::time::sleep(Duration::from_millis(1000)).await;
-					}
-					info!("Tor client bootstrapped successfully");
-					Ok(())
-				}
-				Err(e) => Err(e),
-			};
-		};
-		match c.runtime().timeout(timeout, bootstrap()).await {
-			Ok(r) => match r {
-				Err(e) => Err(Error::Generic(format!("{:?}", e))),
-				Ok(_) => Ok(c),
-			},
-			Err(e) => Err(Error::Generic(format!("{:?}", e))),
-		}
-	});
-	res
+	tokio::time::timeout(timeout, async {
+		// Arti runtime creation enters block_on internally
+		let runtime = tokio::task::spawn_blocking(runtime)
+			.await
+			.map_err(|e| Error::Generic(format!("{:?}", e)))??;
+		let client = TorClient::with_runtime(runtime)
+			.config(client_config)
+			.create_unbootstrapped_async()
+			.await
+			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
+		client
+			.bootstrap()
+			.await
+			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
+		info!("Tor client bootstrapped successfully");
+		Ok(client)
+	})
+	.await
+	.map_err(|e| Error::Generic(format!("{:?}", e)))?
 }
 
 /// Create Onion service proxy.
@@ -551,9 +546,13 @@ fn add_service_key(
 
 #[cfg(test)]
 mod tests {
-	use super::build_post_request;
+	use super::{build_post_request, post_request};
 	use hyper::{Method, Uri};
 	use std::collections::HashMap;
+	use std::time::Duration;
+	use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+	use tokio::sync::oneshot;
+	use tokio::time::{timeout, Instant};
 
 	#[test]
 	fn builds_origin_form_request() {
@@ -566,5 +565,69 @@ mod tests {
 		assert_eq!(request.uri(), "/v1?test=1");
 		assert_eq!(request.headers()["host"], "example.onion:8080");
 		assert_eq!(request.headers()["key"], "value");
+	}
+
+	async fn read_headers(stream: &mut DuplexStream) {
+		let mut headers = Vec::new();
+		while !headers.ends_with(b"\r\n\r\n") {
+			headers.push(stream.read_u8().await.unwrap());
+		}
+	}
+
+	#[tokio::test]
+	async fn request_cancel() {
+		for response in ["", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx"] {
+			let (stream, mut peer) = tokio::io::duplex(1024);
+			let (sent, received) = oneshot::channel();
+			let server = tokio::spawn(async move {
+				read_headers(&mut peer).await;
+				peer.write_all(response.as_bytes()).await.unwrap();
+				sent.send(()).unwrap();
+				assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+			});
+			let url = "http://example.onion/".parse().unwrap();
+			let request = build_post_request(String::new(), None, &url).unwrap();
+			let task = tokio::spawn(async move {
+				post_request(
+					stream,
+					request,
+					100,
+					Instant::now() + Duration::from_secs(1),
+				)
+				.await
+			});
+			timeout(Duration::from_secs(1), received)
+				.await
+				.unwrap()
+				.unwrap();
+			task.abort();
+			assert!(task.await.unwrap_err().is_cancelled());
+			timeout(Duration::from_secs(1), server)
+				.await
+				.unwrap()
+				.unwrap();
+		}
+	}
+
+	#[tokio::test]
+	async fn request_complete() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let server = async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+				.await
+				.unwrap();
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		};
+		let url = "http://example.onion/".parse().unwrap();
+		let request = build_post_request(String::new(), None, &url).unwrap();
+		let deadline = Instant::now() + Duration::from_secs(1);
+		let response = post_request(stream, request, 2, deadline);
+		let (_, response) = timeout(Duration::from_secs(1), async {
+			tokio::join!(server, response)
+		})
+		.await
+		.unwrap();
+		assert_eq!(response.unwrap().body(), "ok");
 	}
 }

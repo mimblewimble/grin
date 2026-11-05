@@ -278,11 +278,12 @@ mod tests {
 		}
 	}
 
-	#[test]
-	fn reject_https() {
+	#[tokio::test]
+	async fn reject_https() {
 		let config = Config::default();
 		assert!(matches!(
-			crate::tor::arti::tor_post(&config, String::new(), None, "https://example.onion/", 100),
+			crate::tor::arti::tor_post(&config, String::new(), None, "https://example.onion/", 100)
+				.await,
 			Err(PostError::NotSent(_))
 		));
 	}

@@ -14,6 +14,7 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 /// Tor request timeout in seconds.
 pub const REQUEST_TIMEOUT_SECS: u64 = 60;
@@ -46,6 +47,15 @@ pub trait TorConfig {
 
 	/// The address of the socks proxy for external process.
 	fn socks_proxy_addr(&self) -> String;
+}
+
+pub(crate) fn request_timeout<T: TorConfig>(config: &T) -> Duration {
+	Duration::from_secs(
+		config
+			.request_timeout_secs()
+			.filter(|s| *s > 0)
+			.unwrap_or(REQUEST_TIMEOUT_SECS),
+	)
 }
 
 /// Tor Bridge Config
