@@ -40,7 +40,7 @@ where
 {
 	fn tor_config(&self) -> &T;
 
-	async fn post(
+	async fn post_tor(
 		&self,
 		url: &str,
 		headers: Option<HashMap<&str, &str>>,
