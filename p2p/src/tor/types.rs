@@ -29,7 +29,7 @@ use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::Duration;
 
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 pub enum Error {
 	/// Generic Tor error
 	#[error("Tor Process Error: {0}")]
@@ -44,7 +44,7 @@ pub enum Error {
 
 /// Failure from a POST HTTP request over Tor, classified by whether delivery may
 /// have started.
-#[derive(Debug, thiserror::Error, Clone)]
+#[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 pub enum PostError {
 	/// The failure happened before handing the request to Hyper.
 	#[error("Not sent: {0}")]
