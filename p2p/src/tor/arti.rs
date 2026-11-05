@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::tor::client::read_response;
 use crate::tor::config::{
 	TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS, REQUEST_TIMEOUT_SECS,
 };
@@ -28,15 +29,14 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
-use http_body_util::{BodyExt, Full};
-use hyper::{Request, Uri};
+use http_body_util::Full;
+use hyper::{Request, Response, Uri};
 use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
 use sha2::Sha512;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -260,7 +260,8 @@ pub(crate) fn tor_post<T>(
 	body: String,
 	headers: Option<HashMap<&str, &str>>,
 	url: &str,
-) -> Result<String, PostError>
+	response_limit: usize,
+) -> Result<Response<String>, PostError>
 where
 	T: TorConfig,
 {
@@ -268,6 +269,11 @@ where
 	let url: Uri = url
 		.parse()
 		.map_err(|_| PostError::NotSent(format!("Bad URL: {}", url)))?;
+	if url.scheme_str() != Some("http") {
+		return Err(PostError::NotSent(
+			"Integrated Tor only supports HTTP requests".to_string(),
+		));
+	}
 	let host = match url.host() {
 		None => {
 			return Err(PostError::NotSent(format!("URL {} has bad host", url)));
@@ -287,14 +293,14 @@ where
 	let (state_path, cache_path) = state_cache_paths(config);
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
-	let res: Result<String, PostError> = thread::spawn(move || {
+	let res: Result<Response<String>, PostError> = thread::spawn(move || {
 		let c = client.clone();
 		client.runtime().block_on(async move {
-			let send_started = Arc::new(AtomicBool::new(false));
-			let send_started_in_request = send_started.clone();
+			let mut send_started = false;
+			let mut status = None;
 			let runtime = c.runtime().clone();
 			let res = runtime
-				.timeout(timeout, async move {
+				.timeout(timeout, async {
 					let stream = c
 						.connect((host, port))
 						.await
@@ -311,33 +317,19 @@ where
 						}
 					});
 
-					send_started_in_request.store(true, Ordering::Release);
+					send_started = true;
 					let resp = request_sender
 						.send_request(request)
 						.await
 						.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
 
-					let status = resp.status();
-					let body_resp = resp.into_body().collect().await.map_err(|e| {
-						PostError::PossiblySent(format!("{:?}", e), Some(status), None)
-					})?;
-					let body = body_resp.to_bytes().into();
-					let body_text = String::from_utf8(body).map_err(|e| {
-						PostError::PossiblySent(format!("{:?}", e), Some(status), None)
-					})?;
-					if !status.is_success() {
-						return Err(PostError::PossiblySent(
-							format!("HTTP request failed with status {}: {}", status, body_text),
-							Some(status),
-							Some(body_text),
-						));
-					}
-					Ok(body_text)
+					status = Some(resp.status());
+					read_response(resp, response_limit).await
 				})
 				.await;
 			match res {
-				Err(e) if send_started.load(Ordering::Acquire) => {
-					Err(PostError::PossiblySent(format!("{:?}", e), None, None))
+				Err(e) if send_started => {
+					Err(PostError::PossiblySent(format!("{:?}", e), status, None))
 				}
 				Err(e) => Err(PostError::NotSent(format!("{:?}", e))),
 				Ok(body) => Ok(body),

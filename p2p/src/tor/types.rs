@@ -46,10 +46,10 @@ pub enum Error {
 /// have started.
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 pub enum PostError {
-	/// The failure happened before handing the request to Hyper.
+	/// Request was not sent
 	#[error("Not sent: {0}")]
 	NotSent(String),
-	/// Hyper started sending the request, so delivery cannot be ruled out.
+	/// Request may have been sent
 	#[error("Possibly sent: {0}")]
 	PossiblySent(String, Option<StatusCode>, Option<String>),
 }
@@ -276,6 +276,15 @@ mod tests {
 		fn socks_proxy_addr(&self) -> String {
 			"127.0.0.1:9050".into()
 		}
+	}
+
+	#[test]
+	fn reject_https() {
+		let config = Config::default();
+		assert!(matches!(
+			crate::tor::arti::tor_post(&config, String::new(), None, "https://example.onion/", 100),
+			Err(PostError::NotSent(_))
+		));
 	}
 
 	#[test]
