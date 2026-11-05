@@ -104,7 +104,7 @@ where
 			.data_dir()
 			.join("sender")
 			.to_str()
-			.unwrap()
+			.ok_or_else(|| Error::Config("Tor data directory is not valid UTF-8".into()))?
 			.to_string();
 		let running = {
 			let running_process_dir = RUNNING_PROCESS_DIR.lock().unwrap();
@@ -235,5 +235,142 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 	match service_statuses.get(&onion_address) {
 		None => ServiceStatus::Stopped,
 		Some(s) => s.clone(),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::tor::config::{TorBridgeConfig, TorProxyConfig};
+
+	#[derive(Default)]
+	struct Config {
+		integrated: bool,
+		dir: PathBuf,
+		bridge: TorBridgeConfig,
+		proxy: TorProxyConfig,
+	}
+
+	impl TorConfig for Config {
+		fn use_integrated(&self) -> bool {
+			self.integrated
+		}
+		fn request_timeout_secs(&self) -> Option<u64> {
+			None
+		}
+		fn bootstrap_timeout_secs(&self) -> Option<u64> {
+			None
+		}
+		fn min_circuit_timeout_ms(&self) -> Option<i32> {
+			None
+		}
+		fn bridge_config(&self) -> &TorBridgeConfig {
+			&self.bridge
+		}
+		fn proxy_config(&self) -> &TorProxyConfig {
+			&self.proxy
+		}
+		fn data_dir(&self) -> PathBuf {
+			self.dir.clone()
+		}
+		fn socks_proxy_addr(&self) -> String {
+			"127.0.0.1:9050".into()
+		}
+	}
+
+	#[test]
+	fn reject_empty_ports() {
+		let dir = tempfile::tempdir().unwrap();
+		let config = Config {
+			dir: dir.path().join("tor"),
+			proxy: TorProxyConfig {
+				allowed_port: Some(vec![]),
+				..Default::default()
+			},
+			..Default::default()
+		};
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert!(!config.dir.exists());
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn reject_non_utf8_dir() {
+		use std::ffi::OsString;
+		use std::os::unix::ffi::OsStringExt;
+		let dir = tempfile::tempdir().unwrap();
+		let config = Config {
+			dir: dir.path().join(OsString::from_vec(b"tor-\xff".to_vec())),
+			..Default::default()
+		};
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert!(!config.dir.exists());
+	}
+
+	struct Warnings(Mutex<Vec<String>>);
+	static WARNINGS: Warnings = Warnings(Mutex::new(Vec::new()));
+	impl log::Log for Warnings {
+		fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+			metadata.level() == log::Level::Warn
+		}
+		fn log(&self, record: &log::Record<'_>) {
+			if self.enabled(record.metadata()) {
+				self.0.lock().unwrap().push(record.args().to_string());
+			}
+		}
+		fn flush(&self) {}
+	}
+
+	#[test]
+	fn ignored_proxy_warning() {
+		// Keep the global logger separate from other unit tests
+		if std::env::var_os("GRIN_TOR_PROXY_WARNING_TEST").is_none() {
+			let output = std::process::Command::new(std::env::current_exe().unwrap())
+				.args([
+					"--exact",
+					"tor::types::tests::ignored_proxy_warning",
+					"--nocapture",
+				])
+				.env("GRIN_TOR_PROXY_WARNING_TEST", "1")
+				.output()
+				.unwrap();
+			assert!(
+				output.status.success(),
+				"{}\n{}",
+				String::from_utf8_lossy(&output.stdout),
+				String::from_utf8_lossy(&output.stderr)
+			);
+			assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+			return;
+		}
+
+		log::set_logger(&WARNINGS).unwrap();
+		log::set_max_level(log::LevelFilter::Warn);
+		let dir = tempfile::tempdir().unwrap();
+		let mut config = Config {
+			integrated: true,
+			dir: dir.path().join("tor"),
+			// Stop before bootstrap so this test needs no network
+			bridge: TorBridgeConfig {
+				bridge_line: Some("invalid bridge".into()),
+				..Default::default()
+			},
+			..Default::default()
+		};
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert!(WARNINGS.0.lock().unwrap().is_empty());
+		config.proxy = TorProxyConfig {
+			transport: Some("socks5".into()),
+			address: Some("127.0.0.1:1".into()),
+			username: Some("private-user".into()),
+			password: Some("private-password".into()),
+			..Default::default()
+		};
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		let messages = WARNINGS.0.lock().unwrap();
+		assert_eq!(messages.len(), 1);
+		assert!(messages[0].contains("proxy") && messages[0].contains("ignored"));
+		assert!(!messages[0].contains("private-user") && !messages[0].contains("private-password"));
+		assert!(!config.dir.exists());
 	}
 }

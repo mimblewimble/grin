@@ -67,7 +67,7 @@ impl<'a> FlagParser<'a> {
 			let index = self.flags.iter().position(|&flag| flag == is_flag);
 			if let Some(m) = index {
 				let i = self.line.find(is_flag).unwrap();
-				split_index = i + is_flag.len() + 1;
+				split_index = i + is_flag.len();
 				let idx_b_flag = self
 					.bool_flags
 					.iter()
@@ -88,9 +88,9 @@ impl<'a> FlagParser<'a> {
 		if is_bool_flag {
 			0
 		} else if let Some(stripped) = right.strip_prefix('"') {
-			stripped.find('"').unwrap_or(0) + 2
+			stripped.find('"').map_or(right.len(), |i| i + 2)
 		} else {
-			right.find(' ').unwrap_or(right.len())
+			right.find(char::is_whitespace).unwrap_or(right.len())
 		}
 	}
 }
@@ -110,6 +110,7 @@ impl<'a> Iterator for FlagParser<'a> {
 			let (l, r) = self.line.split_at(split_index + 1);
 			(l, r)
 		};
+		let right = right.trim_start();
 		let end = self.end(self.is_bool_flag, right);
 		let key = left.split_whitespace().last()?;
 		let val = &right[..end];
@@ -222,6 +223,14 @@ pub struct PluginClient {
 }
 
 impl PluginClient {
+	const BOOL_FLAGS: &[&str] = &[
+		"-log-to-state-dir",
+		"-keep-local-addresses",
+		"-unsafe-logging",
+		"-enableLogging",
+		"-unsafeLogging",
+	];
+
 	/// Get the hashmap key(argument) and attached value of the client option line.
 	pub fn get_flags(s: &str) -> HashMap<&str, &str> {
 		let flags = vec![
@@ -237,14 +246,7 @@ impl PluginClient {
 			"-enableLogging",
 			"-unsafeLogging",
 		];
-		let bool_flags = vec![
-			"-log-to-state-dir",
-			"-keep-local-addresses",
-			"-unsafe-logging",
-			"-enableLogging",
-			"-unsafeLogging",
-		];
-		FlagParser::new(s, flags, bool_flags, true).collect()
+		FlagParser::new(s, flags, Self::BOOL_FLAGS.to_vec(), true).collect()
 	}
 
 	/// Try to find the plugin client path
@@ -343,6 +345,18 @@ impl PluginClient {
 	/// Snowflake client args : https://gitlab.torproject.org/tpo/anti-censorship/pluggable-transports/snowflake/-/blob/main/client/snowflake.go#L123-132
 	pub fn parse_client(option: &str, snowflake: bool) -> Result<String, Error> {
 		let hm_flags = PluginClient::get_flags(option);
+		for (flag, value) in &hm_flags {
+			if !Self::BOOL_FLAGS.contains(flag)
+				&& (value.is_empty()
+					|| value.starts_with('-')
+					|| (value.starts_with('"') && (value.len() == 1 || !value.ends_with('"'))))
+			{
+				return Err(Error::Bridge(format!(
+					"Missing or invalid value for {}",
+					flag
+				)));
+			}
+		}
 		let mut string = String::from("");
 		if snowflake {
 			let (ck_url, ck_ice) = (hm_flags.contains_key("-url"), hm_flags.contains_key("-ice"));
@@ -500,7 +514,10 @@ impl TryFrom<TorBridgeConfig> for TorBridge {
 		let flags = TorBridge::get_flags(&bridge);
 		let split = bridge.split_whitespace().collect::<Vec<&str>>();
 		let mut iter = split.iter();
-		let transport = iter.next().unwrap().to_lowercase();
+		let transport = iter
+			.next()
+			.ok_or_else(|| Error::Bridge("Missing bridge transport".into()))?
+			.to_lowercase();
 		match transport.as_str() {
 			"obfs4" => {
 				let socketaddr = Transport::parse_socketaddr_arg(iter.next())?;
@@ -619,5 +636,36 @@ impl TryFrom<TorBridgeConfig> for TorBridge {
 				Err(Error::Bridge(msg))
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn client_flags() {
+		assert_eq!(
+			PluginClient::parse_client("-enableLogging", false).unwrap(),
+			"-enableLogging"
+		);
+		let flags = PluginClient::get_flags("-loglevel\tINFO\t-enableLogging");
+		assert_eq!(flags["-loglevel"], "INFO");
+		assert_eq!(flags["-enableLogging"], "");
+		assert!(
+			PluginClient::parse_client("-url https://example.com -log-to-state-dir", true).is_ok()
+		);
+		assert!(
+			PluginClient::parse_client("-url https://example.com -log \"a b.log\"", true).is_ok()
+		);
+		assert!(PluginClient::parse_client("-loglevel -enableLogging", false).is_err());
+		assert!(PluginClient::parse_client("-url https://example.com -log", true).is_err());
+		assert!(PluginClient::parse_client("-url https://example.com -log \"", true).is_err());
+		assert!(PluginClient::parse_client("-url https://example.com -log \"é", true).is_err());
+		assert!(TorBridge::try_from(TorBridgeConfig {
+			bridge_line: Some(" ".into()),
+			..Default::default()
+		})
+		.is_err());
 	}
 }

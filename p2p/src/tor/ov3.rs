@@ -163,15 +163,13 @@ pub fn is_tor_address(input: &str) -> Result<(), OnionV3Error> {
 }
 
 pub fn complete_tor_address(input: &str) -> Result<String, OnionV3Error> {
-	is_tor_address(input)?;
-	let mut input = input.to_uppercase();
-	if !input.starts_with("HTTP://") && !input.starts_with("HTTPS://") {
-		input = format!("HTTP://{}", input);
-	}
-	if !input.ends_with(".ONION") {
-		input = format!("{}.ONION", input);
-	}
-	Ok(input.to_lowercase())
+	let address = OnionV3Address::try_from(input)?;
+	let scheme = if input.to_ascii_lowercase().starts_with("https://") {
+		"https"
+	} else {
+		"http"
+	};
+	Ok(format!("{}://{}.onion", scheme, address))
 }
 
 #[cfg(test)]
@@ -211,6 +209,13 @@ mod test {
 		let ret: Result<OnionV3Address, OnionV3Error> = onion_address_str.try_into();
 		assert!(ret.is_err());
 
+		for invalid in [
+			"aa6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid",
+			"2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyia",
+		] {
+			assert!(OnionV3Address::try_from(invalid).is_err());
+		}
+
 		Ok(())
 	}
 
@@ -246,6 +251,20 @@ mod test {
 
 	#[test]
 	fn test_complete_tor_address() -> Result<(), Error> {
+		assert_eq!(
+			"http://2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid.onion",
+			complete_tor_address(
+				"d03c09e9c19bb74aa9ea44e0fe5ae237a9bf40bddf0941064a80913a4459c8bb"
+			)
+			.unwrap()
+		);
+		assert_eq!(
+			"https://2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid.onion",
+			complete_tor_address(
+				"HTTPS://2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid.ONION"
+			)
+			.unwrap()
+		);
 		assert_eq!(
 			"http://2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid.onion",
 			complete_tor_address("2a6at2obto3uvkpkitqp4wxcg6u36qf534eucbskqciturczzc5suyid")

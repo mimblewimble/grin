@@ -35,54 +35,35 @@ pub struct TorProxy {
 }
 
 impl TorProxy {
-	fn parse_host_port(addr: &str) -> Result<(String, Option<String>), Error> {
-		let host: String;
-		let str_port: Option<String>;
-		let address = addr
-			.chars()
-			.filter(|c| !c.is_whitespace())
-			.collect::<String>();
-		if address.starts_with('[') {
-			let split = address.split_once("]:").unwrap();
-			host = split.0.to_string();
-			str_port = Some(split.1.to_string());
-		} else if address.contains(":") && !address.ends_with(":") {
-			let split = address.split_once(":").unwrap();
-			host = split.0.to_string();
-			str_port = Some(split.1.to_string());
-		} else {
-			host = address.to_string();
-			str_port = None;
-		};
-		Ok((host, str_port))
-	}
-
 	pub fn parse_address(addr: &str) -> Result<(String, Option<u16>), Error> {
-		let (host, str_port) = TorProxy::parse_host_port(addr)?;
-		let host = Host::parse(&host)
-			.map_err(|_e| Error::Proxy(format!("Invalid host address: {}", host)))?;
-		let port = if let Some(p) = str_port {
-			let res = p
-				.parse::<u16>()
-				.map_err(|_e| Error::Proxy(format!("Invalid port number: {}", p)))?;
-			Some(res)
-		} else {
-			None
-		};
+		let authority = addr
+			.parse::<hyper::http::uri::Authority>()
+			.map_err(|_| Error::Proxy("Invalid proxy address".into()))?;
+		if addr.contains('@') {
+			return Err(Error::Proxy(
+				"Proxy credentials must be configured separately".into(),
+			));
+		}
+		let host =
+			Host::parse(authority.host()).map_err(|_| Error::Proxy("Invalid proxy host".into()))?;
+		let port = authority.port_u16();
+		if port.is_none() && (addr != authority.host() || matches!(host, Host::Ipv6(_))) {
+			return Err(Error::Proxy("Missing or invalid proxy port".into()));
+		}
 		Ok((host.to_string(), port))
 	}
 
 	pub fn to_hashmap(self) -> Result<HashMap<String, String>, Error> {
 		let mut hm = HashMap::new();
 		if let Some(ports) = self.allowed_port {
-			let mut allowed_ports = "".to_string();
-			let last_port = ports.last().unwrap().to_owned();
-			for port in ports.clone() {
-				allowed_ports.push_str(format!("*:{}", port).as_str());
-				if port != last_port {
-					allowed_ports.push(',');
-				}
+			if ports.is_empty() {
+				return Err(Error::Proxy("Allowed ports must not be empty".into()));
 			}
+			let allowed_ports = ports
+				.iter()
+				.map(|port| format!("*:{}", port))
+				.collect::<Vec<_>>()
+				.join(",");
 			hm.insert("ReachableAddresses".to_string(), allowed_ports);
 		}
 
@@ -90,13 +71,16 @@ impl TorProxy {
 			Some(t) => t,
 			None => return Ok(hm),
 		};
+		let address = self
+			.address
+			.ok_or_else(|| Error::Proxy("Missing proxy address".into()))?;
 		match transport.as_str() {
 			"socks4" => {
-				hm.insert("Socks4Proxy".to_string(), self.address.unwrap());
+				hm.insert("Socks4Proxy".to_string(), address);
 				Ok(hm)
 			}
 			"socks5" => {
-				hm.insert("Socks5Proxy".to_string(), self.address.unwrap());
+				hm.insert("Socks5Proxy".to_string(), address);
 
 				if let Some(s) = self.username {
 					hm.insert("Socks5ProxyUsername".to_string(), s);
@@ -107,7 +91,7 @@ impl TorProxy {
 				Ok(hm)
 			}
 			"http" | "https" | "http(s)" => {
-				hm.insert("HTTPSProxy".to_string(), self.address.unwrap());
+				hm.insert("HTTPSProxy".to_string(), address);
 
 				if let Some(user) = self.username {
 					let pass = self.password.unwrap_or("".to_string());
@@ -166,11 +150,67 @@ impl TryFrom<TorProxyConfig> for TorProxy {
 			}
 		} else {
 			// In case the user want to allow only some ports
-			let ports = tb.allowed_port.unwrap();
 			Ok(TorProxy {
-				allowed_port: Some(ports),
+				allowed_port: tb.allowed_port,
 				..TorProxy::default()
 			})
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn proxy_host_port() {
+		for (input, host, port) in [
+			("127.0.0.1:9050", "127.0.0.1", Some(9050)),
+			("localhost:9050", "localhost", Some(9050)),
+			("proxy.example", "proxy.example", None),
+			("[::1]:9050", "[::1]", Some(9050)),
+		] {
+			assert_eq!(TorProxy::parse_address(input).unwrap(), (host.into(), port));
+			let proxy = TorProxy::try_from(TorProxyConfig {
+				transport: Some("socks5".into()),
+				address: Some(input.into()),
+				..Default::default()
+			})
+			.unwrap();
+			assert_eq!(proxy.to_hashmap().unwrap()["Socks5Proxy"], input);
+		}
+		assert!(TorProxy::parse_address("[::1]").is_err());
+		assert!(TorProxy::parse_address("localhost:65536").is_err());
+		assert!(TorProxy::parse_address("user@localhost:9050").is_err());
+	}
+
+	#[test]
+	fn proxy_torrc() {
+		let proxy = TorProxy::try_from(TorProxyConfig {
+			allowed_port: Some(vec![80, 443, 80]),
+			..Default::default()
+		})
+		.unwrap();
+		assert_eq!(
+			proxy.to_hashmap().unwrap()["ReachableAddresses"],
+			"*:80,*:443,*:80"
+		);
+		assert!(TorProxy {
+			allowed_port: Some(vec![]),
+			..Default::default()
+		}
+		.to_hashmap()
+		.is_err());
+		assert!(TorProxy {
+			transport: Some("socks5".into()),
+			..Default::default()
+		}
+		.to_hashmap()
+		.is_err());
+		assert!(TorProxy::try_from(TorProxyConfig::default())
+			.unwrap()
+			.to_hashmap()
+			.unwrap()
+			.is_empty());
 	}
 }
