@@ -23,7 +23,6 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use hyper::StatusCode;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex, TryLockError};
 
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
@@ -79,7 +78,7 @@ type ProcessSlot = Arc<Mutex<Option<TorProcess>>>;
 
 lazy_static! {
 	/// Statuses on onion services, where key is onion address.
-	pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, ServiceStatus>>> =
+	pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, Arc<Mutex<ServiceStatus>>>>> =
 		LazyLock::new(|| Mutex::new(HashMap::new()));
 	/// External Tor sender
 	static ref RUNNING_PROCESS_SENDER: LazyLock<Mutex<Option<TorProcess>>> =
@@ -155,14 +154,8 @@ fn service_slot(address: &str) -> ProcessSlot {
 		.clone()
 }
 
-/// Start Tor service from provided key to forward requests to
-/// provided address and store listener data at provided dir for process.
-pub fn start_onion_service<T>(
-	sec_key: SecretKey,
-	addr: &str,
-	dir: PathBuf,
-	config: &T,
-) -> Result<(), Error>
+/// Start Tor service from provided key to forward requests to the given address
+pub fn start_onion_service<T>(sec_key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
@@ -180,10 +173,13 @@ where
 		SERVICE_STATUS.lock().unwrap().remove(&onion_address);
 	}
 	*process = None;
+	let status = Arc::new(Mutex::new(ServiceStatus::Starting));
 	{
 		let mut statuses = SERVICE_STATUS.lock().unwrap();
 		if matches!(
-			statuses.get(&onion_address),
+			statuses
+				.get(&onion_address)
+				.map(|status| status.lock().unwrap().clone()),
 			Some(ServiceStatus::Starting | ServiceStatus::Running)
 		) {
 			return Err(Error::Generic(format!(
@@ -191,21 +187,20 @@ where
 				onion_address
 			)));
 		}
-		statuses.insert(onion_address.clone(), ServiceStatus::Starting);
+		statuses.insert(onion_address.clone(), status.clone());
 	}
 	let result = if config.use_integrated() {
 		start_tor_service(sec_key, addr, config)
 	} else {
-		TorProcess::start_listener(sec_key, dir, addr, config)
-			.map(|started| *process = Some(started))
+		TorProcess::start_listener(sec_key, addr, config).map(|started| *process = Some(started))
 	};
-	let mut statuses = SERVICE_STATUS.lock().unwrap();
+	let mut status = status.lock().unwrap();
 	match &result {
 		Ok(()) if !config.use_integrated() => {
-			statuses.insert(onion_address, ServiceStatus::Running);
+			*status = ServiceStatus::Running;
 		}
 		Err(error) => {
-			statuses.insert(onion_address, ServiceStatus::Errored(error.clone()));
+			*status = ServiceStatus::Errored(error.clone());
 		}
 		_ => {}
 	}
@@ -242,7 +237,7 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 	let service_statuses = SERVICE_STATUS.lock().unwrap();
 	match service_statuses.get(&onion_address) {
 		None => ServiceStatus::Stopped,
-		Some(s) => s.clone(),
+		Some(s) => s.lock().unwrap().clone(),
 	}
 }
 
@@ -250,6 +245,7 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 mod tests {
 	use super::*;
 	use crate::tor::config::{TorBridgeConfig, TorProxyConfig};
+	use std::path::PathBuf;
 
 	#[derive(Default)]
 	struct Config {
@@ -293,6 +289,67 @@ mod tests {
 			crate::tor::arti::tor_post(&config, String::new(), None, "https://example.onion/", 100)
 				.await,
 			Err(PostError::NotSent(_))
+		));
+	}
+
+	#[test]
+	fn locked_dirs() {
+		use fslock_guard::LockFileGuard;
+		use std::fs;
+		let dir = tempfile::tempdir().unwrap();
+		let config = Config {
+			dir: dir.path().to_path_buf(),
+			..Default::default()
+		};
+		let key = SecretKey::from_slice(&grin_util::secp::Secp256k1::new(), &[1; 32]).unwrap();
+		let address = service_address(&key).unwrap();
+		for path in [
+			config.dir.join("sender"),
+			config.dir.join("listener").join(&address),
+		] {
+			fs::create_dir_all(&path).unwrap();
+			fs::write(path.join("torrc"), "existing config").unwrap();
+			let _lock = LockFileGuard::lock(path.join("lock")).unwrap();
+			let result = if path.ends_with("sender") {
+				start_tor(&config)
+			} else {
+				start_onion_service(key.clone(), "127.0.0.1:3415", &config)
+			};
+			assert!(matches!(result, Err(Error::Config(_))));
+			assert_eq!(
+				fs::read_to_string(path.join("torrc")).unwrap(),
+				"existing config"
+			);
+			assert!(!path.join("onion_service_addresses").exists());
+			assert!(!path.join("pid").exists());
+		}
+		stop_onion_service(address).unwrap();
+	}
+
+	#[test]
+	fn stale_status() {
+		let config = Config {
+			proxy: TorProxyConfig {
+				allowed_port: Some(vec![]),
+				..Default::default()
+			},
+			..Default::default()
+		};
+		let key = SecretKey::from_slice(&grin_util::secp::Secp256k1::new(), &[2; 32]).unwrap();
+		let address = service_address(&key).unwrap();
+		assert!(start_onion_service(key.clone(), "127.0.0.1:3415", &config).is_err());
+		let old = SERVICE_STATUS.lock().unwrap()[&address].clone();
+		assert!(start_onion_service(key, "127.0.0.1:3415", &config).is_err());
+		*old.lock().unwrap() = ServiceStatus::Running;
+		assert!(matches!(
+			onion_service_status(address.clone()),
+			ServiceStatus::Errored(_)
+		));
+		stop_onion_service(address.clone()).unwrap();
+		*old.lock().unwrap() = ServiceStatus::Starting;
+		assert!(matches!(
+			onion_service_status(address),
+			ServiceStatus::Stopped
 		));
 	}
 

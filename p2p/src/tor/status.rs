@@ -92,6 +92,7 @@ pub fn spawn_status_logger<R>(
 where
 	R: Runtime,
 {
+	let service_status = SERVICE_STATUS.lock().unwrap().get(&onion_address).cloned();
 	let mut statuses = service.status_events();
 
 	let mut status = service.status();
@@ -115,12 +116,15 @@ where
 				// Keep checking while the status stays unchanged
 				match timer.timeout(Duration::from_secs(30), statuses.next()).await {
 					Ok(Some(next)) => {
-						if next.state().is_fully_reachable() {
-							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Running);
-						} else if next.state() == State::Recovering || next.state() == State::Bootstrapping {
-							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Starting);
-						} else if next.state() == State::Broken || next.state() == State::DegradedUnreachable {
-							SERVICE_STATUS.lock().unwrap().insert(onion_address.clone(), ServiceStatus::Errored(Error::Generic(format!("Service {} is broken or unreachable", onion_address))));
+						if let Some(ref service_status) = service_status {
+							let mut service_status = service_status.lock().unwrap();
+							if next.state().is_fully_reachable() {
+								*service_status = ServiceStatus::Running;
+							} else if next.state() == State::Recovering || next.state() == State::Bootstrapping {
+								*service_status = ServiceStatus::Starting;
+							} else if next.state() == State::Broken || next.state() == State::DegradedUnreachable {
+								*service_status = ServiceStatus::Errored(Error::Generic(format!("Service {} is broken or unreachable", onion_address)));
+							}
 						}
 						if format!("{next:?}") != format!("{status:?}") {
 							debug!("Onion service status at http://{onion_address}.onion: {next:?}");

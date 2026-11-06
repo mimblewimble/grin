@@ -55,6 +55,7 @@ use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
 
+use fslock_guard::LockFileGuard;
 use grin_util::secp::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
@@ -62,7 +63,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf, MAIN_SEPARATOR};
+use std::path::{Path, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
@@ -98,6 +99,7 @@ pub(crate) struct TorProcess {
 	readers: Vec<thread::JoinHandle<io::Result<u64>>>,
 	pub process: Option<Child>,
 	sys: System,
+	dir_lock: Option<LockFileGuard>,
 	sender_config: Option<(String, TorBridgeConfig, TorProxyConfig)>,
 }
 
@@ -111,6 +113,7 @@ impl Default for TorProcess {
 			readers: Vec::new(),
 			process: None,
 			sys: System::new(),
+			dir_lock: None,
 			sender_config: None,
 		}
 	}
@@ -120,7 +123,6 @@ impl TorProcess {
 	/// Start Tor process as listener.
 	pub fn start_listener<T>(
 		sec_key: SecretKey,
-		mut tor_dir: PathBuf,
 		addr: &str,
 		config: &T,
 	) -> Result<TorProcess, crate::tor::types::Error>
@@ -134,10 +136,15 @@ impl TorProcess {
 
 		let (hm_tor_bridge, hm_tor_proxy) = bridge_proxy(config)?;
 
-		tor_dir.push("listener");
+		let tor_dir = config
+			.data_dir()
+			.join("listener")
+			.join(crate::tor::service_address(&sec_key)?);
 		let tor_dir_str = tor_dir
 			.to_str()
 			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
+		tor.lock_dir(tor_dir_str)
+			.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		output_tor_listener_config(tor_dir_str, addr, &[sec_key], hm_tor_bridge, hm_tor_proxy)
 			.map_err(|e| Error::Config(format!("{:?}", e)))?;
 
@@ -172,6 +179,8 @@ impl TorProcess {
 		let tor_dir_str = tor_dir
 			.to_str()
 			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
+		tor.lock_dir(tor_dir_str)
+			.map_err(|e| Error::Config(format!("{:?}", e)))?;
 		output_tor_sender_config(
 			tor_dir_str,
 			socks_proxy_addr.to_string().as_str(),
@@ -188,6 +197,30 @@ impl TorProcess {
 			config.proxy_config().clone(),
 		));
 		Ok(tor)
+	}
+
+	fn lock_dir(&mut self, dir: &str) -> Result<(), Error> {
+		fs::create_dir_all(dir).map_err(Error::IO)?;
+		let lock = LockFileGuard::try_lock(Path::new(dir).join("lock"))
+			.map_err(Error::IO)?
+			.ok_or_else(|| Error::Process(format!("Tor data directory is in use: {}", dir)))?;
+		let pid_file_name = format!("{}{}pid", dir, MAIN_SEPARATOR);
+		// A PID file does not establish ownership
+		if Path::new(&pid_file_name).exists() {
+			let pid = fs::read_to_string(&pid_file_name).map_err(Error::IO)?;
+			let pid = pid
+				.parse::<i32>()
+				.map_err(|err| Error::PID(format!("{:?}", err)))?;
+			if self.get_process(pid).is_some() {
+				return Err(Error::Process(format!(
+					"Tor data directory is in use: {}",
+					dir
+				)));
+			}
+		}
+		self.dir_lock = Some(lock);
+		self.working_dir(dir);
+		Ok(())
 	}
 
 	fn get_process(&mut self, pid: i32) -> Option<&Process> {
@@ -222,22 +255,8 @@ impl TorProcess {
 	}
 
 	fn launch_command(&mut self, mut tor: Command) -> Result<&mut Self, Error> {
-		if let Some(d) = self.working_dir.clone() {
-			tor.current_dir(&d);
-			let pid_file_name = format!("{}{}pid", d, MAIN_SEPARATOR);
-			// A PID file does not establish ownership
-			if Path::new(&pid_file_name).exists() {
-				let pid = fs::read_to_string(&pid_file_name).map_err(Error::IO)?;
-				let pid = pid
-					.parse::<i32>()
-					.map_err(|err| Error::PID(format!("{:?}", err)))?;
-				if self.get_process(pid).is_some() {
-					return Err(Error::Process(format!(
-						"Tor data directory is in use: {}",
-						d
-					)));
-				}
-			}
+		if let Some(ref dir) = self.working_dir {
+			tor.current_dir(dir);
 		}
 		if let Some(ref torrc_path) = self.torrc_path {
 			tor.args(vec!["-f", torrc_path]);
@@ -399,6 +418,7 @@ impl TorProcess {
 			}
 		}
 		self.process = None;
+		self.dir_lock = None;
 		result
 	}
 }
@@ -436,9 +456,13 @@ fn start_tor<T>(tor_dir: &str, tor: &mut TorProcess, config: &T) -> Result<(), c
 where
 	T: TorConfig,
 {
-	let rc_path = PathBuf::from(tor_dir).join("torrc");
-	tor.torrc_path(rc_path.to_str().unwrap())
-		.working_dir(tor_dir)
+	let rc_path = fs::canonicalize(tor_dir)
+		.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?
+		.join("torrc");
+	let rc_path = rc_path
+		.to_str()
+		.ok_or_else(|| crate::tor::Error::Config(format!("Bad tor dir {}", rc_path.display())))?;
+	tor.torrc_path(rc_path)
 		.timeout(
 			config
 				.bootstrap_timeout_secs()
@@ -520,9 +544,12 @@ exec /bin/sleep 60",
 		)
 		.unwrap();
 		let mut other = TorProcess::default();
-		other.working_dir(dir.path().to_str().unwrap());
-		assert!(other.launch_command(command("exit 0")).is_err());
+		assert!(other.lock_dir(dir.path().to_str().unwrap()).is_err());
 		assert!(owner.exit_status().unwrap().is_none());
 		owner.kill().unwrap();
+		other.lock_dir(dir.path().to_str().unwrap()).unwrap();
+		assert!(owner.lock_dir(dir.path().to_str().unwrap()).is_err());
+		other.kill().unwrap();
+		owner.lock_dir(dir.path().to_str().unwrap()).unwrap();
 	}
 }

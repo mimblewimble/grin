@@ -155,11 +155,20 @@ where
 {
 	info!("Starting integrated Tor listener.");
 
+	let onion_address = service_address(&key)?;
+	if ARTI_PROXY_SERVICES
+		.lock()
+		.unwrap()
+		.contains_key(&onion_address)
+	{
+		return Err(Error::Config(
+			"Tor service is still in use; stop it first".into(),
+		));
+	}
 	let (state_path, cache_path) = state_cache_paths(config);
 	let (client, config) = runtime()?.block_on(init_client(&state_path, &cache_path, config))?;
 
 	// Add service key to keystore.
-	let onion_address = service_address(&key)?;
 	let hs =
 		HsNickname::new(onion_address.clone()).map_err(|e| Error::Config(format!("{:?}", e)))?;
 	let keystore_path = Path::new(&state_path).join("keystore");
@@ -421,6 +430,11 @@ where
 			debug!("Reusing Arti Tor client from global state.");
 			return Ok((client.clone(), c.clone()));
 		} else {
+			if Arc::strong_count(client) > 1 {
+				return Err(Error::Config(
+					"Tor client configuration changed while in use".into(),
+				));
+			}
 			debug!("Tor config changed, rebuild client.");
 			*cached_client_config = None;
 		}
