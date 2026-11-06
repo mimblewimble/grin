@@ -16,8 +16,9 @@ use crate::tor::client::read_response;
 use crate::tor::config::{
 	request_timeout, TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
 };
+use crate::tor::status::spawn_status_logger;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
-use crate::tor::{service_address, spawn_status_logger, SERVICE_STATUS};
+use crate::tor::{service_address, SERVICE_STATUS};
 
 use grin_util::secp::SecretKey;
 
@@ -30,7 +31,7 @@ use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
 use http_body_util::Full;
-use hyper::{Request, Response, Uri};
+use hyper::{Method, Request, Response, Uri};
 use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
 use sha2::Sha512;
@@ -245,8 +246,9 @@ where
 	Ok(())
 }
 
-/// Build an origin-form POST request
-fn build_post_request(
+/// Build an origin-form request
+fn build_request(
+	method: Method,
 	body: String,
 	headers: Option<HashMap<&str, &str>>,
 	url: &Uri,
@@ -259,7 +261,7 @@ fn build_post_request(
 		.map(|path| path.as_str())
 		.unwrap_or("/");
 
-	let mut req = Request::builder().uri(request_target).method("POST");
+	let mut req = Request::builder().uri(request_target).method(method);
 	if let Some(headers) = headers {
 		for (k, v) in headers {
 			req = req.header(k, v);
@@ -270,9 +272,10 @@ fn build_post_request(
 		.map_err(|e| Error::Generic(format!("{:?}", e)))
 }
 
-/// Make POST request.
-pub(crate) async fn tor_post<T>(
+/// Send HTTP request
+pub(crate) async fn tor_request<T>(
 	config: &T,
+	method: Method,
 	body: String,
 	headers: Option<HashMap<&str, &str>>,
 	url: &str,
@@ -298,10 +301,11 @@ where
 	}
 	.to_string();
 	let port = url.port_u16().unwrap_or(80);
-	let request = build_post_request(body, headers, &url)
+	let request = build_request(method, body, headers, &url)
 		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
 	let deadline = Instant::now() + request_timeout(config);
-	let stream = timeout_at(deadline, async {
+	// Keep the client until the request completes
+	let (_client, stream) = timeout_at(deadline, async {
 		let (state_path, cache_path) = state_cache_paths(config);
 		let (client, _) = init_client(&state_path, &cache_path, config)
 			.await
@@ -310,13 +314,14 @@ where
 			.connect((host, port))
 			.await
 			.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))
+			.map(|stream| (client, stream))
 	})
 	.await
 	.map_err(|_| PostError::NotSent("Tor request timed out".into()))??;
-	post_request(stream, request, response_limit, deadline).await
+	send_request(stream, request, response_limit, deadline).await
 }
 
-async fn post_request<S>(
+async fn send_request<S>(
 	stream: S,
 	request: Request<Full<Bytes>>,
 	response_limit: usize,
@@ -560,7 +565,7 @@ fn add_service_key(
 
 #[cfg(test)]
 mod tests {
-	use super::{build_post_request, post_request};
+	use super::{build_request, send_request};
 	use hyper::{Method, Uri};
 	use std::collections::HashMap;
 	use std::time::Duration;
@@ -573,7 +578,7 @@ mod tests {
 		let url: Uri = "http://example.onion:8080/v1?test=1".parse().unwrap();
 		let mut headers = HashMap::new();
 		headers.insert("key", "value");
-		let request = build_post_request("{}".to_string(), Some(headers), &url).unwrap();
+		let request = build_request(Method::POST, "{}".to_string(), Some(headers), &url).unwrap();
 
 		assert_eq!(request.method(), Method::POST);
 		assert_eq!(request.uri(), "/v1?test=1");
@@ -589,6 +594,26 @@ mod tests {
 	}
 
 	#[tokio::test]
+	async fn head_response() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let server = tokio::spawn(async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 100\r\n\r\n")
+				.await
+				.unwrap();
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		});
+		let url = "http://example.onion/".parse().unwrap();
+		let request = build_request(Method::HEAD, String::new(), None, &url).unwrap();
+		let result =
+			send_request(stream, request, 0, Instant::now() + Duration::from_secs(1)).await;
+		assert!(
+			matches!(result, Err(super::PostError::PossiblySent(_, Some(status), Some(ref body))) if status.as_u16() == 503 && body.is_empty())
+		);
+		server.await.unwrap();
+	}
+
+	#[tokio::test]
 	async fn request_cancel() {
 		for response in ["", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx"] {
 			let (stream, mut peer) = tokio::io::duplex(1024);
@@ -600,9 +625,9 @@ mod tests {
 				assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
 			});
 			let url = "http://example.onion/".parse().unwrap();
-			let request = build_post_request(String::new(), None, &url).unwrap();
+			let request = build_request(Method::POST, String::new(), None, &url).unwrap();
 			let task = tokio::spawn(async move {
-				post_request(
+				send_request(
 					stream,
 					request,
 					100,
@@ -634,9 +659,9 @@ mod tests {
 			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
 		};
 		let url = "http://example.onion/".parse().unwrap();
-		let request = build_post_request(String::new(), None, &url).unwrap();
+		let request = build_request(Method::POST, String::new(), None, &url).unwrap();
 		let deadline = Instant::now() + Duration::from_secs(1);
-		let response = post_request(stream, request, 2, deadline);
+		let response = send_request(stream, request, 2, deadline);
 		let (_, response) = timeout(Duration::from_secs(1), async {
 			tokio::join!(server, response)
 		})

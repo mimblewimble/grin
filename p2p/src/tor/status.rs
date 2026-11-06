@@ -16,7 +16,7 @@ use crate::tor::{Error, ServiceStatus, SERVICE_STATUS};
 
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState, State};
+use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState};
 use tor_hsservice::RunningOnionService;
 use tor_rtcompat::{Runtime, SleepProviderExt, SpawnExt};
 
@@ -84,7 +84,7 @@ impl StatusLog {
 	}
 }
 
-pub fn spawn_status_logger<R>(
+pub(super) fn spawn_status_logger<R>(
 	runtime: &R,
 	service: &RunningOnionService,
 	onion_address: String,
@@ -105,6 +105,9 @@ where
 			loop {
 				let state = status.state();
 				let problem = status.current_problem().and_then(onion_service_problem);
+				if let Some(ref service_status) = service_status {
+					update_status(&mut service_status.lock().unwrap(), state, problem.as_deref());
+				}
 				if let Some((level, elapsed)) = monitor.update(state, problem, Instant::now()) {
 					if level == log::Level::Info {
 						info!("Onion service recovered after {}s at http://{onion_address}.onion", elapsed.as_secs());
@@ -116,16 +119,6 @@ where
 				// Keep checking while the status stays unchanged
 				match timer.timeout(Duration::from_secs(30), statuses.next()).await {
 					Ok(Some(next)) => {
-						if let Some(ref service_status) = service_status {
-							let mut service_status = service_status.lock().unwrap();
-							if next.state().is_fully_reachable() {
-								*service_status = ServiceStatus::Running;
-							} else if next.state() == State::Recovering || next.state() == State::Bootstrapping {
-								*service_status = ServiceStatus::Starting;
-							} else if next.state() == State::Broken || next.state() == State::DegradedUnreachable {
-								*service_status = ServiceStatus::Errored(Error::Generic(format!("Service {} is broken or unreachable", onion_address)));
-							}
-						}
 						if format!("{next:?}") != format!("{status:?}") {
 							debug!("Onion service status at http://{onion_address}.onion: {next:?}");
 						}
@@ -140,6 +133,23 @@ where
 			Error::Generic(format!("Could not monitor Onion service: {error}"))
 		})?;
 	Ok(())
+}
+
+fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: Option<&str>) {
+	use OnionServiceState::*;
+	*status = match state {
+		Running => ServiceStatus::Running,
+		DegradedReachable => ServiceStatus::Degraded,
+		Recovering => ServiceStatus::Recovering,
+		Bootstrapping if !matches!(status, ServiceStatus::Starting) => ServiceStatus::Recovering,
+		Broken | DegradedUnreachable => ServiceStatus::Errored(Error::Generic(
+			problem
+				.map(str::to_owned)
+				.unwrap_or_else(|| format!("Onion service is {:?}", state)),
+		)),
+		Shutdown => ServiceStatus::Stopped,
+		_ => ServiceStatus::Starting,
+	};
 }
 
 fn onion_service_problem(problem: &OnionServiceProblem) -> Option<String> {
@@ -157,6 +167,29 @@ mod tests {
 		Bootstrapping, Broken, DegradedReachable, DegradedUnreachable, Recovering, Running,
 		Shutdown,
 	};
+
+	#[test]
+	fn service_states() {
+		let mut status = ServiceStatus::Starting;
+		update_status(&mut status, Bootstrapping, None);
+		assert!(matches!(status, ServiceStatus::Starting));
+		update_status(&mut status, Running, None);
+		assert!(matches!(status, ServiceStatus::Running));
+		update_status(&mut status, DegradedReachable, None);
+		assert!(matches!(status, ServiceStatus::Degraded));
+		update_status(&mut status, Bootstrapping, None);
+		assert!(matches!(status, ServiceStatus::Recovering));
+		update_status(&mut status, Recovering, None);
+		assert!(matches!(status, ServiceStatus::Recovering));
+		update_status(&mut status, DegradedUnreachable, Some("upload failed"));
+		assert!(
+			matches!(status, ServiceStatus::Errored(Error::Generic(ref e)) if e == "upload failed")
+		);
+		update_status(&mut status, Running, None);
+		assert!(matches!(status, ServiceStatus::Running));
+		update_status(&mut status, Shutdown, None);
+		assert!(matches!(status, ServiceStatus::Stopped));
+	}
 
 	#[test]
 	fn brief_problem() {

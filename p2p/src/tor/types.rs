@@ -54,7 +54,11 @@ pub enum PostError {
 #[derive(Debug, Clone)]
 pub enum ServiceStatus {
 	Starting,
+	/// External Tor has completed bootstrap
+	Bootstrapped,
 	Running,
+	Degraded,
+	Recovering,
 	Errored(Error),
 	Stopped,
 }
@@ -176,11 +180,11 @@ where
 	let status = Arc::new(Mutex::new(ServiceStatus::Starting));
 	{
 		let mut statuses = SERVICE_STATUS.lock().unwrap();
-		if matches!(
+		if !matches!(
 			statuses
 				.get(&onion_address)
 				.map(|status| status.lock().unwrap().clone()),
-			Some(ServiceStatus::Starting | ServiceStatus::Running)
+			None | Some(ServiceStatus::Errored(_) | ServiceStatus::Stopped)
 		) {
 			return Err(Error::Generic(format!(
 				"Tor service {} already started",
@@ -197,7 +201,7 @@ where
 	let mut status = status.lock().unwrap();
 	match &result {
 		Ok(()) if !config.use_integrated() => {
-			*status = ServiceStatus::Running;
+			*status = ServiceStatus::Bootstrapped;
 		}
 		Err(error) => {
 			*status = ServiceStatus::Errored(error.clone());
@@ -219,7 +223,7 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 			Ok(mut process) => {
 				if let Some(process) = process.as_mut() {
 					return match process.exit_status() {
-						Ok(None) => ServiceStatus::Running,
+						Ok(None) => ServiceStatus::Bootstrapped,
 						Ok(Some(status)) => ServiceStatus::Errored(Error::Generic(format!(
 							"Tor process exited: {}",
 							status
@@ -286,8 +290,15 @@ mod tests {
 	async fn reject_https() {
 		let config = Config::default();
 		assert!(matches!(
-			crate::tor::arti::tor_post(&config, String::new(), None, "https://example.onion/", 100)
-				.await,
+			crate::tor::arti::tor_request(
+				&config,
+				hyper::Method::POST,
+				String::new(),
+				None,
+				"https://example.onion/",
+				100
+			)
+			.await,
 			Err(PostError::NotSent(_))
 		));
 	}

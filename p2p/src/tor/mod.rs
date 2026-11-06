@@ -24,4 +24,3 @@ mod client;
 pub use self::client::*;
 
 mod status;
-pub use self::status::spawn_status_logger;

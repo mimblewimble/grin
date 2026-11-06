@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::arti::tor_post;
+use crate::tor::arti::tor_request;
 use crate::tor::config::{request_timeout, TorConfig};
 use crate::tor::{Error, PostError};
 
@@ -20,7 +20,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Body;
-use hyper::{Request, Response};
+use hyper::{Method, Request, Response, StatusCode};
 use hyper_tls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
@@ -45,23 +45,51 @@ where
 		body: String,
 		response_limit: usize,
 	) -> Result<Response<String>, Error> {
-		if !self.tor_config().use_integrated() {
-			let mut req = Request::builder().method("POST").uri(url);
-			if let Some(headers) = headers {
-				for (name, value) in headers {
-					req = req.header(name, value);
-				}
-			}
-			let req = req.body(Full::new(Bytes::from(body))).map_err(|e| {
-				Error::Post(PostError::NotSent(format!("Cannot build request: {}", e)))
-			})?;
-			send_socks_proxy(self.tor_config(), req, response_limit).await
-		} else {
-			tor_post(self.tor_config(), body, headers, url, response_limit)
-				.await
-				.map_err(Error::Post)
+		request_tor(
+			self.tor_config(),
+			Method::POST,
+			url,
+			headers,
+			body,
+			response_limit,
+		)
+		.await
+	}
+
+	/// Send HEAD to check HTTP reachability within the request timeout
+	/// HTTP errors also confirm a response
+	async fn check_tor(&self, url: &str) -> Result<StatusCode, Error> {
+		match request_tor(self.tor_config(), Method::HEAD, url, None, String::new(), 0).await {
+			Ok(response) => Ok(response.status()),
+			Err(Error::Post(PostError::PossiblySent(_, Some(status), Some(_)))) => Ok(status),
+			Err(error) => Err(error),
 		}
 	}
+}
+
+async fn request_tor<T: TorConfig>(
+	config: &T,
+	method: Method,
+	url: &str,
+	headers: Option<HashMap<&str, &str>>,
+	body: String,
+	response_limit: usize,
+) -> Result<Response<String>, Error> {
+	if config.use_integrated() {
+		return tor_request(config, method, body, headers, url, response_limit)
+			.await
+			.map_err(Error::Post);
+	}
+	let mut req = Request::builder().method(method).uri(url);
+	if let Some(headers) = headers {
+		for (name, value) in headers {
+			req = req.header(name, value);
+		}
+	}
+	let req = req
+		.body(Full::new(Bytes::from(body)))
+		.map_err(|e| Error::Post(PostError::NotSent(format!("Cannot build request: {}", e))))?;
+	send_socks_proxy(config, req, response_limit).await
 }
 
 /// Send request over proxy.
@@ -120,7 +148,7 @@ where
 	.await
 	.unwrap_or_else(|_| {
 		Err(PostError::PossiblySent(
-			"Post request over socks proxy timed out".to_string(),
+			"Tor request timed out".to_string(),
 			status,
 			None,
 		))
