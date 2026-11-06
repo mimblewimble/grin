@@ -49,12 +49,11 @@ extern crate chrono;
 extern crate regex;
 extern crate timer;
 
-use crate::tor::config::{TorConfig, BOOTSTRAP_TIMEOUT_SECS};
+use crate::tor::config::{TorBridgeConfig, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS};
 use crate::tor::ov3::OnionV3Error;
 use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
-use crate::tor::{service_address, SERVICE_STATUS};
 
 use grin_util::secp::SecretKey;
 use regex::Regex;
@@ -64,11 +63,11 @@ use std::io::Write;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf, MAIN_SEPARATOR};
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::mpsc::channel;
 use std::thread;
 use std::{cmp, io};
-use sysinfo::{Process, ProcessExt, System, SystemExt};
+use sysinfo::{Process, System, SystemExt};
 
 #[cfg(windows)]
 const TOR_EXE_NAME: &str = "tor.exe";
@@ -96,10 +95,10 @@ pub(crate) struct TorProcess {
 	completion_percent: u8,
 	timeout: u64,
 	pub working_dir: Option<String>,
-	pub stdout: Option<BufReader<ChildStdout>>,
+	readers: Vec<thread::JoinHandle<io::Result<u64>>>,
 	pub process: Option<Child>,
 	sys: System,
-	onion_address: Option<String>,
+	sender_config: Option<(String, TorBridgeConfig, TorProxyConfig)>,
 }
 
 impl Default for TorProcess {
@@ -109,10 +108,10 @@ impl Default for TorProcess {
 			completion_percent: 100,
 			timeout: 0,
 			working_dir: None,
-			stdout: None,
+			readers: Vec::new(),
 			process: None,
 			sys: System::new(),
-			onion_address: None,
+			sender_config: None,
 		}
 	}
 }
@@ -132,8 +131,6 @@ impl TorProcess {
 		info!("Starting external Tor Process listener at {}.", addr);
 
 		let mut tor = TorProcess::default();
-		let onion_address = service_address(&sec_key)?;
-		tor.onion_address = Some(onion_address.clone());
 
 		let (hm_tor_bridge, hm_tor_proxy) = bridge_proxy(config)?;
 
@@ -185,6 +182,11 @@ impl TorProcess {
 
 		// Start TOR process
 		start_tor(tor_dir_str, &mut tor, config)?;
+		tor.sender_config = Some((
+			config.socks_proxy_addr(),
+			config.bridge_config().clone(),
+			config.proxy_config().clone(),
+		));
 		Ok(tor)
 	}
 
@@ -216,26 +218,31 @@ impl TorProcess {
 	// The tor process will have its stdout piped, so if the stdout lines are not consumed they
 	// will keep accumulating over time, increasing the consumed memory.
 	pub fn launch(&mut self) -> Result<&mut Self, Error> {
-		let mut tor = Command::new(TOR_EXE_NAME);
+		self.launch_command(Command::new(TOR_EXE_NAME))
+	}
 
-		if let Some(ref d) = self.working_dir {
-			tor.current_dir(d);
+	fn launch_command(&mut self, mut tor: Command) -> Result<&mut Self, Error> {
+		if let Some(d) = self.working_dir.clone() {
+			tor.current_dir(&d);
 			let pid_file_name = format!("{}{}pid", d, MAIN_SEPARATOR);
-			// kill off PID if its already running
+			// A PID file does not establish ownership
 			if Path::new(&pid_file_name).exists() {
 				let pid = fs::read_to_string(&pid_file_name).map_err(Error::IO)?;
 				let pid = pid
 					.parse::<i32>()
 					.map_err(|err| Error::PID(format!("{:?}", err)))?;
-				if let Some(p) = self.get_process(pid) {
-					let _ = p.kill();
+				if self.get_process(pid).is_some() {
+					return Err(Error::Process(format!(
+						"Tor data directory is in use: {}",
+						d
+					)));
 				}
 			}
 		}
 		if let Some(ref torrc_path) = self.torrc_path {
 			tor.args(vec!["-f", torrc_path]);
 		}
-		let mut tor_process = tor
+		let tor_process = tor
 			.stdin(Stdio::piped())
 			.stdout(Stdio::piped())
 			.stderr(Stdio::piped())
@@ -245,9 +252,15 @@ impl TorProcess {
 				Error::Process(msg)
 			})?;
 
+		self.process = Some(tor_process);
+		let tor_process = self.process.as_mut().unwrap();
+		let mut stderr = tor_process.stderr.take().unwrap();
+		self.readers.push(thread::spawn(move || {
+			io::copy(&mut stderr, &mut io::sink())
+		}));
+
 		if let Some(ref d) = self.working_dir {
-			// Split out the process id, so if we don't exit cleanly
-			// we can take it down on the next run
+			// Keep the PID for diagnostics and conflict checks
 			let pid_file_name = format!("{}{}pid", d, MAIN_SEPARATOR);
 			let mut file = File::create(pid_file_name).map_err(Error::IO)?;
 			file.write_all(format!("{}", tor_process.id()).as_bytes())
@@ -256,7 +269,6 @@ impl TorProcess {
 
 		let stdout = BufReader::new(tor_process.stdout.take().unwrap());
 
-		self.process = Some(tor_process);
 		let completion_percent = self.completion_percent;
 
 		let (stdout_tx, stdout_rx) = channel();
@@ -268,29 +280,37 @@ impl TorProcess {
 		let _guard = timer.schedule_with_delay(timeout, move || {
 			stdout_timeout_tx.send(Err(Error::Timeout)).unwrap_or(());
 		});
-		let stdout_thread = thread::spawn(move || {
-			stdout_tx
-				.send(Self::parse_tor_stdout(stdout, completion_percent))
-				.unwrap_or(());
-		});
-		match stdout_rx.recv().unwrap() {
-			Ok(stdout) => {
-				stdout_thread.join().unwrap();
-				self.stdout = Some(stdout);
-				Ok(self)
+		self.readers.push(thread::spawn(move || {
+			let mut stdout = stdout;
+			let result = Self::parse_tor_stdout(&mut stdout, completion_percent);
+			let ready = result.is_ok();
+			stdout_tx.send(result).unwrap_or(());
+			if ready {
+				io::copy(&mut stdout, &mut io::sink())
+			} else {
+				Ok(0)
 			}
+		}));
+		match stdout_rx.recv().unwrap() {
+			Ok(()) => Ok(self),
 			Err(err) => {
-				self.kill().unwrap_or(());
-				stdout_thread.join().unwrap();
-				Err(err)
+				let exit = self.exit_status()?;
+				self.kill()?;
+				match exit {
+					Some(status) => Err(Error::Process(format!(
+						"Tor exited during bootstrap: {} ({:?})",
+						status, err
+					))),
+					None => Err(err),
+				}
 			}
 		}
 	}
 
 	fn parse_tor_stdout(
-		mut stdout: BufReader<ChildStdout>,
+		stdout: &mut BufReader<ChildStdout>,
 		completion_perc: u8,
-	) -> Result<BufReader<ChildStdout>, Error> {
+	) -> Result<(), Error> {
 		let re_bootstrap =
 			Regex::new(r"^\[notice] Bootstrapped (?P<perc>[0-9]+)%(.*): ").map_err(Error::Regex)?;
 
@@ -320,7 +340,7 @@ impl TorProcess {
 								.ok_or_else(|| Error::InvalidBootstrapLine(line.to_string()))?;
 
 							if perc >= completion_perc {
-								break;
+								return Ok(());
 							}
 						}
 					}
@@ -331,17 +351,55 @@ impl TorProcess {
 			}
 			raw_line.clear();
 		}
-		Ok(stdout)
+		Err(Error::Process(
+			"Tor exited before bootstrap completed".into(),
+		))
+	}
+
+	pub fn exit_status(&mut self) -> Result<Option<ExitStatus>, Error> {
+		self.process
+			.as_mut()
+			.ok_or(Error::ProcessNotStarted)?
+			.try_wait()
+			.map_err(Error::IO)
+	}
+
+	pub fn matches_sender<T: TorConfig>(&self, config: &T) -> bool {
+		self.working_dir.as_deref() == config.data_dir().join("sender").to_str()
+			&& self
+				.sender_config
+				.as_ref()
+				.map(|(socks, bridge, proxy)| {
+					socks == &config.socks_proxy_addr()
+						&& bridge == config.bridge_config()
+						&& proxy == config.proxy_config()
+				})
+				.unwrap_or(false)
 	}
 
 	pub fn kill(&mut self) -> Result<(), Error> {
-		if let Some(ref mut process) = self.process {
-			Ok(process
-				.kill()
-				.map_err(|err| Error::Process(format!("{}", err)))?)
-		} else {
-			Err(Error::ProcessNotStarted)
+		if let Some(process) = self.process.as_mut() {
+			if process.try_wait().map_err(Error::IO)?.is_none() {
+				if let Err(error) = process.kill() {
+					if process.try_wait().map_err(Error::IO)?.is_none() {
+						return Err(Error::IO(error));
+					}
+				}
+			}
+			process.wait().map_err(Error::IO)?;
 		}
+		let mut result = Ok(());
+		for reader in self.readers.drain(..) {
+			let joined = reader
+				.join()
+				.map_err(|_| Error::Process("Tor reader panicked".into()))
+				.and_then(|result| result.map(|_| ()).map_err(Error::IO));
+			if result.is_ok() {
+				result = joined;
+			}
+		}
+		self.process = None;
+		result
 	}
 }
 
@@ -397,9 +455,74 @@ impl Drop for TorProcess {
 	// kill the child
 	fn drop(&mut self) {
 		debug!("Dropping TOR process");
-		self.kill().unwrap_or(());
-		if let Some(a) = &self.onion_address {
-			SERVICE_STATUS.lock().unwrap().remove(a);
+		if let Err(error) = self.kill() {
+			error!("Error stopping Tor process: {:?}", error);
 		}
+	}
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+	use super::*;
+
+	fn command(script: &str) -> Command {
+		let mut command = Command::new("/bin/sh");
+		command.args(["-c", script]);
+		command
+	}
+
+	#[test]
+	fn bootstrap_exit() {
+		let mut process = TorProcess::default();
+		process.timeout(2);
+		assert!(process.launch_command(command("exit 42")).is_err());
+		assert!(process.process.is_none());
+		assert!(process.readers.is_empty());
+	}
+
+	#[test]
+	fn stop_wait() {
+		let mut process = TorProcess::default();
+		process.timeout(2);
+		process
+			.launch_command(command(
+				"echo 'May 16 02:50:08.792 [notice] Bootstrapped 100% (done): Done'
+exec /bin/sleep 60",
+			))
+			.unwrap();
+		assert!(process.exit_status().unwrap().is_none());
+		process.kill().unwrap();
+		assert!(process.process.is_none());
+		assert!(process.readers.is_empty());
+		process.kill().unwrap();
+	}
+
+	#[test]
+	fn bootstrap_timeout() {
+		let mut process = TorProcess::default();
+		process.timeout(1);
+		assert!(matches!(
+			process.launch_command(command("exec /bin/sleep 60")),
+			Err(Error::Timeout)
+		));
+		assert!(process.process.is_none());
+		assert!(process.readers.is_empty());
+	}
+
+	#[test]
+	fn foreign_pid() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut owner = TorProcess::default();
+		owner.process = Some(command("exec /bin/sleep 60").spawn().unwrap());
+		fs::write(
+			dir.path().join("pid"),
+			owner.process.as_ref().unwrap().id().to_string(),
+		)
+		.unwrap();
+		let mut other = TorProcess::default();
+		other.working_dir(dir.path().to_str().unwrap());
+		assert!(other.launch_command(command("exit 0")).is_err());
+		assert!(owner.exit_status().unwrap().is_none());
+		owner.kill().unwrap();
 	}
 }
