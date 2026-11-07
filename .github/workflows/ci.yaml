@@ -8,7 +8,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: rustup toolchain install 1.99.0 --profile minimal --component clippy
-      - run: cargo +1.99.0 clippy --workspace --all-targets -- -D warnings
+      - run: cargo +1.99.0 clippy --workspace --all-targets --features grin_p2p/tor -- -D warnings
   linux-tests:
     name: Linux Tests
     runs-on: ubuntu-latest
@@ -21,6 +21,10 @@ jobs:
       - name: Test ${{ matrix.job_args }}
         working-directory: ${{ matrix.job_args }}
         run: cargo test --release
+      - name: Test Tor (static)
+        if: matrix.job_args == 'p2p'
+        working-directory: p2p
+        run: cargo test --release --features tor-static
 
   macos-tests:
     name: macOS Tests

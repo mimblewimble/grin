@@ -18,7 +18,7 @@ use chrono::Utc;
 use num::FromPrimitive;
 use rand::prelude::*;
 
-use crate::core::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
+use crate::grin::ser::{self, DeserializationMode, Readable, Reader, Writeable, Writer};
 use crate::types::{is_private_ip, Capabilities, PeerAddr, ReasonForBan};
 use grin_store::{self, option_to_not_found, Error};
 

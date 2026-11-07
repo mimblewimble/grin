@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::conn::Tracker;
-use crate::core::core::hash::Hash;
-use crate::core::pow::Difficulty;
-use crate::core::ser::ProtocolVersion;
+use crate::grin::core::hash::Hash;
+use crate::grin::pow::Difficulty;
+use crate::grin::ser::ProtocolVersion;
 use crate::msg::{read_message, user_agent, write_message, Hand, Msg, Shake, Type};
 use crate::peer::Peer;
 use crate::types::{

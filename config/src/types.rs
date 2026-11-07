@@ -67,9 +67,9 @@ impl From<io::Error> for ConfigError {
 	}
 }
 
-/// Going to hold all of the various configuration types
+/// Going to hold all the various configuration types
 /// separately for now, then put them together as a single
-/// ServerConfig object afterwards. This is to flatten
+/// ServerConfig object afterward. This is to flatten
 /// out the configuration file into logical sections,
 /// as they tend to be quite nested in the code
 /// Most structs optional, as they may or may not
@@ -85,7 +85,7 @@ pub struct GlobalConfig {
 /// Keeping an 'inner' structure here, as the top
 /// level GlobalConfigContainer options might want to keep
 /// internal state that we don't necessarily
-/// want serialised or deserialised
+/// want serialized or deserialized
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ConfigMembers {
 	/// Config file version (None == version 1)
