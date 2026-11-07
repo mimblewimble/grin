@@ -23,7 +23,7 @@ use crate::tor::{service_address, SERVICE_STATUS};
 use grin_util::secp::SecretKey;
 
 use arti_client::config::pt::TransportConfigBuilder;
-use arti_client::config::{BridgeConfigBuilder, Reconfigure, TorClientConfigBuilder};
+use arti_client::config::{Reconfigure, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
@@ -271,6 +271,42 @@ pub(super) async fn connect<T: TorConfig>(
 	})
 }
 
+fn configure_bridges(
+	builder: &mut TorClientConfigBuilder,
+	bridges: &[crate::tor::config::TorBridgeConfig],
+) -> Result<(), Error> {
+	let mut transports = HashMap::new();
+	for bridge_config in bridges {
+		let bridge = bridge_config.parse()?;
+		if let Some(protocol) = bridge.get_transport().filter(|p| !p.is_empty()) {
+			let args = bridge_config.arguments(protocol)?;
+			let path = bridge_config.binary(protocol)?;
+			if let Some(previous) =
+				transports.insert(protocol.to_string(), (path.clone(), args.clone()))
+			{
+				if previous != (path.clone(), args.clone()) {
+					return Err(Error::Config(
+						"Conflicting bridge binaries or arguments".into(),
+					));
+				}
+			} else {
+				let mut transport = TransportConfigBuilder::default();
+				transport
+					.protocols(vec![protocol
+						.parse()
+						.map_err(|e| Error::Config(format!("{:?}", e)))?])
+					.path(CfgPath::new_literal(path))
+					.arguments(args)
+					.run_on_startup(true);
+				builder.bridges().transports().push(transport);
+			}
+		}
+		builder.bridges().bridges().push(bridge);
+	}
+
+	Ok(())
+}
+
 /// Create Tor client.
 async fn init_client<T>(
 	state_path: &PathBuf,
@@ -293,37 +329,8 @@ where
 			.unwrap_or(MIN_CIRCUIT_TIMEOUT_MS),
 	);
 
-	// Configure bridge.
-	let bridge_config = config.bridge_config();
-	if let Some(bridge_line) = bridge_config.bridge_line.as_ref() {
-		let bridge: BridgeConfigBuilder = bridge_line
-			.parse()
-			.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		builder.bridges().bridges().push(bridge.clone());
-		match bridge.get_transport() {
-			None => {
-				return Err(Error::Config(format!(
-					"No transport found at {}",
-					bridge_line
-				)))
-			}
-			Some(t) => {
-				// Now configure bridge transport. (Requires the "pt-client" feature)
-				let bin_path = bridge_config
-					.bridge_bin_path
-					.clone()
-					.unwrap_or(t.to_owned());
-				let mut transport = TransportConfigBuilder::default();
-				transport
-					.protocols(vec![t
-						.parse()
-						.map_err(|e| Error::Config(format!("{:?}", e)))?])
-					.path(CfgPath::new(bin_path))
-					.run_on_startup(true);
-				builder.bridges().transports().push(transport);
-			}
-		}
-	}
+	configure_bridges(&mut builder, config.bridge_config())?;
+
 	let arti_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
@@ -473,4 +480,26 @@ fn add_service_key(
 		}
 	}
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::tor::config::TorBridgeConfig;
+
+	#[test]
+	fn bridge_list() {
+		let bridge = TorBridgeConfig {
+			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge".into()),
+			bridge_bin_path: Some("/tmp/bridge client".into()),
+			client_args: vec!["--test".into()],
+		};
+		let mut builder = TorClientConfigBuilder::default();
+		configure_bridges(&mut builder, &[bridge.clone(), bridge.clone()]).unwrap();
+		assert_eq!(builder.bridges().bridges().len(), 2);
+		assert_eq!(builder.bridges().transports().len(), 1);
+		let mut changed = bridge.clone();
+		changed.bridge_bin_path = Some("/tmp/other".into());
+		assert!(configure_bridges(&mut builder, &[bridge, changed]).is_err());
+	}
 }

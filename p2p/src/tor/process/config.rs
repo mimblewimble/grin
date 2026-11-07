@@ -170,7 +170,7 @@ pub fn output_torrc(
 	wallet_listener_addr: &str,
 	socks_port: &str,
 	service_dirs: &[String],
-	hm_tor_bridge: HashMap<String, String>,
+	hm_tor_bridge: Vec<(String, String)>,
 	hm_tor_proxy: HashMap<String, String>,
 ) -> Result<(), Error> {
 	let torrc_file_path = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TORRC_FILE);
@@ -210,7 +210,7 @@ pub fn output_tor_listener_config(
 	tor_config_directory: &str,
 	wallet_listener_addr: &str,
 	listener_keys: &[SecretKey],
-	hm_tor_bridge: HashMap<String, String>,
+	hm_tor_bridge: Vec<(String, String)>,
 	hm_tor_proxy: HashMap<String, String>,
 ) -> Result<(), Error> {
 	let tor_data_dir = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TOR_DATA_DIR);
@@ -242,7 +242,7 @@ pub fn output_tor_listener_config(
 pub fn output_tor_sender_config(
 	tor_config_dir: &str,
 	socks_listener_addr: &str,
-	hm_tor_bridge: HashMap<String, String>,
+	hm_tor_bridge: Vec<(String, String)>,
 	hm_tor_proxy: HashMap<String, String>,
 ) -> Result<(), Error> {
 	// create data directory if it doesn't exist
@@ -299,7 +299,7 @@ mod tests {
 		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
 		let sec_key = secp::key::SecretKey::new(&secp, &mut test_rng);
 		let hm = HashMap::new();
-		output_tor_listener_config(test_dir, "127.0.0.1:3415", &[sec_key], hm.clone(), hm)?;
+		output_tor_listener_config(test_dir, "127.0.0.1:3415", &[sec_key], Vec::new(), hm)?;
 		clean_output_dir(test_dir);
 		Ok(())
 	}

@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::tor::process::bridge;
+use crate::tor::Error;
+
+use arti_client::config::BridgeConfigBuilder;
+use hyper::Uri;
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -36,11 +41,16 @@ pub trait TorConfig {
 	/// Custom minimum Tor circuit build timeout in milliseconds.
 	fn min_circuit_timeout_ms(&self) -> Option<i32>;
 
-	/// Get bridge configuration.
-	fn bridge_config(&self) -> &TorBridgeConfig;
+	/// Bridge configurations
+	fn bridge_config(&self) -> &[TorBridgeConfig];
 
-	/// Get proxy configuration.
+	/// Upstream proxy for Tor
 	fn proxy_config(&self) -> &TorProxyConfig;
+
+	/// Existing proxy for outgoing requests, without starting a Tor sender
+	fn outbound_proxy(&self) -> Option<TorOutboundProxy> {
+		None
+	}
 
 	/// Tor data directory.
 	fn data_dir(&self) -> PathBuf;
@@ -60,13 +70,57 @@ pub(crate) fn request_timeout<T: TorConfig>(config: &T) -> Duration {
 
 /// Tor Bridge Config
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
 pub struct TorBridgeConfig {
-	/// Path to bridge binary to use with integrated Tor library
+	/// Path to the bridge binary
 	pub bridge_bin_path: Option<String>,
 	/// Bridge Line
 	pub bridge_line: Option<String>,
-	/// Client Option
-	pub client_option: Option<String>,
+	/// Bridge client arguments
+	#[serde(default)]
+	pub client_args: Vec<String>,
+}
+
+impl TorBridgeConfig {
+	pub(crate) fn parse(&self) -> Result<BridgeConfigBuilder, Error> {
+		let line = self
+			.bridge_line
+			.as_ref()
+			.ok_or_else(|| Error::Config("Missing bridge line".into()))?;
+		if line.contains(['\r', '\n']) {
+			return Err(Error::Config("Bad bridge line".into()));
+		}
+		if self
+			.bridge_bin_path
+			.iter()
+			.chain(self.client_args.iter())
+			.any(|arg| arg.contains(['\r', '\n', '\0']))
+		{
+			return Err(Error::Config("Bad bridge client argument".into()));
+		}
+		let bridge: BridgeConfigBuilder = bridge::bridge_line(line)?
+			.parse()
+			.map_err(|e| Error::Config(format!("{:?}", e)))?;
+		if bridge.get_transport().is_none_or(str::is_empty)
+			&& (self.bridge_bin_path.is_some() || !self.client_args.is_empty())
+		{
+			return Err(Error::Config(
+				"Bridge client options require a transport".into(),
+			));
+		}
+		Ok(bridge)
+	}
+
+	pub(crate) fn binary(&self, transport: &str) -> Result<String, Error> {
+		match &self.bridge_bin_path {
+			Some(path) => Ok(path.clone()),
+			None => bridge::binary(transport),
+		}
+	}
+
+	pub(crate) fn arguments(&self, transport: &str) -> Result<Vec<String>, Error> {
+		bridge::client_args(transport, &self.client_args)
+	}
 }
 
 impl fmt::Display for TorBridgeConfig {
@@ -93,5 +147,80 @@ pub struct TorProxyConfig {
 impl fmt::Display for TorProxyConfig {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{:?}", self)
+	}
+}
+
+/// Existing Tor gateway, separate from Tor's upstream proxy
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum TorOutboundProxy {
+	Socks5(String),
+	Http(String),
+}
+
+impl TorOutboundProxy {
+	pub(crate) fn uri(&self) -> Result<Uri, Error> {
+		let (address, schemes) = match self {
+			Self::Socks5(address) => (address, &["socks5"][..]),
+			Self::Http(address) => (address, &["http", "https"][..]),
+		};
+		let uri: Uri = address
+			.parse()
+			.map_err(|_| Error::Config("Bad outbound proxy URL".into()))?;
+		if !schemes.contains(&uri.scheme_str().unwrap_or(""))
+			|| uri.host().is_none()
+			|| uri.authority().is_some_and(|a| a.as_str().contains('@'))
+			|| uri.path_and_query().is_some_and(|p| p.as_str() != "/")
+		{
+			return Err(Error::Config("Bad outbound proxy URL".into()));
+		}
+		Ok(uri)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn proxy_url() {
+		assert!(TorOutboundProxy::Socks5("socks5://127.0.0.1:9050".into())
+			.uri()
+			.is_ok());
+		assert!(TorOutboundProxy::Socks5("http://127.0.0.1:9050".into())
+			.uri()
+			.is_err());
+		assert!(
+			TorOutboundProxy::Http("http://user:pass@localhost:8080".into())
+				.uri()
+				.is_err()
+		);
+	}
+
+	#[test]
+	fn bridge_fields() {
+		let json = r#"{"client_option":"-enableLogging"}"#;
+		let error = serde_json::from_str::<TorBridgeConfig>(json).unwrap_err();
+		assert!(error.to_string().contains("unknown field `client_option`"));
+		let bridge = TorBridgeConfig {
+			client_args: vec!["-enableLogging".into()],
+			..Default::default()
+		};
+		let json = serde_json::to_string(&bridge).unwrap();
+		assert_eq!(
+			serde_json::from_str::<TorBridgeConfig>(&json).unwrap(),
+			bridge
+		);
+	}
+
+	#[test]
+	fn bridge_transport() {
+		assert!(TorBridgeConfig::default().parse().is_err());
+		let mut bridge: TorBridgeConfig = serde_json::from_str(
+			r#"{"bridge_line":"192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567"}"#,
+		)
+		.unwrap();
+		assert!(bridge.parse().is_ok());
+		bridge.client_args.push("--test".into());
+		assert!(bridge.parse().is_err());
 	}
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::config::{request_timeout, TorConfig};
+use crate::tor::config::{request_timeout, TorConfig, TorOutboundProxy};
 use crate::tor::{Error, PostError};
 
 use arti_client::StreamPrefs;
@@ -191,11 +191,16 @@ async fn exchange<T: TorConfig>(
 	config: &T,
 	state: &mut ConnectionState,
 	url: Uri,
-	request: Request<Full<Bytes>>,
+	mut request: Request<Full<Bytes>>,
 	limit: usize,
 	deadline: Instant,
 	closed: &mut watch::Receiver<bool>,
 ) -> Result<Response<String>, Error> {
+	let proxy = config.outbound_proxy();
+	let proxy_uri = proxy.as_ref().map(TorOutboundProxy::uri).transpose()?;
+	if matches!(proxy, Some(TorOutboundProxy::Http(_))) && url.scheme_str() == Some("http") {
+		*request.uri_mut() = url.clone();
+	}
 	let isolation = state.isolation.take().unwrap_or_else(|| {
 		let mut prefs = StreamPrefs::default();
 		prefs.new_isolation_group();
@@ -209,12 +214,21 @@ async fn exchange<T: TorConfig>(
 		Some((_, connection)) => connection,
 		None => {
 			let connect = async {
-				if config.use_integrated() {
+				if let Some(proxy) = &proxy {
+					match proxy {
+						TorOutboundProxy::Socks5(address) => {
+							connect_socks(address.clone(), &url, isolation.1.as_deref()).await
+						}
+						TorOutboundProxy::Http(_) => {
+							connect_http(proxy_uri.clone().unwrap(), &url).await
+						}
+					}
+				} else if config.use_integrated() {
 					crate::tor::arti::connect(config, &url, &isolation.0)
 						.await
 						.map_err(Error::Post)
 				} else {
-					connect_socks(config, &url, isolation.1.as_deref()).await
+					connect_socks(config.socks_proxy_addr(), &url, isolation.1.as_deref()).await
 				}
 			};
 			tokio::select! {
@@ -234,12 +248,11 @@ async fn exchange<T: TorConfig>(
 	response.map_err(Error::Post)
 }
 
-async fn connect_socks<T: TorConfig>(
-	config: &T,
+async fn connect_socks(
+	mut addr: String,
 	url: &Uri,
 	isolation: Option<&str>,
 ) -> Result<HttpConnection, Error> {
-	let mut addr = config.socks_proxy_addr();
 	let socks_prefix = "socks5://";
 	if addr.starts_with("http://") {
 		addr = addr.replace("http://", socks_prefix);
@@ -266,6 +279,17 @@ async fn connect_socks<T: TorConfig>(
 			e
 		)))
 	})?;
+	HttpConnection::open(stream).await.map_err(Error::Post)
+}
+
+async fn connect_http(proxy: Uri, url: &Uri) -> Result<HttpConnection, Error> {
+	let proxy = hyper_proxy2::Proxy::new(hyper_proxy2::Intercept::All, proxy);
+	let mut connector = hyper_proxy2::ProxyConnector::from_proxy(HttpsConnector::new(), proxy)
+		.map_err(|e| Error::Config(format!("Unable to create HTTP proxy connector: {}", e)))?;
+	let stream = connector
+		.call(url.clone())
+		.await
+		.map_err(|e| Error::Post(PostError::NotSent(format!("HTTP proxy connection: {}", e))))?;
 	HttpConnection::open(stream).await.map_err(Error::Post)
 }
 

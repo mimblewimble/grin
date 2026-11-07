@@ -51,7 +51,6 @@ extern crate timer;
 
 use crate::tor::config::{TorBridgeConfig, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS};
 use crate::tor::ov3::OnionV3Error;
-use crate::tor::process::bridge::TorBridge;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
 use crate::tor::process::proxy::TorProxy;
 
@@ -78,7 +77,6 @@ const TOR_EXE_NAME: &str = "tor";
 #[derive(Debug)]
 pub enum Error {
 	Process(String),
-	Bridge(String),
 	Proxy(String),
 	IO(io::Error),
 	PID(String),
@@ -100,7 +98,7 @@ pub(crate) struct TorProcess {
 	pub process: Option<Child>,
 	sys: System,
 	dir_lock: Option<LockFileGuard>,
-	sender_config: Option<(String, TorBridgeConfig, TorProxyConfig)>,
+	sender_config: Option<(String, Vec<TorBridgeConfig>, TorProxyConfig)>,
 }
 
 impl Default for TorProcess {
@@ -193,7 +191,7 @@ impl TorProcess {
 		start_tor(tor_dir_str, &mut tor, config)?;
 		tor.sender_config = Some((
 			config.socks_proxy_addr(),
-			config.bridge_config().clone(),
+			config.bridge_config().to_vec(),
 			config.proxy_config().clone(),
 		));
 		Ok(tor)
@@ -424,21 +422,49 @@ impl TorProcess {
 }
 
 type BridgeProxyResult =
-	Result<(HashMap<String, String>, HashMap<String, String>), crate::tor::types::Error>;
+	Result<(Vec<(String, String)>, HashMap<String, String>), crate::tor::types::Error>;
+
+fn bridge_options(bridges: &[TorBridgeConfig]) -> Result<Vec<(String, String)>, crate::tor::Error> {
+	let mut hm_tor_bridge = Vec::new();
+	let mut transports = HashMap::new();
+	for config in bridges {
+		let bridge = config.parse()?;
+		if let Some(protocol) = bridge.get_transport().filter(|p| !p.is_empty()) {
+			let args = config.arguments(protocol)?;
+			let path = config.binary(protocol)?;
+			if std::iter::once(&path)
+				.chain(args.iter())
+				.any(|arg| arg.is_empty() || arg.chars().any(char::is_whitespace))
+			{
+				return Err(crate::tor::Error::Config(
+					"External Tor bridge arguments cannot be empty or contain whitespace".into(),
+				));
+			}
+			let command = format!("{} exec {} {}", protocol, path, args.join(" "));
+			if let Some(previous) = transports.insert(protocol.to_string(), command.clone()) {
+				if previous != command {
+					return Err(crate::tor::Error::Config(
+						"Conflicting bridge binaries or options".into(),
+					));
+				}
+			} else {
+				hm_tor_bridge.push(("ClientTransportPlugin".into(), command));
+			}
+		}
+		hm_tor_bridge.push((
+			"Bridge".into(),
+			super::bridge::bridge_line(config.bridge_line.as_deref().unwrap_or_default())?,
+		));
+	}
+
+	Ok(hm_tor_bridge)
+}
 
 fn bridge_proxy<T>(config: &T) -> BridgeProxyResult
 where
 	T: TorConfig,
 {
-	let mut hm_tor_bridge: HashMap<String, String> = HashMap::new();
-	let bridge_config = config.bridge_config();
-	if bridge_config.bridge_line.is_some() {
-		let bridge_struct = TorBridge::try_from(bridge_config.clone())
-			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
-		hm_tor_bridge = bridge_struct
-			.to_hashmap()
-			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
-	}
+	let hm_tor_bridge = bridge_options(config.bridge_config())?;
 
 	let mut hm_tor_proxy: HashMap<String, String> = HashMap::new();
 	let proxy_config = config.proxy_config();
@@ -488,6 +514,53 @@ impl Drop for TorProcess {
 #[cfg(all(test, unix))]
 mod tests {
 	use super::*;
+
+	#[test]
+	fn bridge_list() {
+		let bridge = TorBridgeConfig {
+			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge".into()),
+			bridge_bin_path: Some("/tmp/bridge-client".into()),
+			client_args: vec!["-enableLogging".into()],
+		};
+		let options = bridge_options(&[bridge.clone(), bridge.clone()]).unwrap();
+		let dir = tempfile::tempdir().unwrap();
+		output_tor_sender_config(
+			dir.path().to_str().unwrap(),
+			"127.0.0.1:9050",
+			options,
+			HashMap::new(),
+		)
+		.unwrap();
+		let torrc = fs::read_to_string(dir.path().join("torrc")).unwrap();
+		assert!(torrc.lines().any(|line| line == "UseBridges 1"));
+		assert_eq!(
+			torrc
+				.lines()
+				.filter(|line| *line == format!("Bridge {}", bridge.bridge_line.as_ref().unwrap()))
+				.count(),
+			2
+		);
+
+		assert_eq!(
+			torrc
+				.lines()
+				.filter(|line| line.starts_with("ClientTransportPlugin "))
+				.collect::<Vec<_>>(),
+			vec!["ClientTransportPlugin webtunnel exec /tmp/bridge-client -enableLogging"]
+		);
+
+		let mut changed = bridge.clone();
+		changed.bridge_bin_path = Some("/tmp/other".into());
+		assert!(bridge_options(&[bridge.clone(), changed]).is_err());
+		let mut invalid = bridge.clone();
+		invalid.bridge_bin_path = Some("/tmp/bridge client".into());
+		assert!(bridge_options(&[invalid]).is_err());
+		let mut invalid = bridge;
+		invalid.client_args.push("two words".into());
+		assert!(bridge_options(&[invalid.clone()]).is_err());
+		invalid.client_args = vec![String::new()];
+		assert!(bridge_options(&[invalid]).is_err());
+	}
 
 	fn command(script: &str) -> Command {
 		let mut command = Command::new("/bin/sh");

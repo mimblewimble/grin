@@ -94,10 +94,15 @@ lazy_static! {
 
 /// Start integrated Tor client or external process to send
 /// Reuse a live sender with the same configuration
+/// Existing outbound proxies do not start a sender
 pub fn start_tor<T>(config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
 {
+	if let Some(proxy) = config.outbound_proxy() {
+		proxy.uri()?;
+		return Ok(());
+	}
 	if config.use_integrated() {
 		return start_tor_client(config);
 	}
@@ -248,14 +253,15 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tor::config::{TorBridgeConfig, TorProxyConfig};
+	use crate::tor::config::{TorBridgeConfig, TorOutboundProxy, TorProxyConfig};
 	use std::path::PathBuf;
 
 	#[derive(Default)]
 	struct Config {
 		integrated: bool,
 		dir: PathBuf,
-		bridge: TorBridgeConfig,
+		bridge: Vec<TorBridgeConfig>,
+		outbound: Option<TorOutboundProxy>,
 		proxy: TorProxyConfig,
 	}
 
@@ -272,8 +278,11 @@ mod tests {
 		fn min_circuit_timeout_ms(&self) -> Option<i32> {
 			None
 		}
-		fn bridge_config(&self) -> &TorBridgeConfig {
+		fn bridge_config(&self) -> &[TorBridgeConfig] {
 			&self.bridge
+		}
+		fn outbound_proxy(&self) -> Option<TorOutboundProxy> {
+			self.outbound.clone()
 		}
 		fn proxy_config(&self) -> &TorProxyConfig {
 			&self.proxy
@@ -290,6 +299,50 @@ mod tests {
 		fn tor_config(&self) -> &Config {
 			self
 		}
+	}
+
+	#[tokio::test]
+	async fn existing_proxy() {
+		use crate::tor::{TorContext, TorHttpClient};
+		use tokio::io::{AsyncReadExt, AsyncWriteExt};
+		let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+		let proxy = listener.local_addr().unwrap();
+		let server = tokio::spawn(async move {
+			let (mut stream, _) = listener.accept().await.unwrap();
+			for _ in 0..2 {
+				let mut headers = Vec::new();
+				while !headers.ends_with(b"\r\n\r\n") {
+					headers.push(stream.read_u8().await.unwrap());
+				}
+				assert!(headers.starts_with(b"POST http://example.onion/test HTTP/1.1\r\n"));
+				stream
+					.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 3\r\n\r\nbad")
+					.await
+					.unwrap();
+			}
+			assert_eq!(stream.read(&mut [0]).await.unwrap(), 0);
+		});
+		let dir = tempfile::tempdir().unwrap();
+		let config = Config {
+			integrated: true,
+			dir: dir.path().join("tor"),
+			outbound: Some(TorOutboundProxy::Http(format!("http://{}", proxy))),
+			..Default::default()
+		};
+		start_tor(&config).unwrap();
+		assert!(!config.dir.exists());
+		let context = TorContext::new(config);
+		for _ in 0..2 {
+			assert!(
+				matches!(context.post_tor("http://example.onion/test", None, String::new(), 3).await,
+				Err(Error::Post(PostError::PossiblySent(_, Some(status), Some(body)))) if status.as_u16() == 503 && body == "bad")
+			);
+		}
+		context.close().await;
+		tokio::time::timeout(std::time::Duration::from_secs(1), server)
+			.await
+			.unwrap()
+			.unwrap();
 	}
 
 	#[tokio::test]
@@ -439,10 +492,10 @@ mod tests {
 			integrated: true,
 			dir: dir.path().join("tor"),
 			// Stop before bootstrap so this test needs no network
-			bridge: TorBridgeConfig {
+			bridge: vec![TorBridgeConfig {
 				bridge_line: Some("invalid bridge".into()),
 				..Default::default()
-			},
+			}],
 			..Default::default()
 		};
 		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
