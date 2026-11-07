@@ -360,7 +360,7 @@ where
 		} else {
 			if Arc::strong_count(client) > 1 {
 				return Err(Error::Config(
-					"Tor client configuration changed while in use".into(),
+					"Stop using the Tor client before changing its configuration".into(),
 				));
 			}
 			debug!("Tor config changed, rebuild client.");

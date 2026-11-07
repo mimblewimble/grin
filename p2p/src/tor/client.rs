@@ -30,6 +30,7 @@ use tokio::time::{timeout_at, Instant};
 use tower_service::Service;
 
 /// One connection per context, with fixed configuration
+/// Release Arti contexts, listeners and requests before changing configuration
 pub struct TorContext<T> {
 	config: T,
 	state: Mutex<ConnectionState>,
@@ -46,6 +47,7 @@ impl<T> TorContext<T> {
 	}
 
 	/// Cancel pending requests and close the cached connection
+	/// Further requests require a new context
 	pub async fn close(&self) {
 		self.closed.send_replace(true);
 		*self.state.lock().await = ConnectionState::default();
