@@ -249,7 +249,9 @@ impl TorProcess {
 	// The tor process will have its stdout piped, so if the stdout lines are not consumed they
 	// will keep accumulating over time, increasing the consumed memory.
 	pub fn launch(&mut self) -> Result<&mut Self, Error> {
-		self.launch_command(Command::new(TOR_EXE_NAME))
+		let mut command = Command::new(TOR_EXE_NAME);
+		command.args(["__OwningControllerProcess", &std::process::id().to_string()]);
+		self.launch_command(command)
 	}
 
 	fn launch_command(&mut self, mut tor: Command) -> Result<&mut Self, Error> {
