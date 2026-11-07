@@ -29,6 +29,7 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
+use futures::task::SpawnExt;
 use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use sha2::Sha512;
@@ -193,11 +194,12 @@ where
 				let proxy = create_service_proxy(addr)?;
 				let c = client.clone();
 				let p = proxy.clone();
-				let worker = thread::spawn(move || {
-					let _client = c;
-					let runtime = proxy_runtime.handle().clone().into();
-					// Stop forwarding tasks when this worker exits
-					proxy_runtime.block_on(async move {
+				let runtime = proxy_runtime.handle().clone().into();
+				// Keep circuit timers on the client runtime
+				let task = client
+					.runtime()
+					.spawn_with_handle(async move {
+						let _client = c;
 						loop {
 							match run_service_proxy(&runtime, p.clone(), &mut request, hs.clone())
 								.await
@@ -214,7 +216,9 @@ where
 							}
 						}
 					})
-				});
+					.map_err(|e| Error::Generic(format!("Can not start Tor proxy: {}", e)))?;
+				// Stop forwarding tasks when this worker exits
+				let worker = thread::spawn(move || proxy_runtime.block_on(task));
 				(service, proxy, worker)
 			} else {
 				return Err(Error::Generic("Can not launch onion service".to_owned()));
