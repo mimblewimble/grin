@@ -26,7 +26,7 @@ pub const REQUEST_TIMEOUT_SECS: u64 = 60;
 /// Tor bootstrap timeout in seconds.
 pub const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
 /// Default minimum Tor circuit build timeout in milliseconds.
-pub const MIN_CIRCUIT_TIMEOUT_MS: i32 = 60_000;
+pub const MIN_CIRCUIT_TIMEOUT_MS: i32 = 2_000;
 
 pub trait TorConfig {
 	/// Whether to use integrated Tor library.

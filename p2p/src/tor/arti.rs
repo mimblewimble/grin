@@ -29,7 +29,7 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
-use futures::task::SpawnExt;
+use futures::{task::SpawnExt, FutureExt};
 use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use sha2::Sha512;
@@ -66,6 +66,7 @@ type ArtiClientConfig = (
 	Arc<TorClient<TokioNativeTlsRuntime>>,
 	TorClientConfig,
 	Duration,
+	arti_client::StreamPrefs,
 );
 
 /// Arti Tokio runtime.
@@ -255,7 +256,7 @@ where
 pub(super) async fn connect<T: TorConfig>(
 	config: &T,
 	url: &Uri,
-	prefs: &mut arti_client::StreamPrefs,
+	prefs: Option<&mut arti_client::StreamPrefs>,
 	deadline: tokio::time::Instant,
 ) -> Result<HttpConnection, PostError> {
 	if url.scheme_str() != Some("http") {
@@ -267,6 +268,13 @@ pub(super) async fn connect<T: TorConfig>(
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.await
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
+	let initial = match &prefs {
+		Some(prefs) => (*prefs).clone(),
+		None => {
+			let state = ARTI_CLIENT_CONFIG.lock().await;
+			state.0.as_ref().unwrap().3.clone()
+		}
+	};
 	let target = (url.host().unwrap(), url.port_u16().unwrap_or(80));
 	let (stream, selected) = {
 		let client_ref = &client;
@@ -276,22 +284,31 @@ pub(super) async fn connect<T: TorConfig>(
 				.await
 				.map(|stream| (stream, prefs))
 		};
-		let mut first = Box::pin(connect(prefs.clone()));
+		let mut first = async {
+			match connect(initial.clone()).await {
+				Ok(connected) => Ok(connected),
+				Err(_) => connect(initial.clone()).await,
+			}
+		}
+		.boxed();
 		let wait = deadline.saturating_duration_since(tokio::time::Instant::now()) / 2;
 		match tokio::time::timeout(wait, &mut first).await {
-			Ok(Ok(connected)) => Ok(connected),
-			Ok(Err(_)) => connect(prefs.clone()).await,
+			Ok(result) => result,
 			Err(_) => {
-				let mut alternative = prefs.clone();
+				let mut alternative = initial.clone();
 				alternative.new_isolation_group();
-				futures::future::select_ok([first, Box::pin(connect(alternative))])
+				futures::future::select_ok([first, connect(alternative).boxed()])
 					.await
 					.map(|(connected, _)| connected)
 			}
 		}
 	}
 	.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
-	*prefs = selected;
+	if let Some(prefs) = prefs {
+		*prefs = selected;
+	} else {
+		ARTI_CLIENT_CONFIG.lock().await.0.as_mut().unwrap().3 = selected;
+	}
 	let HttpConnection { sender, driver } = HttpConnection::open(TokioIo::new(stream)).await?;
 	Ok(HttpConnection {
 		sender,
@@ -378,7 +395,7 @@ where
 	let client_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	if let Some((client, c, timeout)) = cached_client_config.as_mut() {
+	if let Some((client, c, timeout, _)) = cached_client_config.as_mut() {
 		if c == &arti_config {
 			// A shorter request must not shorten another request's connect budget
 			if connect_timeout > *timeout {
@@ -400,7 +417,12 @@ where
 		}
 	}
 	let client = launch_client(client_config, config).await?;
-	cached_client_config.replace((client.clone(), arti_config.clone(), connect_timeout));
+	cached_client_config.replace((
+		client.clone(),
+		arti_config.clone(),
+		connect_timeout,
+		Default::default(),
+	));
 	Ok((client, arti_config))
 }
 

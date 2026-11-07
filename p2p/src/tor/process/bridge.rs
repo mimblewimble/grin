@@ -92,15 +92,7 @@ pub(crate) fn bridge_line(line: &str) -> Result<String, Error> {
 }
 
 pub(crate) fn client_args(transport: &str, configured: &[String]) -> Result<Vec<String>, Error> {
-	let mut args = if transport == "snowflake" && configured.is_empty() {
-		vec![
-			"-url".into(), "https://snowflake-broker.torproject.net.global.prod.fastly.net/".into(),
-			"-front".into(), "cdn.sstatic.net".into(),
-			"-ice".into(), "stun:stun.l.google.com:19302,stun:stun.voip.blackberry.com:3478,stun:stun.altar.com.pl:3478,stun:stun.antisip.com:3478,stun:stun.bluesip.net:3478,stun:stun.dus.net:3478,stun:stun.epygi.com:3478,stun:stun.sonetel.com:3478,stun:stun.sonetel.net:3478,stun:stun.stunprotocol.org:3478,stun:stun.uls.co.za:3478,stun:stun.voipgate.com:3478,stun:stun.voys.nl:3478".into(),
-		]
-	} else {
-		configured.to_vec()
-	};
+	let mut args = configured.to_vec();
 	let mut index = 0;
 	while index < args.len() {
 		let flag = args[index].as_str();
@@ -313,18 +305,7 @@ mod tests {
 			bridge.arguments(parsed.get_transport().unwrap()).unwrap(),
 			bridge.client_args
 		);
-		let defaults = client_args("snowflake", &[]).unwrap();
-		assert_eq!(
-			&defaults[..4],
-			[
-				"-url",
-				"https://snowflake-broker.torproject.net.global.prod.fastly.net/",
-				"-front",
-				"cdn.sstatic.net"
-			]
-		);
-		assert_eq!(defaults[4], "-ice");
-		assert!(defaults[5].starts_with("stun:stun.l.google.com:19302,"));
+		assert!(client_args("snowflake", &[]).unwrap().is_empty());
 		let mut args = vec![
 			"-url".into(),
 			"https://example.com/".into(),

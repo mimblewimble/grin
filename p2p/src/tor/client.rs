@@ -236,7 +236,8 @@ async fn exchange<T: TorConfig>(
 							}
 						}
 					} else if config.use_integrated() {
-						crate::tor::arti::connect(config, &url, &mut isolation.0, deadline)
+						let prefs = isolation.1.as_ref().map(|_| &mut isolation.0);
+						crate::tor::arti::connect(config, &url, prefs, deadline)
 							.await
 							.map_err(Error::Post)
 					} else {
