@@ -255,7 +255,8 @@ where
 pub(super) async fn connect<T: TorConfig>(
 	config: &T,
 	url: &Uri,
-	prefs: &arti_client::StreamPrefs,
+	prefs: &mut arti_client::StreamPrefs,
+	deadline: tokio::time::Instant,
 ) -> Result<HttpConnection, PostError> {
 	if url.scheme_str() != Some("http") {
 		return Err(PostError::NotSent(
@@ -267,12 +268,30 @@ pub(super) async fn connect<T: TorConfig>(
 		.await
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
 	let target = (url.host().unwrap(), url.port_u16().unwrap_or(80));
-	let stream = match client.connect_with_prefs(target, prefs).await {
-		Ok(stream) => Ok(stream),
-		// Retry before sending the HTTP request
-		Err(_) => client.connect_with_prefs(target, prefs).await,
+	let (stream, selected) = {
+		let client_ref = &client;
+		let connect = |prefs: arti_client::StreamPrefs| async move {
+			client_ref
+				.connect_with_prefs(target, &prefs)
+				.await
+				.map(|stream| (stream, prefs))
+		};
+		let mut first = Box::pin(connect(prefs.clone()));
+		let wait = deadline.saturating_duration_since(tokio::time::Instant::now()) / 2;
+		match tokio::time::timeout(wait, &mut first).await {
+			Ok(Ok(connected)) => Ok(connected),
+			Ok(Err(_)) => connect(prefs.clone()).await,
+			Err(_) => {
+				let mut alternative = prefs.clone();
+				alternative.new_isolation_group();
+				futures::future::select_ok([first, Box::pin(connect(alternative))])
+					.await
+					.map(|(connected, _)| connected)
+			}
+		}
 	}
 	.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
+	*prefs = selected;
 	let HttpConnection { sender, driver } = HttpConnection::open(TokioIo::new(stream)).await?;
 	Ok(HttpConnection {
 		sender,

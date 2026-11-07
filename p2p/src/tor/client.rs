@@ -61,7 +61,8 @@ struct ConnectionState {
 }
 
 /// Tor powered HTTP client to send requests.
-/// Use TorContext to reuse connections and isolation
+/// Default requests share Arti isolation
+/// Use TorContext for separate isolation and connection reuse
 #[async_trait]
 pub trait TorHttpClient<T>: Send + Sync
 where
@@ -178,8 +179,7 @@ async fn request_tor<T: TorConfig>(
 	exchange(
 		config,
 		&mut ConnectionState {
-			isolation: (!config.use_integrated() || config.outbound_proxy().is_some())
-				.then(|| (StreamPrefs::default(), None)),
+			isolation: Some((StreamPrefs::default(), None)),
 			..Default::default()
 		},
 		url,
@@ -205,7 +205,7 @@ async fn exchange<T: TorConfig>(
 	if matches!(proxy, Some(TorOutboundProxy::Http(_))) && url.scheme_str() == Some("http") {
 		*request.uri_mut() = url.clone();
 	}
-	let isolation = state.isolation.take().unwrap_or_else(|| {
+	let mut isolation = state.isolation.take().unwrap_or_else(|| {
 		let mut prefs = StreamPrefs::default();
 		prefs.new_isolation_group();
 		(prefs, Some(format!("{:032x}", rand::random::<u128>())))
@@ -236,7 +236,7 @@ async fn exchange<T: TorConfig>(
 							}
 						}
 					} else if config.use_integrated() {
-						crate::tor::arti::connect(config, &url, &isolation.0)
+						crate::tor::arti::connect(config, &url, &mut isolation.0, deadline)
 							.await
 							.map_err(Error::Post)
 					} else {
@@ -256,12 +256,14 @@ async fn exchange<T: TorConfig>(
 		if reused && matches!(response, Err(PostError::NotSent(_))) {
 			continue;
 		}
-		if response.is_ok() || matches!(response, Err(PostError::PossiblySent(_, Some(_), Some(_))))
-		{
+		if Instant::now() < deadline && !*closed.borrow() {
 			state.isolation = Some(isolation);
-			if !connection.sender.is_closed() {
-				state.cached = Some((url, connection));
-			}
+		}
+		if !connection.sender.is_closed()
+			&& (response.is_ok()
+				|| matches!(response, Err(PostError::PossiblySent(_, Some(_), Some(_)))))
+		{
+			state.cached = Some((url, connection));
 		}
 		return response.map_err(Error::Post);
 	}
