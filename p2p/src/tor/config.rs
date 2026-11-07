@@ -169,6 +169,9 @@ impl TorOutboundProxy {
 		if !schemes.contains(&uri.scheme_str().unwrap_or(""))
 			|| uri.host().is_none()
 			|| uri.authority().is_some_and(|a| a.as_str().contains('@'))
+			|| uri
+				.authority()
+				.is_some_and(|a| a.as_str() != a.host() && a.port_u16().is_none())
 			|| uri.path_and_query().is_some_and(|p| p.as_str() != "/")
 		{
 			return Err(Error::Config("Bad outbound proxy URL".into()));
@@ -183,6 +186,10 @@ mod tests {
 
 	#[test]
 	fn proxy_url() {
+		assert!(TorOutboundProxy::Http("http://localhost:65536".into())
+			.uri()
+			.is_err());
+		assert!(TorOutboundProxy::Http("http://[::1]".into()).uri().is_ok());
 		assert!(TorOutboundProxy::Socks5("socks5://127.0.0.1:9050".into())
 			.uri()
 			.is_ok());

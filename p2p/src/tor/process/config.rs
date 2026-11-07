@@ -24,7 +24,7 @@ use ed25519_dalek::VerifyingKey as DalekPublicKey;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::{Path, MAIN_SEPARATOR};
+use std::path::MAIN_SEPARATOR;
 use std::string::String;
 
 const SEC_KEY_FILE: &str = "hs_ed25519_secret_key";
@@ -97,7 +97,7 @@ pub fn create_onion_service_sec_key_file(
 	let key_file_path = &format!("{}{}{}", os_directory, MAIN_SEPARATOR, SEC_KEY_FILE);
 	let mut file = File::create(key_file_path).map_err(Error::IO)?;
 	// Tag is always 32 bytes, so pad with null zeroes
-	file.write(b"== ed25519v1-secret: type0 ==\0\0\0")
+	file.write_all(b"== ed25519v1-secret: type0 ==\0\0\0")
 		.map_err(Error::IO)?;
 	let expanded_skey: ExpandedSecretKey = ExpandedSecretKey::from(sec_key.as_bytes());
 	let sk_bytes = exp_sec_key_bytes(expanded_skey);
@@ -112,7 +112,7 @@ pub fn create_onion_service_pub_key_file(
 	let key_file_path = &format!("{}{}{}", os_directory, MAIN_SEPARATOR, PUB_KEY_FILE);
 	let mut file = File::create(key_file_path).map_err(Error::IO)?;
 	// Tag is always 32 bytes, so pad with null zeroes
-	file.write(b"== ed25519v1-public: type0 ==\0\0\0")
+	file.write_all(b"== ed25519v1-public: type0 ==\0\0\0")
 		.map_err(Error::IO)?;
 	file.write_all(pub_key.as_bytes()).map_err(Error::IO)?;
 	Ok(())
@@ -143,13 +143,9 @@ pub fn output_onion_service_config(
 		tor_config_directory, MAIN_SEPARATOR, HIDDEN_SERVICES_DIR, MAIN_SEPARATOR, address
 	);
 
-	// If file already exists, don't overwrite it, just return address
-	if Path::new(&hs_dir_file_path).exists() {
-		return Ok(address);
-	}
-
 	// create directory if it doesn't exist
 	fs::create_dir_all(&hs_dir_file_path).map_err(Error::IO)?;
+	set_permissions(&hs_dir_file_path)?;
 
 	create_onion_service_sec_key_file(&hs_dir_file_path, &d_sec_key)?;
 	create_onion_service_pub_key_file(
@@ -158,8 +154,6 @@ pub fn output_onion_service_config(
 	)?;
 	create_onion_service_hostname_file(&hs_dir_file_path, &address.to_string())?;
 	create_onion_auth_clients_dir(&hs_dir_file_path)?;
-
-	set_permissions(&hs_dir_file_path)?;
 
 	Ok(address)
 }
@@ -279,14 +273,29 @@ mod tests {
 
 	#[test]
 	fn test_service_config() -> Result<(), Error> {
-		let test_dir = "target/test_output/onion_service";
-		setup(test_dir);
+		let dir = tempfile::tempdir().unwrap();
+		let test_dir = dir.path().to_str().unwrap();
 		let secp_inst = static_secp_instance();
 		let secp = secp_inst.lock();
 		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
 		let sec_key = secp::key::SecretKey::new(&secp, &mut test_rng);
+		let address = OnionV3Address::from_private(&sec_key.0).unwrap();
+		let service_dir = dir
+			.path()
+			.join(HIDDEN_SERVICES_DIR)
+			.join(address.to_string());
+		fs::create_dir_all(&service_dir).unwrap();
 		output_onion_service_config(test_dir, &sec_key)?;
-		clean_output_dir(test_dir);
+		let key = fs::read(service_dir.join(SEC_KEY_FILE)).unwrap();
+		assert_eq!(key.len(), 96);
+		fs::write(service_dir.join(SEC_KEY_FILE), &key[..32]).unwrap();
+		fs::remove_file(service_dir.join(PUB_KEY_FILE)).unwrap();
+		output_onion_service_config(test_dir, &sec_key)?;
+		assert_eq!(fs::read(service_dir.join(SEC_KEY_FILE)).unwrap(), key);
+		assert_eq!(
+			&fs::read(service_dir.join(PUB_KEY_FILE)).unwrap()[32..],
+			address.to_ed25519().unwrap().as_bytes()
+		);
 		Ok(())
 	}
 
