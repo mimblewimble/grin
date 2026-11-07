@@ -180,6 +180,10 @@ where
 		.nickname(hs.clone())
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
+	let proxy_runtime = tokio::runtime::Builder::new_current_thread()
+		.enable_all()
+		.build()
+		.map_err(|e| Error::Generic(format!("Can not start Tor proxy: {}", e)))?;
 	let (service, proxy, worker) = match client.launch_onion_service(service_config) {
 		Ok(res) => {
 			if let Some((service, mut request)) = res {
@@ -190,9 +194,14 @@ where
 				let c = client.clone();
 				let p = proxy.clone();
 				let worker = thread::spawn(move || {
-					c.clone().runtime().block_on(async move {
+					let _client = c;
+					let runtime = proxy_runtime.handle().clone().into();
+					// Stop forwarding tasks when this worker exits
+					proxy_runtime.block_on(async move {
 						loop {
-							match run_service_proxy(p.clone(), &mut request, hs.clone()).await {
+							match run_service_proxy(&runtime, p.clone(), &mut request, hs.clone())
+								.await
+							{
 								Ok(_) => {
 									info!("Tor proxy stopped");
 									break;
@@ -422,6 +431,7 @@ fn create_service_proxy(addr: SocketAddr) -> Result<Arc<OnionServiceReverseProxy
 
 /// Launch service proxy.
 async fn run_service_proxy<S>(
+	runtime: &TokioNativeTlsRuntime,
 	proxy: Arc<OnionServiceReverseProxy>,
 	request: &mut S,
 	nickname: HsNickname,
@@ -429,9 +439,8 @@ async fn run_service_proxy<S>(
 where
 	S: futures::Stream<Item = tor_hsservice::RendRequest> + Unpin + Send + 'static,
 {
-	let runtime = runtime()?;
 	proxy
-		.handle_requests(runtime, nickname, request)
+		.handle_requests(runtime.clone(), nickname, request)
 		.await
 		.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 	Ok(())
