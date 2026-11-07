@@ -54,6 +54,14 @@ impl TorProxy {
 	}
 
 	pub fn to_hashmap(self) -> Result<HashMap<String, String>, Error> {
+		if self
+			.username
+			.iter()
+			.chain(self.password.iter())
+			.any(|value| value.contains(['\r', '\n', '\0']))
+		{
+			return Err(Error::Proxy("Invalid proxy credentials".into()));
+		}
 		let mut hm = HashMap::new();
 		if let Some(ports) = self.allowed_port {
 			if ports.is_empty() {
@@ -186,15 +194,27 @@ mod tests {
 
 	#[test]
 	fn proxy_torrc() {
-		let proxy = TorProxy::try_from(TorProxyConfig {
+		let mut proxy = TorProxy::try_from(TorProxyConfig {
+			transport: Some("socks5".into()),
+			address: Some("127.0.0.1:9050".into()),
+			username: Some("user".into()),
+			password: Some("password".into()),
 			allowed_port: Some(vec![80, 443, 80]),
-			..Default::default()
 		})
 		.unwrap();
-		assert_eq!(
-			proxy.to_hashmap().unwrap()["ReachableAddresses"],
-			"*:80,*:443,*:80"
-		);
+		let options = proxy.clone().to_hashmap().unwrap();
+		assert_eq!(options["ReachableAddresses"], "*:80,*:443,*:80");
+		assert_eq!(options["Socks5ProxyUsername"], "user");
+		assert_eq!(options["Socks5ProxyPassword"], "password");
+		for (username, password) in [
+			("user\nSocksPort 0", "password"),
+			("user", "password\rSocksPort 0"),
+			("user", "password\0"),
+		] {
+			proxy.username = Some(username.into());
+			proxy.password = Some(password.into());
+			assert!(matches!(proxy.clone().to_hashmap(), Err(Error::Proxy(_))));
+		}
 		assert!(TorProxy {
 			allowed_port: Some(vec![]),
 			..Default::default()
