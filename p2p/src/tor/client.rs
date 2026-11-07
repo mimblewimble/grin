@@ -18,7 +18,7 @@ use crate::tor::{Error, PostError};
 use arti_client::StreamPrefs;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, FutureExt};
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Body;
 use hyper::{Method, Request, Response, StatusCode, Uri};
@@ -206,46 +206,61 @@ async fn exchange<T: TorConfig>(
 		prefs.new_isolation_group();
 		(prefs, Some(format!("{:032x}", rand::random::<u128>())))
 	});
-	let mut connection = match state.cached.take().filter(|(target, connection)| {
+	let mut cached = state.cached.take().filter(|(target, connection)| {
 		target.scheme() == url.scheme()
 			&& target.authority() == url.authority()
 			&& !connection.sender.is_closed()
-	}) {
-		Some((_, connection)) => connection,
-		None => {
-			let connect = async {
-				if let Some(proxy) = &proxy {
-					match proxy {
-						TorOutboundProxy::Socks5(address) => {
-							connect_socks(address.clone(), &url, isolation.1.as_deref()).await
+	});
+	loop {
+		if Instant::now() >= deadline {
+			return Err(Error::Post(PostError::NotSent(
+				"Tor request timed out".into(),
+			)));
+		}
+		let reused = cached.is_some();
+		let mut connection = match cached.take() {
+			Some((_, connection)) => connection,
+			None => {
+				let connect = async {
+					if let Some(proxy) = &proxy {
+						match proxy {
+							TorOutboundProxy::Socks5(address) => {
+								connect_socks(address.clone(), &url, isolation.1.as_deref()).await
+							}
+							TorOutboundProxy::Http(_) => {
+								connect_http(proxy_uri.clone().unwrap(), &url).await
+							}
 						}
-						TorOutboundProxy::Http(_) => {
-							connect_http(proxy_uri.clone().unwrap(), &url).await
-						}
+					} else if config.use_integrated() {
+						crate::tor::arti::connect(config, &url, &isolation.0)
+							.await
+							.map_err(Error::Post)
+					} else {
+						connect_socks(config.socks_proxy_addr(), &url, isolation.1.as_deref()).await
 					}
-				} else if config.use_integrated() {
-					crate::tor::arti::connect(config, &url, &isolation.0)
-						.await
-						.map_err(Error::Post)
-				} else {
-					connect_socks(config.socks_proxy_addr(), &url, isolation.1.as_deref()).await
+				};
+				tokio::select! {
+					biased;
+					_ = closed.changed() => return Err(Error::Post(PostError::NotSent("Tor context closed".into()))),
+					result = timeout_at(deadline, connect) => result.map_err(|_| Error::Post(PostError::NotSent("Tor request timed out".into())))??,
 				}
-			};
-			tokio::select! {
-				biased;
-				_ = closed.changed() => return Err(Error::Post(PostError::NotSent("Tor context closed".into()))),
-				result = timeout_at(deadline, connect) => result.map_err(|_| Error::Post(PostError::NotSent("Tor request timed out".into())))??,
+			}
+		};
+		let response = connection
+			.send(request.clone(), limit, deadline, closed)
+			.await;
+		if reused && matches!(response, Err(PostError::NotSent(_))) {
+			continue;
+		}
+		if response.is_ok() || matches!(response, Err(PostError::PossiblySent(_, Some(_), Some(_))))
+		{
+			state.isolation = Some(isolation);
+			if !connection.sender.is_closed() {
+				state.cached = Some((url, connection));
 			}
 		}
-	};
-	let response = connection.send(request, limit, deadline, closed).await;
-	if response.is_ok() || matches!(response, Err(PostError::PossiblySent(_, Some(_), Some(_)))) {
-		state.isolation = Some(isolation);
-		if !connection.sender.is_closed() {
-			state.cached = Some((url, connection));
-		}
+		return response.map_err(Error::Post);
 	}
-	response.map_err(Error::Post)
 }
 
 async fn connect_socks(
@@ -308,7 +323,7 @@ impl HttpConnection {
 			.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
 		Ok(Self {
 			sender,
-			driver: Box::pin(driver),
+			driver: Box::pin(driver.fuse()),
 		})
 	}
 
@@ -322,11 +337,14 @@ impl HttpConnection {
 		let mut status = None;
 		let result = {
 			let response = async {
-				let response = self
-					.sender
-					.send_request(request)
-					.await
-					.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
+				let response = self.sender.try_send_request(request).await.map_err(|e| {
+					let message = format!("{:?}", e.error());
+					if e.message().is_some() {
+						PostError::NotSent(message)
+					} else {
+						PostError::PossiblySent(message, None, None)
+					}
+				})?;
 				status = Some(response.status());
 				read_response(response, limit).await
 			};
@@ -556,6 +574,33 @@ mod tests {
 			.await
 			.unwrap()
 			.unwrap();
+	}
+
+	#[tokio::test]
+	async fn idle_close() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let (close, idle) = oneshot::channel();
+		let server = tokio::spawn(async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+				.await
+				.unwrap();
+			idle.await.unwrap();
+		});
+		let mut connection = HttpConnection::open(TokioIo::new(stream)).await.unwrap();
+		let (_close, mut closed) = watch::channel(false);
+		let (_, request) =
+			build_request(Method::POST, String::new(), None, "http://example.onion/").unwrap();
+		let deadline = Instant::now() + Duration::from_secs(1);
+		connection
+			.send(request.clone(), 0, deadline, &mut closed)
+			.await
+			.unwrap();
+		close.send(()).unwrap();
+		server.await.unwrap();
+		assert!(!connection.sender.is_closed());
+		let result = connection.send(request, 0, deadline, &mut closed).await;
+		assert!(matches!(result, Err(PostError::NotSent(_))), "{:?}", result);
 	}
 
 	#[tokio::test]
