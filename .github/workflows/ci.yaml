@@ -18,13 +18,18 @@ jobs:
         job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
     steps:
       - uses: actions/checkout@v3
+      - name: Install SQLite
+        if: matrix.job_args == 'p2p'
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
       - name: Test ${{ matrix.job_args }}
         working-directory: ${{ matrix.job_args }}
         run: cargo test --release
-      - name: Test Tor (static)
+      - name: Test Tor
         if: matrix.job_args == 'p2p'
         working-directory: p2p
-        run: cargo test --release --features tor-static
+        run: |
+          cargo test --release --features tor
+          cargo test --release --features tor-static
 
   macos-tests:
     name: macOS Tests
@@ -47,6 +52,8 @@ jobs:
         uses: actions/checkout@v3
       - name: Tests
         run: cargo test --release --all
+      - name: Test Tor
+        run: cargo test --release -p grin_p2p --features tor-static
 
   telegram-notify:
     name: Telegram Notification

@@ -249,12 +249,11 @@ impl TorProcess {
 	// The tor process will have its stdout piped, so if the stdout lines are not consumed they
 	// will keep accumulating over time, increasing the consumed memory.
 	pub fn launch(&mut self) -> Result<&mut Self, Error> {
-		let mut command = Command::new(TOR_EXE_NAME);
-		command.args(["__OwningControllerProcess", &std::process::id().to_string()]);
-		self.launch_command(command)
+		self.launch_command(Command::new(TOR_EXE_NAME))
 	}
 
 	fn launch_command(&mut self, mut tor: Command) -> Result<&mut Self, Error> {
+		tor.args(["__OwningControllerProcess", &std::process::id().to_string()]);
 		if let Some(ref dir) = self.working_dir {
 			tor.current_dir(dir);
 		}
@@ -585,8 +584,11 @@ mod tests {
 		process.timeout(2);
 		process
 			.launch_command(command(
-				"echo 'May 16 02:50:08.792 [notice] Bootstrapped 100% (done): Done'
-exec /bin/sleep 60",
+				r#"set -e
+test "$0" = __OwningControllerProcess
+test "$1" = "$PPID"
+echo 'May 16 02:50:08.792 [notice] Bootstrapped 100% (done): Done'
+exec /bin/sleep 60"#,
 			))
 			.unwrap();
 		assert!(process.exit_status().unwrap().is_none());
