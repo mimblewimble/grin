@@ -463,6 +463,26 @@ mod tests {
 	}
 
 	#[test]
+	fn listener_address() {
+		let dir = tempfile::tempdir().unwrap();
+		let config = Config {
+			integrated: true,
+			dir: dir.path().join("tor"),
+			bridge: vec![TorBridgeConfig {
+				bridge_line: Some("invalid bridge".into()),
+				..Default::default()
+			}],
+			..Default::default()
+		};
+		let key = SecretKey::from_slice(&grin_util::secp::Secp256k1::new(), &[3; 32]).unwrap();
+		let result = start_onion_service(key, "invalid", &config);
+		assert!(
+			matches!(result, Err(Error::Config(message)) if message == "Invalid Tor listener address")
+		);
+		assert!(!config.dir.exists());
+	}
+
+	#[test]
 	fn ignored_proxy_warning() {
 		// Keep the global logger separate from other unit tests
 		if std::env::var_os("GRIN_TOR_PROXY_WARNING_TEST").is_none() {
@@ -508,10 +528,21 @@ mod tests {
 			..Default::default()
 		};
 		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
 		let messages = WARNINGS.0.lock().unwrap();
 		assert_eq!(messages.len(), 1);
 		assert!(messages[0].contains("proxy") && messages[0].contains("ignored"));
 		assert!(!messages[0].contains("private-user") && !messages[0].contains("private-password"));
+		drop(messages);
+		config.proxy.address = Some("127.0.0.1:2".into());
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert_eq!(WARNINGS.0.lock().unwrap().len(), 2);
+		let proxy = std::mem::take(&mut config.proxy);
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert_eq!(WARNINGS.0.lock().unwrap().len(), 2);
+		config.proxy = proxy;
+		assert!(matches!(start_tor(&config), Err(Error::Config(_))));
+		assert_eq!(WARNINGS.0.lock().unwrap().len(), 3);
 		assert!(!config.dir.exists());
 	}
 }

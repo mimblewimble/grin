@@ -14,7 +14,7 @@
 
 use crate::tor::client::HttpConnection;
 use crate::tor::config::{
-	request_timeout, TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
+	request_timeout, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
 };
 use crate::tor::status::spawn_status_logger;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
@@ -73,8 +73,8 @@ lazy_static! {
 	static ref ARTI_RUNTIME: LazyLock<Mutex<Option<ArtiRuntimeWrapper>>> =
 		LazyLock::new(|| Mutex::new(ArtiRuntimeWrapper::create().ok()));
 	/// Arti client and config.
-	static ref ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<Option<ArtiClientConfig>>> =
-		LazyLock::new(|| AsyncMutex::new(None));
+	static ref ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<(Option<ArtiClientConfig>, TorProxyConfig)>> =
+		LazyLock::new(|| AsyncMutex::new(Default::default()));
 	/// Running services, where key is onion address.
 	static ref ARTI_PROXY_SERVICES: LazyLock<Mutex<HashMap<String, TorService>>> =
 		LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -151,6 +151,9 @@ where
 	T: TorConfig,
 {
 	info!("Starting integrated Tor listener.");
+	let addr: SocketAddr = addr
+		.parse()
+		.map_err(|_| Error::Config("Invalid Tor listener address".into()))?;
 
 	let onion_address = service_address(&key)?;
 	if ARTI_PROXY_SERVICES
@@ -186,9 +189,6 @@ where
 				spawn_status_logger(client.runtime(), &service, onion_address.to_string())?;
 
 				// Launch service proxy.
-				let addr: SocketAddr = addr
-					.parse()
-					.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 				let proxy = create_service_proxy(addr)?;
 				let c = client.clone();
 				let p = proxy.clone();
@@ -316,8 +316,13 @@ async fn init_client<T>(
 where
 	T: TorConfig,
 {
-	if config.proxy_config() != &Default::default() {
-		warn!("Integrated Tor proxy configuration is ignored");
+	let mut state = ARTI_CLIENT_CONFIG.lock().await;
+	let (cached_client_config, proxy_config) = &mut *state;
+	if proxy_config != config.proxy_config() {
+		*proxy_config = config.proxy_config().clone();
+		if proxy_config != &Default::default() {
+			warn!("Integrated Tor proxy configuration is ignored");
+		}
 	}
 	let mut builder = TorClientConfigBuilder::from_directories(state_path, cache_path);
 	builder.address_filter().allow_onion_addrs(true);
@@ -336,7 +341,6 @@ where
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
 
 	// Return existing client if config was not changed.
-	let mut cached_client_config = ARTI_CLIENT_CONFIG.lock().await;
 	let connect_timeout = request_timeout(config);
 	builder.stream_timeouts().connect_timeout(connect_timeout);
 	let client_config = builder
