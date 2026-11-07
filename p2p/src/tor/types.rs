@@ -286,20 +286,22 @@ mod tests {
 		}
 	}
 
+	impl crate::tor::TorHttpClient<Config> for Config {
+		fn tor_config(&self) -> &Config {
+			self
+		}
+	}
+
 	#[tokio::test]
 	async fn reject_https() {
-		let config = Config::default();
+		use crate::tor::TorHttpClient;
+		let config = Config {
+			integrated: true,
+			..Default::default()
+		};
 		assert!(matches!(
-			crate::tor::arti::tor_request(
-				&config,
-				hyper::Method::POST,
-				String::new(),
-				None,
-				"https://example.onion/",
-				100
-			)
-			.await,
-			Err(PostError::NotSent(_))
+			config.check_tor("https://example.onion/").await,
+			Err(Error::Post(PostError::NotSent(_)))
 		));
 	}
 

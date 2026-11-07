@@ -12,21 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::arti::tor_request;
 use crate::tor::config::{request_timeout, TorConfig};
 use crate::tor::{Error, PostError};
 
+use arti_client::StreamPrefs;
 use async_trait::async_trait;
 use bytes::Bytes;
+use futures::future::BoxFuture;
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Body;
-use hyper::{Method, Request, Response, StatusCode};
+use hyper::{Method, Request, Response, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
-use hyper_util::client::legacy::Client;
-use hyper_util::rt::TokioExecutor;
 use serde::de::StdError;
 use std::collections::HashMap;
-use tokio::time::timeout;
+use tokio::sync::{watch, Mutex};
+use tokio::time::{timeout_at, Instant};
+use tower_service::Service;
+
+/// One connection per context, with fixed configuration
+pub struct TorContext<T> {
+	config: T,
+	state: Mutex<ConnectionState>,
+	closed: watch::Sender<bool>,
+}
+
+impl<T> TorContext<T> {
+	pub fn new(config: T) -> Self {
+		Self {
+			config,
+			state: Mutex::new(ConnectionState::default()),
+			closed: watch::channel(false).0,
+		}
+	}
+
+	/// Cancel pending requests and close the cached connection
+	pub async fn close(&self) {
+		self.closed.send_replace(true);
+		*self.state.lock().await = ConnectionState::default();
+	}
+}
+
+#[derive(Default)]
+struct ConnectionState {
+	cached: Option<(Uri, HttpConnection)>,
+	isolation: Option<(StreamPrefs, Option<String>)>,
+}
 
 /// Tor powered HTTP client to send requests.
 #[async_trait]
@@ -59,11 +89,75 @@ where
 	/// Send HEAD to check HTTP reachability within the request timeout
 	/// HTTP errors also confirm a response
 	async fn check_tor(&self, url: &str) -> Result<StatusCode, Error> {
-		match request_tor(self.tor_config(), Method::HEAD, url, None, String::new(), 0).await {
-			Ok(response) => Ok(response.status()),
-			Err(Error::Post(PostError::PossiblySent(_, Some(status), Some(_)))) => Ok(status),
-			Err(error) => Err(error),
+		probe_status(
+			request_tor(self.tor_config(), Method::HEAD, url, None, String::new(), 0).await,
+		)
+	}
+}
+
+#[async_trait]
+impl<T: TorConfig + Send + Sync> TorHttpClient<T> for TorContext<T> {
+	fn tor_config(&self) -> &T {
+		&self.config
+	}
+
+	async fn post_tor(
+		&self,
+		url: &str,
+		headers: Option<HashMap<&str, &str>>,
+		body: String,
+		response_limit: usize,
+	) -> Result<Response<String>, Error> {
+		self.request(Method::POST, url, headers, body, response_limit)
+			.await
+	}
+
+	async fn check_tor(&self, url: &str) -> Result<StatusCode, Error> {
+		probe_status(
+			self.request(Method::HEAD, url, None, String::new(), 0)
+				.await,
+		)
+	}
+}
+
+impl<T: TorConfig> TorContext<T> {
+	async fn request(
+		&self,
+		method: Method,
+		url: &str,
+		headers: Option<HashMap<&str, &str>>,
+		body: String,
+		limit: usize,
+	) -> Result<Response<String>, Error> {
+		let deadline = Instant::now() + request_timeout(&self.config);
+		let (url, request) = build_request(method, body, headers, url).map_err(Error::Post)?;
+		let mut closed = self.closed.subscribe();
+		if *closed.borrow() {
+			return Err(Error::Post(PostError::NotSent("Tor context closed".into())));
 		}
+		let mut state = tokio::select! {
+			biased;
+			_ = closed.changed() => return Err(Error::Post(PostError::NotSent("Tor context closed".into()))),
+			state = timeout_at(deadline, self.state.lock()) => state.map_err(|_| Error::Post(PostError::NotSent("Tor request timed out".into())))?,
+		};
+		exchange(
+			&self.config,
+			&mut state,
+			url,
+			request,
+			limit,
+			deadline,
+			&mut closed,
+		)
+		.await
+	}
+}
+
+fn probe_status(result: Result<Response<String>, Error>) -> Result<StatusCode, Error> {
+	match result {
+		Ok(response) => Ok(response.status()),
+		Err(Error::Post(PostError::PossiblySent(_, Some(status), Some(_)))) => Ok(status),
+		Err(error) => Err(error),
 	}
 }
 
@@ -75,36 +169,76 @@ async fn request_tor<T: TorConfig>(
 	body: String,
 	response_limit: usize,
 ) -> Result<Response<String>, Error> {
-	if config.use_integrated() {
-		return tor_request(config, method, body, headers, url, response_limit)
-			.await
-			.map_err(Error::Post);
-	}
-	let mut req = Request::builder().method(method).uri(url);
-	if let Some(headers) = headers {
-		for (name, value) in headers {
-			req = req.header(name, value);
-		}
-	}
-	let req = req
-		.body(Full::new(Bytes::from(body)))
-		.map_err(|e| Error::Post(PostError::NotSent(format!("Cannot build request: {}", e))))?;
-	send_socks_proxy(config, req, response_limit).await
+	let deadline = Instant::now() + request_timeout(config);
+	let (url, request) = build_request(method, body, headers, url).map_err(Error::Post)?;
+	let (_close, mut closed) = watch::channel(false);
+	exchange(
+		config,
+		&mut ConnectionState {
+			isolation: Some((StreamPrefs::default(), None)),
+			..Default::default()
+		},
+		url,
+		request,
+		response_limit,
+		deadline,
+		&mut closed,
+	)
+	.await
 }
 
-/// Send request over proxy.
-async fn send_socks_proxy<T, B>(
+async fn exchange<T: TorConfig>(
 	config: &T,
-	req: Request<B>,
-	response_limit: usize,
-) -> Result<Response<String>, Error>
-where
-	T: TorConfig,
-	B: Body + Send + 'static + Unpin,
-	<B as Body>::Data: Send,
-	B::Data: Send,
-	B::Error: Into<Box<dyn StdError + Send + Sync>>,
-{
+	state: &mut ConnectionState,
+	url: Uri,
+	request: Request<Full<Bytes>>,
+	limit: usize,
+	deadline: Instant,
+	closed: &mut watch::Receiver<bool>,
+) -> Result<Response<String>, Error> {
+	let isolation = state.isolation.take().unwrap_or_else(|| {
+		let mut prefs = StreamPrefs::default();
+		prefs.new_isolation_group();
+		(prefs, Some(format!("{:032x}", rand::random::<u128>())))
+	});
+	let mut connection = match state.cached.take().filter(|(target, connection)| {
+		target.scheme() == url.scheme()
+			&& target.authority() == url.authority()
+			&& !connection.sender.is_closed()
+	}) {
+		Some((_, connection)) => connection,
+		None => {
+			let connect = async {
+				if config.use_integrated() {
+					crate::tor::arti::connect(config, &url, &isolation.0)
+						.await
+						.map_err(Error::Post)
+				} else {
+					connect_socks(config, &url, isolation.1.as_deref()).await
+				}
+			};
+			tokio::select! {
+				biased;
+				_ = closed.changed() => return Err(Error::Post(PostError::NotSent("Tor context closed".into()))),
+				result = timeout_at(deadline, connect) => result.map_err(|_| Error::Post(PostError::NotSent("Tor request timed out".into())))??,
+			}
+		}
+	};
+	let response = connection.send(request, limit, deadline, closed).await;
+	if response.is_ok() || matches!(response, Err(PostError::PossiblySent(_, Some(_), Some(_)))) {
+		state.isolation = Some(isolation);
+		if !connection.sender.is_closed() {
+			state.cached = Some((url, connection));
+		}
+	}
+	response.map_err(Error::Post)
+}
+
+async fn connect_socks<T: TorConfig>(
+	config: &T,
+	url: &Uri,
+	isolation: Option<&str>,
+) -> Result<HttpConnection, Error> {
 	let mut addr = config.socks_proxy_addr();
 	let socks_prefix = "socks5://";
 	if addr.starts_with("http://") {
@@ -119,41 +253,104 @@ where
 	let uri = addr
 		.parse()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	let proxy = hyper_socks2::SocksConnector {
+	let mut proxy = hyper_socks2::SocksConnector {
 		proxy_addr: uri,
-		auth: None,
+		auth: isolation.map(|token| hyper_socks2::Auth::new(token, "tor")),
 		connector,
 	}
 	.with_tls()
 	.map_err(|err| Error::Generic(format!("Unable to create socks connector: {}", err)))?;
+	let stream = proxy.call(url.clone()).await.map_err(|e| {
+		Error::Post(PostError::NotSent(format!(
+			"Unable to connect over socks proxy: {:?}",
+			e
+		)))
+	})?;
+	HttpConnection::open(stream).await.map_err(Error::Post)
+}
 
-	debug!("socks_proxy: {:?}", proxy);
+pub(super) struct HttpConnection {
+	pub sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
+	pub driver: BoxFuture<'static, Result<(), hyper::Error>>,
+}
 
-	let client = Client::builder(TokioExecutor::new())
-		.retry_canceled_requests(false)
-		.build::<_, B>(proxy);
-	let mut status = None;
-	timeout(request_timeout(config), async {
-		let response = client.request(req).await.map_err(|e| {
-			let message = format!("Unable to send request over socks proxy: {:?}", e);
-			if e.is_connect() {
-				PostError::NotSent(message)
-			} else {
-				PostError::PossiblySent(message, None, None)
+impl HttpConnection {
+	pub async fn open<I>(io: I) -> Result<Self, PostError>
+	where
+		I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+	{
+		let (sender, driver) = hyper::client::conn::http1::handshake(io)
+			.await
+			.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
+		Ok(Self {
+			sender,
+			driver: Box::pin(driver),
+		})
+	}
+
+	async fn send(
+		&mut self,
+		request: Request<Full<Bytes>>,
+		limit: usize,
+		deadline: Instant,
+		closed: &mut watch::Receiver<bool>,
+	) -> Result<Response<String>, PostError> {
+		let mut status = None;
+		let result = {
+			let response = async {
+				let response = self
+					.sender
+					.send_request(request)
+					.await
+					.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
+				status = Some(response.status());
+				read_response(response, limit).await
+			};
+			let transfer = async {
+				tokio::pin!(response);
+				tokio::select! {
+					result = &mut response => result,
+					_ = &mut self.driver => response.await,
+				}
+			};
+			tokio::select! {
+				biased;
+				_ = closed.changed() => Err("Tor context closed"),
+				result = timeout_at(deadline, transfer) => result.map_err(|_| "Tor request timed out"),
 			}
-		})?;
-		status = Some(response.status());
-		read_response(response, response_limit).await
-	})
-	.await
-	.unwrap_or_else(|_| {
-		Err(PostError::PossiblySent(
-			"Tor request timed out".to_string(),
-			status,
-			None,
-		))
-	})
-	.map_err(Error::Post)
+		};
+		result.map_err(|e| PostError::PossiblySent(e.into(), status, None))?
+	}
+}
+
+/// Build an origin-form request
+fn build_request(
+	method: Method,
+	body: String,
+	headers: Option<HashMap<&str, &str>>,
+	url: &str,
+) -> Result<(Uri, Request<Full<Bytes>>), PostError> {
+	let url: Uri = url
+		.parse()
+		.map_err(|_| PostError::NotSent(format!("Bad URL: {}", url)))?;
+	if !matches!(url.scheme_str(), Some("http" | "https")) || url.host().is_none() {
+		return Err(PostError::NotSent(format!("Bad URL: {}", url)));
+	}
+	let mut req = Request::builder()
+		.method(method)
+		.uri(url.path_and_query().map(|p| p.as_str()).unwrap_or("/"));
+	if let Some(headers) = headers {
+		for (name, value) in headers {
+			req = req.header(name, value);
+		}
+	}
+	if !req.headers_ref().is_some_and(|h| h.contains_key("host")) {
+		req = req.header("host", url.authority().unwrap().as_str());
+	}
+	let request = req
+		.body(Full::from(body))
+		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
+	Ok((url, request))
 }
 
 pub(crate) async fn read_response<B>(
@@ -189,7 +386,12 @@ mod tests {
 	use http_body_util::StreamBody;
 	use hyper::body::Frame;
 	use hyper::StatusCode;
+	use hyper_util::rt::TokioIo;
 	use std::io;
+	use std::time::Duration;
+	use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+	use tokio::sync::oneshot;
+	use tokio::time::timeout;
 
 	#[tokio::test]
 	async fn response_status() {
@@ -257,5 +459,207 @@ mod tests {
 			read_response(Response::new(body), 100).await,
 			Err(PostError::PossiblySent(_, Some(StatusCode::OK), None))
 		));
+	}
+
+	async fn send_request(
+		stream: DuplexStream,
+		request: Request<Full<Bytes>>,
+		limit: usize,
+		deadline: Instant,
+	) -> Result<Response<String>, PostError> {
+		let (_close, mut closed) = watch::channel(false);
+		HttpConnection::open(TokioIo::new(stream))
+			.await?
+			.send(request, limit, deadline, &mut closed)
+			.await
+	}
+	#[test]
+	fn builds_origin_form_request() {
+		let url = "http://example.onion:8080/v1?test=1";
+		let mut headers = HashMap::new();
+		headers.insert("key", "value");
+		let (_, request) =
+			build_request(Method::POST, "{}".to_string(), Some(headers), url).unwrap();
+
+		assert_eq!(request.method(), Method::POST);
+		assert_eq!(request.uri(), "/v1?test=1");
+		assert_eq!(request.headers()["host"], "example.onion:8080");
+		assert_eq!(request.headers()["key"], "value");
+		let mut headers = HashMap::new();
+		headers.insert("Host", "custom.onion");
+		let (_, request) = build_request(Method::POST, String::new(), Some(headers), url).unwrap();
+		assert_eq!(request.headers().get_all("host").iter().count(), 1);
+		assert_eq!(request.headers()["host"], "custom.onion");
+	}
+
+	async fn read_headers(stream: &mut DuplexStream) {
+		let mut headers = Vec::new();
+		while !headers.ends_with(b"\r\n\r\n") {
+			headers.push(stream.read_u8().await.unwrap());
+		}
+	}
+
+	#[tokio::test]
+	async fn connection_reuse() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let server = tokio::spawn(async move {
+			for _ in 0..24 {
+				read_headers(&mut peer).await;
+				peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+					.await
+					.unwrap();
+			}
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		});
+		let mut connection = HttpConnection::open(TokioIo::new(stream)).await.unwrap();
+		let (_close, mut closed) = watch::channel(false);
+		for _ in 0..24 {
+			let (_, request) =
+				build_request(Method::POST, String::new(), None, "http://example.onion/").unwrap();
+			let response = connection
+				.send(
+					request,
+					2,
+					Instant::now() + Duration::from_secs(1),
+					&mut closed,
+				)
+				.await
+				.unwrap();
+			assert_eq!(response.body(), "ok");
+		}
+		drop(connection);
+		timeout(Duration::from_secs(1), server)
+			.await
+			.unwrap()
+			.unwrap();
+	}
+
+	#[tokio::test]
+	async fn context_close() {
+		let context = std::sync::Arc::new(TorContext::new(()));
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let (url, request) =
+			build_request(Method::POST, String::new(), None, "http://example.onion/").unwrap();
+		context.state.lock().await.cached = Some((
+			url,
+			HttpConnection::open(TokioIo::new(stream)).await.unwrap(),
+		));
+		let (sent, received) = oneshot::channel();
+		let server = tokio::spawn(async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nx")
+				.await
+				.unwrap();
+			sent.send(()).unwrap();
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		});
+		let active = context.clone();
+		let request = tokio::spawn(async move {
+			let mut closed = active.closed.subscribe();
+			let mut state = active.state.lock().await;
+			let (_, mut connection) = state.cached.take().unwrap();
+			connection
+				.send(
+					request,
+					2,
+					Instant::now() + Duration::from_secs(5),
+					&mut closed,
+				)
+				.await
+		});
+		timeout(Duration::from_secs(1), received)
+			.await
+			.unwrap()
+			.unwrap();
+		timeout(Duration::from_secs(1), context.close())
+			.await
+			.unwrap();
+		assert!(matches!(
+			request.await.unwrap(),
+			Err(PostError::PossiblySent(..))
+		));
+		timeout(Duration::from_secs(1), server)
+			.await
+			.unwrap()
+			.unwrap();
+		assert!(context.state.lock().await.cached.is_none());
+		context.close().await;
+	}
+
+	#[tokio::test]
+	async fn head_response() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let server = tokio::spawn(async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 100\r\n\r\n")
+				.await
+				.unwrap();
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		});
+		let url = "http://example.onion/";
+		let (_, request) = build_request(Method::HEAD, String::new(), None, url).unwrap();
+		let result =
+			send_request(stream, request, 0, Instant::now() + Duration::from_secs(1)).await;
+		assert!(
+			matches!(result, Err(super::PostError::PossiblySent(_, Some(status), Some(ref body))) if status.as_u16() == 503 && body.is_empty())
+		);
+		server.await.unwrap();
+	}
+
+	#[tokio::test]
+	async fn request_cancel() {
+		for response in ["", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx"] {
+			let (stream, mut peer) = tokio::io::duplex(1024);
+			let (sent, received) = oneshot::channel();
+			let server = tokio::spawn(async move {
+				read_headers(&mut peer).await;
+				peer.write_all(response.as_bytes()).await.unwrap();
+				sent.send(()).unwrap();
+				assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+			});
+			let url = "http://example.onion/";
+			let (_, request) = build_request(Method::POST, String::new(), None, url).unwrap();
+			let task = tokio::spawn(async move {
+				send_request(
+					stream,
+					request,
+					100,
+					Instant::now() + Duration::from_secs(1),
+				)
+				.await
+			});
+			timeout(Duration::from_secs(1), received)
+				.await
+				.unwrap()
+				.unwrap();
+			task.abort();
+			assert!(task.await.unwrap_err().is_cancelled());
+			timeout(Duration::from_secs(1), server)
+				.await
+				.unwrap()
+				.unwrap();
+		}
+	}
+
+	#[tokio::test]
+	async fn request_complete() {
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let server = async move {
+			read_headers(&mut peer).await;
+			peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+				.await
+				.unwrap();
+			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
+		};
+		let url = "http://example.onion/";
+		let (_, request) = build_request(Method::POST, String::new(), None, url).unwrap();
+		let deadline = Instant::now() + Duration::from_secs(1);
+		let response = send_request(stream, request, 2, deadline);
+		let (_, response) = timeout(Duration::from_secs(1), async {
+			tokio::join!(server, response)
+		})
+		.await
+		.unwrap();
+		assert_eq!(response.unwrap().body(), "ok");
 	}
 }

@@ -2271,6 +2271,7 @@ dependencies = [
  "tor-keymgr",
  "tor-llcrypto",
  "tor-rtcompat",
+ "tower-service",
  "tracing",
  "url",
 ]

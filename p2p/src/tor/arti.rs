@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::client::read_response;
+use crate::tor::client::HttpConnection;
 use crate::tor::config::{
 	request_timeout, TorConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
 };
@@ -25,13 +25,11 @@ use grin_util::secp::SecretKey;
 use arti_client::config::pt::TransportConfigBuilder;
 use arti_client::config::{BridgeConfigBuilder, Reconfigure, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
-use bytes::Bytes;
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
-use http_body_util::Full;
-use hyper::{Method, Request, Response, Uri};
+use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use lazy_static::lazy_static;
 use sha2::Sha512;
@@ -41,9 +39,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::time::{timeout_at, Instant};
 use tor_hscrypto::pk::{HsIdKey, HsIdKeypair};
 use tor_hsrproxy::config::{
 	Encapsulation, ProxyAction, ProxyConfigBuilder, ProxyPattern, ProxyRule, TargetAddr,
@@ -246,117 +242,33 @@ where
 	Ok(())
 }
 
-/// Build an origin-form request
-fn build_request(
-	method: Method,
-	body: String,
-	headers: Option<HashMap<&str, &str>>,
-	url: &Uri,
-) -> Result<Request<Full<Bytes>>, Error> {
-	let authority = url
-		.authority()
-		.ok_or_else(|| Error::Generic(format!("URL {} has bad authority", url)))?;
-	let request_target = url
-		.path_and_query()
-		.map(|path| path.as_str())
-		.unwrap_or("/");
-
-	let mut req = Request::builder().uri(request_target).method(method);
-	if let Some(headers) = headers {
-		for (k, v) in headers {
-			req = req.header(k, v);
-		}
-	}
-	req.header("host", authority.as_str())
-		.body(Full::from(body))
-		.map_err(|e| Error::Generic(format!("{:?}", e)))
-}
-
-/// Send HTTP request
-pub(crate) async fn tor_request<T>(
+pub(super) async fn connect<T: TorConfig>(
 	config: &T,
-	method: Method,
-	body: String,
-	headers: Option<HashMap<&str, &str>>,
-	url: &str,
-	response_limit: usize,
-) -> Result<Response<String>, PostError>
-where
-	T: TorConfig,
-{
-	let url = url.to_string();
-	let url: Uri = url
-		.parse()
-		.map_err(|_| PostError::NotSent(format!("Bad URL: {}", url)))?;
+	url: &Uri,
+	prefs: &arti_client::StreamPrefs,
+) -> Result<HttpConnection, PostError> {
 	if url.scheme_str() != Some("http") {
 		return Err(PostError::NotSent(
 			"Integrated Tor only supports HTTP requests".to_string(),
 		));
 	}
-	let host = match url.host() {
-		None => {
-			return Err(PostError::NotSent(format!("URL {} has bad host", url)));
-		}
-		Some(h) => h,
-	}
-	.to_string();
-	let port = url.port_u16().unwrap_or(80);
-	let request = build_request(method, body, headers, &url)
-		.map_err(|e| PostError::NotSent(format!("Cannot build request: {}", e)))?;
-	let deadline = Instant::now() + request_timeout(config);
-	// Keep the client until the request completes
-	let (_client, stream) = timeout_at(deadline, async {
-		let (state_path, cache_path) = state_cache_paths(config);
-		let (client, _) = init_client(&state_path, &cache_path, config)
-			.await
-			.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
-		client
-			.connect((host, port))
-			.await
-			.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))
-			.map(|stream| (client, stream))
-	})
-	.await
-	.map_err(|_| PostError::NotSent("Tor request timed out".into()))??;
-	send_request(stream, request, response_limit, deadline).await
-}
-
-async fn send_request<S>(
-	stream: S,
-	request: Request<Full<Bytes>>,
-	response_limit: usize,
-	deadline: Instant,
-) -> Result<Response<String>, PostError>
-where
-	S: AsyncRead + AsyncWrite + Unpin,
-{
-	let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+	let (state_path, cache_path) = state_cache_paths(config);
+	let (client, _) = init_client(&state_path, &cache_path, config)
 		.await
-		.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
-	let mut status = None;
-	let response = async {
-		let response = sender
-			.send_request(request)
-			.await
-			.map_err(|e| PostError::PossiblySent(format!("{:?}", e), None, None))?;
-		status = Some(response.status());
-		read_response(response, response_limit).await
-	};
-	timeout_at(deadline, async {
-		tokio::pin!(response);
-		// Keep the connection scoped to the request
-		tokio::select! {
-			result = &mut response => result,
-			result = connection => {
-				if let Err(e) = result {
-					error!("Tor connection error: {}", e);
-				}
-				response.await
-			}
-		}
+		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
+	let stream = client
+		.connect_with_prefs((url.host().unwrap(), url.port_u16().unwrap_or(80)), prefs)
+		.await
+		.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
+	let HttpConnection { sender, driver } = HttpConnection::open(TokioIo::new(stream)).await?;
+	Ok(HttpConnection {
+		sender,
+		driver: Box::pin(async move {
+			// Keep the client until the connection closes
+			let _client = client;
+			driver.await
+		}),
 	})
-	.await
-	.map_err(|_| PostError::PossiblySent("Tor request timed out".into(), status, None))?
 }
 
 /// Create Tor client.
@@ -561,112 +473,4 @@ fn add_service_key(
 		}
 	}
 	Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-	use super::{build_request, send_request};
-	use hyper::{Method, Uri};
-	use std::collections::HashMap;
-	use std::time::Duration;
-	use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
-	use tokio::sync::oneshot;
-	use tokio::time::{timeout, Instant};
-
-	#[test]
-	fn builds_origin_form_request() {
-		let url: Uri = "http://example.onion:8080/v1?test=1".parse().unwrap();
-		let mut headers = HashMap::new();
-		headers.insert("key", "value");
-		let request = build_request(Method::POST, "{}".to_string(), Some(headers), &url).unwrap();
-
-		assert_eq!(request.method(), Method::POST);
-		assert_eq!(request.uri(), "/v1?test=1");
-		assert_eq!(request.headers()["host"], "example.onion:8080");
-		assert_eq!(request.headers()["key"], "value");
-	}
-
-	async fn read_headers(stream: &mut DuplexStream) {
-		let mut headers = Vec::new();
-		while !headers.ends_with(b"\r\n\r\n") {
-			headers.push(stream.read_u8().await.unwrap());
-		}
-	}
-
-	#[tokio::test]
-	async fn head_response() {
-		let (stream, mut peer) = tokio::io::duplex(1024);
-		let server = tokio::spawn(async move {
-			read_headers(&mut peer).await;
-			peer.write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 100\r\n\r\n")
-				.await
-				.unwrap();
-			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
-		});
-		let url = "http://example.onion/".parse().unwrap();
-		let request = build_request(Method::HEAD, String::new(), None, &url).unwrap();
-		let result =
-			send_request(stream, request, 0, Instant::now() + Duration::from_secs(1)).await;
-		assert!(
-			matches!(result, Err(super::PostError::PossiblySent(_, Some(status), Some(ref body))) if status.as_u16() == 503 && body.is_empty())
-		);
-		server.await.unwrap();
-	}
-
-	#[tokio::test]
-	async fn request_cancel() {
-		for response in ["", "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nx"] {
-			let (stream, mut peer) = tokio::io::duplex(1024);
-			let (sent, received) = oneshot::channel();
-			let server = tokio::spawn(async move {
-				read_headers(&mut peer).await;
-				peer.write_all(response.as_bytes()).await.unwrap();
-				sent.send(()).unwrap();
-				assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
-			});
-			let url = "http://example.onion/".parse().unwrap();
-			let request = build_request(Method::POST, String::new(), None, &url).unwrap();
-			let task = tokio::spawn(async move {
-				send_request(
-					stream,
-					request,
-					100,
-					Instant::now() + Duration::from_secs(1),
-				)
-				.await
-			});
-			timeout(Duration::from_secs(1), received)
-				.await
-				.unwrap()
-				.unwrap();
-			task.abort();
-			assert!(task.await.unwrap_err().is_cancelled());
-			timeout(Duration::from_secs(1), server)
-				.await
-				.unwrap()
-				.unwrap();
-		}
-	}
-
-	#[tokio::test]
-	async fn request_complete() {
-		let (stream, mut peer) = tokio::io::duplex(1024);
-		let server = async move {
-			read_headers(&mut peer).await;
-			peer.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
-				.await
-				.unwrap();
-			assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
-		};
-		let url = "http://example.onion/".parse().unwrap();
-		let request = build_request(Method::POST, String::new(), None, &url).unwrap();
-		let deadline = Instant::now() + Duration::from_secs(1);
-		let response = send_request(stream, request, 2, deadline);
-		let (_, response) = timeout(Duration::from_secs(1), async {
-			tokio::join!(server, response)
-		})
-		.await
-		.unwrap();
-		assert_eq!(response.unwrap().body(), "ok");
-	}
 }
