@@ -21,10 +21,10 @@ jobs:
       - name: Test ${{ matrix.job_args }}
         working-directory: ${{ matrix.job_args }}
         run: cargo test --release
-      - name: Test Tor
+      - name: Test Tor (static)
         if: matrix.job_args == 'p2p'
         working-directory: p2p
-        run: cargo test --release --features tor
+        run: cargo test --release --features tor-static
 
   macos-tests:
     name: macOS Tests

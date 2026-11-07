@@ -31,7 +31,6 @@ use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
 use hyper::Uri;
 use hyper_util::rt::TokioIo;
-use lazy_static::lazy_static;
 use sha2::Sha512;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -68,17 +67,15 @@ type ArtiClientConfig = (
 	Duration,
 );
 
-lazy_static! {
-	/// Arti Tokio runtime.
-	static ref ARTI_RUNTIME: LazyLock<Mutex<Option<ArtiRuntimeWrapper>>> =
-		LazyLock::new(|| Mutex::new(ArtiRuntimeWrapper::create().ok()));
-	/// Arti client and config.
-	static ref ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<(Option<ArtiClientConfig>, TorProxyConfig)>> =
-		LazyLock::new(|| AsyncMutex::new(Default::default()));
-	/// Running services, where key is onion address.
-	static ref ARTI_PROXY_SERVICES: LazyLock<Mutex<HashMap<String, TorService>>> =
-		LazyLock::new(|| Mutex::new(HashMap::new()));
-}
+/// Arti Tokio runtime.
+static ARTI_RUNTIME: LazyLock<Mutex<Option<ArtiRuntimeWrapper>>> =
+	LazyLock::new(|| Mutex::new(ArtiRuntimeWrapper::create().ok()));
+/// Arti client and config.
+static ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<(Option<ArtiClientConfig>, TorProxyConfig)>> =
+	LazyLock::new(|| AsyncMutex::new(Default::default()));
+/// Running services, where key is onion address.
+static ARTI_PROXY_SERVICES: LazyLock<Mutex<HashMap<String, TorService>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Arti client runtime wrapper.
 #[derive(Clone)]

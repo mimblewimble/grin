@@ -21,7 +21,6 @@ use grin_util::secp::SecretKey;
 
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use hyper::StatusCode;
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, TryLockError};
 
@@ -80,17 +79,15 @@ pub fn service_address(key: &SecretKey) -> Result<String, Error> {
 
 type ProcessSlot = Arc<Mutex<Option<TorProcess>>>;
 
-lazy_static! {
-	/// Statuses on onion services, where key is onion address.
-	pub (crate) static ref SERVICE_STATUS: LazyLock<Mutex<HashMap<String, Arc<Mutex<ServiceStatus>>>>> =
-		LazyLock::new(|| Mutex::new(HashMap::new()));
-	/// External Tor sender
-	static ref RUNNING_PROCESS_SENDER: LazyLock<Mutex<Option<TorProcess>>> =
-		LazyLock::new(|| Mutex::new(None));
-	/// Service slots serialize start and stop for each onion address
-	static ref RUNNING_PROCESS_SERVICES: LazyLock<Mutex<HashMap<String, ProcessSlot>>> =
-		LazyLock::new(|| Mutex::new(HashMap::new()));
-}
+/// Statuses on onion services, where key is onion address.
+pub(crate) static SERVICE_STATUS: LazyLock<Mutex<HashMap<String, Arc<Mutex<ServiceStatus>>>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
+/// External Tor sender
+static RUNNING_PROCESS_SENDER: LazyLock<Mutex<Option<TorProcess>>> =
+	LazyLock::new(|| Mutex::new(None));
+/// Service slots serialize start and stop for each onion address
+static RUNNING_PROCESS_SERVICES: LazyLock<Mutex<HashMap<String, ProcessSlot>>> =
+	LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Start integrated Tor client or external process to send
 /// Reuse a live sender with the same configuration

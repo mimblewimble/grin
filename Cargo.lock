@@ -2250,7 +2250,6 @@ dependencies = [
  "hyper-socks2",
  "hyper-tls",
  "hyper-util",
- "lazy_static",
  "log",
  "lru-cache",
  "num 0.2.1",
