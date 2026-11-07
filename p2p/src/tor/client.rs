@@ -61,6 +61,7 @@ struct ConnectionState {
 }
 
 /// Tor powered HTTP client to send requests.
+/// Use TorContext to reuse connections and isolation
 #[async_trait]
 pub trait TorHttpClient<T>: Send + Sync
 where
@@ -177,7 +178,8 @@ async fn request_tor<T: TorConfig>(
 	exchange(
 		config,
 		&mut ConnectionState {
-			isolation: Some((StreamPrefs::default(), None)),
+			isolation: (!config.use_integrated() || config.outbound_proxy().is_some())
+				.then(|| (StreamPrefs::default(), None)),
 			..Default::default()
 		},
 		url,
