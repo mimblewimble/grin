@@ -130,11 +130,6 @@ pub(crate) fn client_args(transport: &str, configured: &[String]) -> Result<Vec<
 		};
 		index += 2;
 	}
-	if transport == "snowflake" && !args.iter().any(|arg| arg == "-url" || arg == "-ice") {
-		return Err(Error::Config(
-			"Missing snowflake URL or ICE argument".into(),
-		));
-	}
 	Ok(args)
 }
 
@@ -308,7 +303,16 @@ mod tests {
 
 	#[test]
 	fn client_flags() {
-		assert!(client_args("snowflake", &["-log-to-state-dir".into()]).is_err());
+		let bridge = TorBridgeConfig {
+			bridge_line: Some("snowflake 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=http://127.0.0.1:9/ ice=stun:127.0.0.1:9".into()),
+			client_args: vec!["-log".into(), "snowflake.log".into()],
+			..Default::default()
+		};
+		let parsed = bridge.parse().unwrap();
+		assert_eq!(
+			bridge.arguments(parsed.get_transport().unwrap()).unwrap(),
+			bridge.client_args
+		);
 		let defaults = client_args("snowflake", &[]).unwrap();
 		assert_eq!(
 			&defaults[..4],
