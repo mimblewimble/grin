@@ -262,10 +262,13 @@ pub(super) async fn connect<T: TorConfig>(
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.await
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
-	let stream = client
-		.connect_with_prefs((url.host().unwrap(), url.port_u16().unwrap_or(80)), prefs)
-		.await
-		.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
+	let target = (url.host().unwrap(), url.port_u16().unwrap_or(80));
+	let stream = match client.connect_with_prefs(target, prefs).await {
+		Ok(stream) => Ok(stream),
+		// Retry before sending the HTTP request
+		Err(_) => client.connect_with_prefs(target, prefs).await,
+	}
+	.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
 	let HttpConnection { sender, driver } = HttpConnection::open(TokioIo::new(stream)).await?;
 	Ok(HttpConnection {
 		sender,
