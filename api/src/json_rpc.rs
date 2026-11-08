@@ -60,6 +60,14 @@ impl Response {
 		if let Some(ref e) = self.error {
 			return Err(Error::Rpc(e.clone()));
 		}
+		if let Some(e) = self.result.as_ref().and_then(|r| r.get("Err")) {
+			return Err(RpcError {
+				code: -32000,
+				message: e.to_string(),
+				data: None,
+			}
+			.into());
+		}
 
 		let result = match self.result.clone() {
 			Some(r) => serde_json::from_value(r["Ok"].clone()).map_err(Error::Json),
@@ -276,7 +284,23 @@ pub fn _result_to_response(
 
 #[cfg(test)]
 mod tests {
-	use super::Error;
+	use super::{Error, Response};
+	use serde_json::Value;
+
+	#[test]
+	fn node_result() {
+		let mut response: Response = serde_json::from_str(
+			r#"{"jsonrpc":"2.0","result":{"Err":{"Internal":"failed to validate tx"}},"id":1}"#,
+		)
+		.unwrap();
+		let error = response.result::<Value>().unwrap_err();
+		assert!(error.to_string().contains("failed to validate tx"));
+		assert!(response.clone().into_result::<()>().is_err());
+
+		response.result = Some(serde_json::json!({"Ok": null}));
+		response.result::<()>().unwrap();
+		assert!(response.into_result::<Value>().unwrap().is_null());
+	}
 
 	#[test]
 	fn display() {
