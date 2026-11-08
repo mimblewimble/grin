@@ -43,7 +43,6 @@ http-body-util = { version = "0.1.3", optional = true }
 ed25519-dalek = { version = "2", features = ["hazmat", "digest"], optional = true }
 regex = { version = "1.12.4", optional = true }
 sysinfo = { version = "0.29", optional = true }
-timer = { version = "0.2", optional = true }
 thiserror = { version = "2", optional = true }
 data-encoding = { version = "2", optional = true }
 sha3 = { version = "0.8", optional = true }
@@ -87,7 +86,6 @@ tor = [
     "ed25519-dalek",
     "regex",
     "sysinfo",
-    "timer",
     "thiserror",
     "data-encoding",
     "sha3",

@@ -67,11 +67,11 @@ type ArtiClientConfig = (
 	TorClientConfig,
 	Duration,
 	arti_client::StreamPrefs,
+	ClientRuntime,
 );
 
 /// Arti Tokio runtime.
-static ARTI_RUNTIME: LazyLock<Mutex<Option<ArtiRuntimeWrapper>>> =
-	LazyLock::new(|| Mutex::new(ArtiRuntimeWrapper::create().ok()));
+static ARTI_RUNTIME: Mutex<Option<TokioNativeTlsRuntime>> = Mutex::new(None);
 /// Arti client and config.
 static ARTI_CLIENT_CONFIG: LazyLock<AsyncMutex<(Option<ArtiClientConfig>, TorProxyConfig)>> =
 	LazyLock::new(|| AsyncMutex::new(Default::default()));
@@ -80,16 +80,29 @@ static ARTI_PROXY_SERVICES: LazyLock<Mutex<HashMap<String, TorService>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Arti client runtime wrapper.
-#[derive(Clone)]
-struct ArtiRuntimeWrapper {
+struct ClientRuntime {
 	runtime: TokioNativeTlsRuntime,
+	executor: Option<tokio::runtime::Runtime>,
 }
 
-impl ArtiRuntimeWrapper {
-	fn create() -> Result<ArtiRuntimeWrapper, std::io::Error> {
+impl ClientRuntime {
+	fn create() -> Result<ClientRuntime, Error> {
+		let executor = tokio::runtime::Builder::new_multi_thread()
+			.enable_all()
+			.build()
+			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 		Ok(Self {
-			runtime: TokioNativeTlsRuntime::create()?,
+			runtime: executor.handle().clone().into(),
+			executor: Some(executor),
 		})
+	}
+}
+
+impl Drop for ClientRuntime {
+	fn drop(&mut self) {
+		if let Some(executor) = self.executor.take() {
+			executor.shutdown_background();
+		}
 	}
 }
 
@@ -97,11 +110,12 @@ impl ArtiRuntimeWrapper {
 fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
 	let mut runtime = ARTI_RUNTIME.lock().unwrap();
 	let r = match runtime.as_ref() {
-		None => runtime
-			.insert(ArtiRuntimeWrapper::create().map_err(|e| Error::Generic(format!("{:?}", e)))?),
+		None => runtime.insert(
+			TokioNativeTlsRuntime::create().map_err(|e| Error::Generic(format!("{:?}", e)))?,
+		),
 		Some(r) => r,
 	};
-	Ok(r.runtime.clone())
+	Ok(r.clone())
 }
 
 /// Stop running Tor service by onion address as key.
@@ -395,7 +409,7 @@ where
 	let client_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	if let Some((client, c, timeout, _)) = cached_client_config.as_mut() {
+	if let Some((client, c, timeout, _, _)) = cached_client_config.as_mut() {
 		if c == &arti_config {
 			// A shorter request must not shorten another request's connect budget
 			if connect_timeout > *timeout {
@@ -416,12 +430,13 @@ where
 			*cached_client_config = None;
 		}
 	}
-	let client = launch_client(client_config, config).await?;
+	let (client, runtime) = launch_client(client_config, config).await?;
 	cached_client_config.replace((
 		client.clone(),
 		arti_config.clone(),
 		connect_timeout,
 		Default::default(),
+		runtime,
 	));
 	Ok((client, arti_config))
 }
@@ -430,7 +445,7 @@ where
 async fn launch_client<T>(
 	client_config: TorClientConfig,
 	config: &T,
-) -> Result<Arc<TorClient<TokioNativeTlsRuntime>>, Error>
+) -> Result<(Arc<TorClient<TokioNativeTlsRuntime>>, ClientRuntime), Error>
 where
 	T: TorConfig,
 {
@@ -441,11 +456,10 @@ where
 			.unwrap_or(BOOTSTRAP_TIMEOUT_SECS),
 	);
 	tokio::time::timeout(timeout, async {
-		// Arti runtime creation enters block_on internally
-		let runtime = tokio::task::spawn_blocking(runtime)
+		let runtime = tokio::task::spawn_blocking(ClientRuntime::create)
 			.await
 			.map_err(|e| Error::Generic(format!("{:?}", e)))??;
-		let client = TorClient::with_runtime(runtime)
+		let client = TorClient::with_runtime(runtime.runtime.clone())
 			.config(client_config)
 			.create_unbootstrapped_async()
 			.await
@@ -455,7 +469,7 @@ where
 			.await
 			.map_err(|e| Error::Generic(format!("{:?}", e)))?;
 		info!("Tor client bootstrapped successfully");
-		Ok(client)
+		Ok((client, runtime))
 	})
 	.await
 	.map_err(|e| Error::Generic(format!("{:?}", e)))?
@@ -544,6 +558,30 @@ fn add_service_key(
 mod tests {
 	use super::*;
 	use crate::tor::config::TorBridgeConfig;
+
+	#[tokio::test]
+	async fn runtime_drop() {
+		let runtime = tokio::task::spawn_blocking(ClientRuntime::create)
+			.await
+			.unwrap()
+			.unwrap();
+		let handle = runtime.runtime.clone();
+		let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+		let (stopped_tx, stopped_rx) = tokio::sync::oneshot::channel::<()>();
+		handle
+			.spawn(async move {
+				let _stopped = stopped_tx;
+				started_tx.send(()).unwrap();
+				std::future::pending::<()>().await;
+			})
+			.unwrap();
+		started_rx.await.unwrap();
+		drop(runtime);
+		assert!(tokio::time::timeout(Duration::from_secs(2), stopped_rx)
+			.await
+			.unwrap()
+			.is_err());
+	}
 
 	#[test]
 	fn bridge_list() {

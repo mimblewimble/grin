@@ -45,10 +45,6 @@
 //! Tor process control
 //! Derived from https://github.com/Dhole/rust-tor-controller.git
 
-extern crate chrono;
-extern crate regex;
-extern crate timer;
-
 use crate::tor::config::{TorBridgeConfig, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS};
 use crate::tor::ov3::OnionV3Error;
 use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
@@ -59,14 +55,13 @@ use grin_util::secp::SecretKey;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Write;
-use std::io::{BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::net::SocketAddr;
 use std::path::{Path, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, RecvTimeoutError};
 use std::thread;
-use std::{cmp, io};
+use std::time::Duration;
 use sysinfo::{Process, System, SystemExt};
 
 #[cfg(windows)]
@@ -290,14 +285,6 @@ impl TorProcess {
 		let completion_percent = self.completion_percent;
 
 		let (stdout_tx, stdout_rx) = channel();
-		let stdout_timeout_tx = stdout_tx.clone();
-
-		let timer = timer::Timer::new();
-		// Keep this below chrono's DateTime range used by timer.
-		let timeout = chrono::Duration::seconds(cmp::min(self.timeout, u32::MAX as u64) as i64);
-		let _guard = timer.schedule_with_delay(timeout, move || {
-			stdout_timeout_tx.send(Err(Error::Timeout)).unwrap_or(());
-		});
 		self.readers.push(thread::spawn(move || {
 			let mut stdout = stdout;
 			let result = Self::parse_tor_stdout(&mut stdout, completion_percent);
@@ -309,7 +296,14 @@ impl TorProcess {
 				Ok(0)
 			}
 		}));
-		match stdout_rx.recv().unwrap() {
+		let result = match stdout_rx.recv_timeout(Duration::from_secs(self.timeout)) {
+			Ok(result) => result,
+			Err(RecvTimeoutError::Timeout) => Err(Error::Timeout),
+			Err(RecvTimeoutError::Disconnected) => {
+				Err(Error::Process("Tor stdout reader stopped".into()))
+			}
+		};
+		match result {
 			Ok(()) => Ok(self),
 			Err(err) => {
 				let exit = self.exit_status()?;
