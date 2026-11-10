@@ -9,6 +9,8 @@ This API version uses jsonrpc for its requests. It is split up in a foreign API 
 - [Owner API](https://docs.rs/grin_api/latest/grin_api/trait.OwnerRpc.html)
 - [Foreign API](https://docs.rs/grin_api/latest/grin_api/trait.ForeignRpc.html)
 
+Both endpoints answer the `rpc.discover` method with an [OpenRPC](https://spec.open-rpc.org) document describing their methods (sources: [`api/openrpc/`](../../api/openrpc)). It can be loaded into OpenRPC tools such as the playground or client generators.
+
 Basic auth passwords can be found in `.api_secret`/`.foreign_api_secret` files respectively.
 
 ## Node API v1
