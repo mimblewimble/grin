@@ -14,7 +14,8 @@
 
 use crate::tor::client::HttpConnection;
 use crate::tor::config::{
-	request_timeout, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS, MIN_CIRCUIT_TIMEOUT_MS,
+	request_timeout, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS, CONNECT_RETRY_INTERVAL,
+	CONNECT_TIMEOUT, MIN_CIRCUIT_TIMEOUT_MS,
 };
 use crate::tor::status::spawn_status_logger;
 use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
@@ -29,7 +30,7 @@ use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
 use fs_mistrust::Mistrust;
 use fslock_guard::LockFileGuard;
-use futures::{task::SpawnExt, FutureExt};
+use futures::task::SpawnExt;
 use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use sha2::Sha512;
@@ -282,7 +283,7 @@ pub(super) async fn connect<T: TorConfig>(
 	let (client, _) = init_client(&state_path, &cache_path, config)
 		.await
 		.map_err(|e| PostError::NotSent(format!("Cannot init client: {}", e)))?;
-	let initial = match &prefs {
+	let mut selected = match &prefs {
 		Some(prefs) => (*prefs).clone(),
 		None => {
 			let state = ARTI_CLIENT_CONFIG.lock().await;
@@ -290,34 +291,27 @@ pub(super) async fn connect<T: TorConfig>(
 		}
 	};
 	let target = (url.host().unwrap(), url.port_u16().unwrap_or(80));
-	let (stream, selected) = {
-		let client_ref = &client;
-		let connect = |prefs: arti_client::StreamPrefs| async move {
-			client_ref
-				.connect_with_prefs(target, &prefs)
-				.await
-				.map(|stream| (stream, prefs))
-		};
-		let mut first = async {
-			match connect(initial.clone()).await {
-				Ok(connected) => Ok(connected),
-				Err(_) => connect(initial.clone()).await,
-			}
+	let stream = loop {
+		let start = tokio::time::Instant::now();
+		if start >= deadline {
+			return Err(PostError::NotSent("Connection timed out".into()));
 		}
-		.boxed();
-		let wait = deadline.saturating_duration_since(tokio::time::Instant::now()) / 2;
-		match tokio::time::timeout(wait, &mut first).await {
-			Ok(result) => result,
+		let until = deadline.min(start + CONNECT_TIMEOUT);
+		let result = tokio::time::timeout_at(until, client.connect_with_prefs(target, &selected))
+			.await
+			.map_err(|_| PostError::NotSent("Connection timed out".into()))
+			.and_then(|result| {
+				result.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))
+			});
+		match result {
+			Ok(stream) => break stream,
+			Err(e) if tokio::time::Instant::now() >= deadline => return Err(e),
 			Err(_) => {
-				let mut alternative = initial.clone();
-				alternative.new_isolation_group();
-				futures::future::select_ok([first, connect(alternative).boxed()])
-					.await
-					.map(|(connected, _)| connected)
+				selected.new_isolation_group();
 			}
 		}
-	}
-	.map_err(|e| PostError::NotSent(format!("Connection: {:?}", e)))?;
+		tokio::time::sleep_until(deadline.min(start + CONNECT_RETRY_INTERVAL)).await;
+	};
 	if let Some(prefs) = prefs {
 		*prefs = selected;
 	} else {

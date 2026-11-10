@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::config::{request_timeout, TorConfig, TorOutboundProxy};
+use crate::tor::config::{
+	request_timeout, TorConfig, TorOutboundProxy, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
+};
 use crate::tor::{Error, PostError};
 
 use arti_client::StreamPrefs;
@@ -208,7 +210,7 @@ async fn exchange<T: TorConfig>(
 	let mut isolation = state.isolation.take().unwrap_or_else(|| {
 		let mut prefs = StreamPrefs::default();
 		prefs.new_isolation_group();
-		(prefs, Some(format!("{:032x}", rand::random::<u128>())))
+		(prefs, Some(isolation_token()))
 	});
 	let mut cached = state.cached.take().filter(|(target, connection)| {
 		target.scheme() == url.scheme()
@@ -241,7 +243,7 @@ async fn exchange<T: TorConfig>(
 							.await
 							.map_err(Error::Post)
 					} else {
-						connect_socks(config.socks_proxy_addr(), &url, isolation.1.as_deref()).await
+						connect_native(config, &url, &mut isolation.1, deadline).await
 					}
 				};
 				tokio::select! {
@@ -267,6 +269,56 @@ async fn exchange<T: TorConfig>(
 			state.cached = Some((url, connection));
 		}
 		return response.map_err(Error::Post);
+	}
+}
+
+fn isolation_token() -> String {
+	format!("{:032x}", rand::random::<u128>())
+}
+
+async fn connect_native<T: TorConfig>(
+	config: &T,
+	url: &Uri,
+	isolation: &mut Option<String>,
+	deadline: Instant,
+) -> Result<HttpConnection, Error> {
+	let onion = url
+		.host()
+		.filter(|host| host.ends_with(".onion"))
+		.and_then(|host| crate::tor::ov3::OnionV3Address::try_from(host).ok());
+	let Some((shared_isolation, _)) = crate::tor::types::sender_isolation(config).zip(onion) else {
+		return connect_socks(config.socks_proxy_addr(), url, isolation.as_deref()).await;
+	};
+	let shared = isolation.is_none();
+	if shared {
+		*isolation = shared_isolation.lock().unwrap().clone();
+	}
+	loop {
+		let start = Instant::now();
+		if start >= deadline {
+			return Err(Error::Post(PostError::NotSent(
+				"Connection timed out".into(),
+			)));
+		}
+		let until = deadline.min(start + CONNECT_TIMEOUT);
+		let result = timeout_at(
+			until,
+			connect_socks(config.socks_proxy_addr(), url, isolation.as_deref()),
+		)
+		.await
+		.map_err(|_| Error::Post(PostError::NotSent("Connection timed out".into())))
+		.and_then(|result| result);
+		match result {
+			Ok(connection) => {
+				if shared {
+					*shared_isolation.lock().unwrap() = isolation.clone();
+				}
+				return Ok(connection);
+			}
+			Err(e) if Instant::now() >= deadline => return Err(e),
+			Err(_) => *isolation = Some(isolation_token()),
+		}
+		tokio::time::sleep_until(deadline.min(start + CONNECT_RETRY_INTERVAL)).await;
 	}
 }
 

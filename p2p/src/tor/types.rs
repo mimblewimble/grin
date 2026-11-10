@@ -15,7 +15,7 @@
 use crate::tor::arti::{start_tor_client, start_tor_service, stop_tor_service};
 use crate::tor::config::TorConfig;
 use crate::tor::ov3::OnionV3Address;
-use crate::tor::process::types::TorProcess;
+use crate::tor::process::types::{SenderIsolation, TorProcess};
 
 use grin_util::secp::SecretKey;
 
@@ -118,6 +118,15 @@ where
 	stop_process(&mut sender)?;
 	*sender = Some(TorProcess::start_sender(config)?);
 	Ok(())
+}
+
+pub(super) fn sender_isolation<T: TorConfig>(config: &T) -> Option<SenderIsolation> {
+	let mut sender = RUNNING_PROCESS_SENDER.try_lock().ok()?;
+	let process = sender.as_mut()?;
+	if !process.matches_sender(config) || process.exit_status().ok()?.is_some() {
+		return None;
+	}
+	Some(process.sender_isolation.clone())
 }
 
 /// Stop the external Tor sender and wait for its process and readers

@@ -60,6 +60,7 @@ use std::net::SocketAddr;
 use std::path::{Path, MAIN_SEPARATOR};
 use std::process::{Child, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use sysinfo::{Process, System, SystemExt};
@@ -84,6 +85,8 @@ pub enum Error {
 	OnionError(OnionV3Error),
 }
 
+pub(crate) type SenderIsolation = Arc<Mutex<Option<String>>>;
+
 pub(crate) struct TorProcess {
 	torrc_path: Option<String>,
 	completion_percent: u8,
@@ -94,6 +97,7 @@ pub(crate) struct TorProcess {
 	sys: System,
 	dir_lock: Option<LockFileGuard>,
 	sender_config: Option<(String, Vec<TorBridgeConfig>, TorProxyConfig)>,
+	pub sender_isolation: SenderIsolation,
 }
 
 impl Default for TorProcess {
@@ -108,6 +112,7 @@ impl Default for TorProcess {
 			sys: System::new(),
 			dir_lock: None,
 			sender_config: None,
+			sender_isolation: Arc::default(),
 		}
 	}
 }

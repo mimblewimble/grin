@@ -28,6 +28,10 @@ pub const BOOTSTRAP_TIMEOUT_SECS: u64 = 60;
 /// Default minimum Tor circuit build timeout in milliseconds.
 pub const MIN_CIRCUIT_TIMEOUT_MS: i32 = 2_000;
 
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+pub(crate) const CONNECT_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+pub(crate) const NATIVE_INITIAL_CIRCUIT_TIMEOUT_SECS: u64 = 15;
+
 pub trait TorConfig {
 	/// Whether to use integrated Tor library.
 	fn use_integrated(&self) -> bool;

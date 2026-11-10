@@ -15,6 +15,7 @@
 //! Tor Configuration + Onion (Hidden) Service operations
 use crate::util::secp::key::SecretKey;
 
+use crate::tor::config::NATIVE_INITIAL_CIRCUIT_TIMEOUT_SECS;
 use crate::tor::ov3::OnionV3Address;
 use crate::tor::process::types::Error;
 use crate::tor::types::exp_sec_key_bytes;
@@ -174,6 +175,12 @@ pub fn output_torrc(
 	let mut props = TorRcConfig::new();
 	props.add_item("SocksPort", socks_port);
 	props.add_item("DataDirectory", &tor_data_dir);
+	if service_dirs.is_empty() {
+		props.add_item(
+			"CircuitBuildTimeout",
+			&NATIVE_INITIAL_CIRCUIT_TIMEOUT_SECS.to_string(),
+		);
+	}
 
 	for dir in service_dirs {
 		let service_file_name = format!("./{}{}{}", HIDDEN_SERVICES_DIR, MAIN_SEPARATOR, dir);
