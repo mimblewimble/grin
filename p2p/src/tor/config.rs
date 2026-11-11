@@ -241,7 +241,11 @@ mod tests {
 
 	#[test]
 	fn bridge_transport() {
-		assert!(TorBridgeConfig::default().parse().is_err());
+		let bridge = TorBridgeConfig {
+			bridge_bin_path: Some("/tmp/run".to_string()),
+			..Default::default()
+		};
+		assert!(bridge.parse().is_err());
 		let mut bridge: TorBridgeConfig = serde_json::from_str(
 			r#"{"bridge_line":"192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567"}"#,
 		)
