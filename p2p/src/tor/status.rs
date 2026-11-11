@@ -137,17 +137,26 @@ where
 
 fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: Option<&str>) {
 	use OnionServiceState::*;
+	debug!("Onion service status {status:?}, new state: {state:?}");
 	*status = match state {
 		Running => ServiceStatus::Running,
 		DegradedReachable => ServiceStatus::Degraded,
 		Recovering => ServiceStatus::Recovering,
-		Bootstrapping if !matches!(status, ServiceStatus::Starting) => ServiceStatus::Recovering,
+		Bootstrapping => {
+			if matches!(status, ServiceStatus::Starting)
+				&& !matches!(status, ServiceStatus::Degraded)
+			{
+				ServiceStatus::Recovering
+			} else {
+				ServiceStatus::Running
+			}
+		}
 		Broken | DegradedUnreachable => ServiceStatus::Errored(Error::Generic(
 			problem
 				.map(str::to_owned)
 				.unwrap_or_else(|| format!("Onion service is {:?}", state)),
 		)),
-		Shutdown => ServiceStatus::Stopped,
+		Shutdown if !matches!(status, ServiceStatus::Starting) => ServiceStatus::Stopped,
 		_ => ServiceStatus::Starting,
 	};
 }
