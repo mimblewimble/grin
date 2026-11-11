@@ -21,7 +21,7 @@ use crate::msg::{
 	OutputSegmentResponse, PeerAddrs, Pong, SegmentRequest, SegmentResponse, TxHashSetArchive,
 	Type,
 };
-use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo};
+use crate::types::{AttachmentMeta, Error, NetAdapter, PeerInfo, MAX_HEADER_PROOF_ITEMS};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::fs::{self, File};
@@ -458,6 +458,45 @@ impl MessageHandler for Protocol {
 				adapter.receive_kernel_segment(block_hash, segment, &self.peer_info)?;
 				Consumed::None
 			}
+			Message::GetHeaderProofs(req) => {
+				// HEADER_PROOF_HIST is a *server* capability ("this node
+				// serves"); a requester does not have to advertise it (nor
+				// PIHD_HIST). The adapter applies the per-IP request budget and
+				// answers only if it has the data.
+				//
+				// Semantic validation of the requested heights is done here
+				// (not in the wire parser) so that an invalid request is simply
+				// ignored, without banning.
+				if req.heights.is_empty() || req.heights.len() > MAX_HEADER_PROOF_ITEMS as usize {
+					debug!(
+						"handle_payload: ignoring GetHeaderProofs with invalid count {}",
+						req.heights.len()
+					);
+					return Ok(Consumed::None);
+				}
+				if req.heights.windows(2).any(|w| w[0] >= w[1]) {
+					debug!(
+						"handle_payload: ignoring GetHeaderProofs with unsorted/duplicate heights"
+					);
+					return Ok(Consumed::None);
+				}
+				match adapter.get_header_proofs(req.anchor, &req.heights, &self.peer_info)? {
+					Some(proofs) => Consumed::Response(Msg::new(
+						Type::HeaderProofs,
+						proofs,
+						self.peer_info.version,
+					)?),
+					// Missing/invalid anchor or headers: ignore, do not ban.
+					None => Consumed::None,
+				}
+			}
+
+			Message::HeaderProofs(_proofs) => {
+				// A serving node does not initiate proofs requests, so a received
+				// response is unsolicited here. Ignore it (no ban).
+				Consumed::None
+			}
+
 			Message::Unknown(_) => Consumed::None,
 		};
 		Ok(consumed)
@@ -468,11 +507,12 @@ impl MessageHandler for Protocol {
 mod tests {
 	use super::*;
 	use crate::conn::Tracker;
+	use crate::core::core::hash::Hash;
 	use crate::core::core::SegmentIdentifier;
 	use crate::core::global;
 	use crate::core::pow::Difficulty;
 	use crate::core::ser::ProtocolVersion;
-	use crate::msg::{read_message, write_message};
+	use crate::msg::{read_message, write_message, GetHeaderProofs};
 	use crate::serv::DummyAdapter;
 	use crate::types::{
 		Capabilities, Direction, PeerAddr, PeerLiveInfo, PIHD_HEADER_SEGMENT_HEIGHT,
@@ -542,6 +582,324 @@ mod tests {
 			}))
 			.expect("get header segment handling");
 
+		assert!(matches!(consumed, Consumed::None));
+	}
+
+	fn header_proofs_request(heights: Vec<u64>) -> Message {
+		Message::GetHeaderProofs(GetHeaderProofs {
+			anchor: crate::core::core::hash::ZERO_HASH,
+			heights,
+		})
+	}
+
+	fn canned_header_proofs() -> crate::msg::HeaderProofs {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		let header = crate::core::core::BlockHeader::default();
+		crate::msg::HeaderProofs {
+			anchor: header.hash(),
+			mmr_size: 0,
+			items: vec![crate::msg::HeaderProofItem {
+				header,
+				path: vec![],
+			}],
+		}
+	}
+
+	/// Minimal adapter that serves a canned `HeaderProofs` response.
+	///
+	/// Only `get_header_proofs` is exercised by the `GetHeaderProofs` handler;
+	/// all other methods are unreachable in these tests. This adapter has no
+	/// requester-capability requirement (server-only capability policy).
+	struct HeaderProofsTestAdapter {
+		proofs: crate::msg::HeaderProofs,
+	}
+
+	impl crate::types::ChainAdapter for HeaderProofsTestAdapter {
+		fn total_difficulty(&self) -> Result<Difficulty, chain::Error> {
+			unimplemented!()
+		}
+		fn total_height(&self) -> Result<u64, chain::Error> {
+			unimplemented!()
+		}
+		fn transaction_received(
+			&self,
+			_tx: crate::core::core::Transaction,
+			_stem: bool,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn get_transaction(&self, _kernel_hash: Hash) -> Option<crate::core::core::Transaction> {
+			unimplemented!()
+		}
+		fn tx_kernel_received(
+			&self,
+			_kernel_hash: Hash,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn block_received(
+			&self,
+			_b: crate::core::core::Block,
+			_peer_info: &PeerInfo,
+			_opts: chain::Options,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn compact_block_received(
+			&self,
+			_cb: crate::core::core::CompactBlock,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn header_received(
+			&self,
+			_bh: crate::core::core::BlockHeader,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn headers_received(
+			&self,
+			_bh: &[crate::core::core::BlockHeader],
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn locate_headers(
+			&self,
+			_locator: &[Hash],
+		) -> Result<Vec<crate::core::core::BlockHeader>, chain::Error> {
+			unimplemented!()
+		}
+		fn locate_header_segment(
+			&self,
+			_id: SegmentIdentifier,
+			_peer_info: &PeerInfo,
+		) -> Result<Option<Vec<crate::core::core::BlockHeader>>, chain::Error> {
+			unimplemented!()
+		}
+		fn get_header_proofs(
+			&self,
+			_anchor: Hash,
+			_heights: &[u64],
+			_peer_info: &PeerInfo,
+		) -> Result<Option<crate::msg::HeaderProofs>, chain::Error> {
+			let src = &self.proofs;
+			Ok(Some(crate::msg::HeaderProofs {
+				anchor: src.anchor,
+				mmr_size: src.mmr_size,
+				items: src
+					.items
+					.iter()
+					.map(|i| crate::msg::HeaderProofItem {
+						header: i.header.clone(),
+						path: i.path.clone(),
+					})
+					.collect(),
+			}))
+		}
+		fn get_block(&self, _h: Hash, _peer_info: &PeerInfo) -> Option<crate::core::core::Block> {
+			unimplemented!()
+		}
+		fn txhashset_read(&self, _h: Hash) -> Option<crate::types::TxHashSetRead> {
+			unimplemented!()
+		}
+		fn txhashset_archive_header(&self) -> Result<crate::core::core::BlockHeader, chain::Error> {
+			unimplemented!()
+		}
+		fn txhashset_receive_ready(&self) -> bool {
+			unimplemented!()
+		}
+		fn txhashset_download_update(
+			&self,
+			_start_time: chrono::DateTime<chrono::Utc>,
+			_downloaded_size: u64,
+			_total_size: u64,
+		) -> bool {
+			unimplemented!()
+		}
+		fn txhashset_write(
+			&self,
+			_h: Hash,
+			_txhashset_data: std::fs::File,
+			_peer_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn get_tmp_dir(&self) -> std::path::PathBuf {
+			unimplemented!()
+		}
+		fn get_tmpfile_pathname(&self, _tmpfile_name: String) -> std::path::PathBuf {
+			unimplemented!()
+		}
+		fn get_kernel_segment(
+			&self,
+			_hash: Hash,
+			_id: SegmentIdentifier,
+		) -> Result<crate::core::core::Segment<crate::core::core::TxKernel>, chain::Error> {
+			unimplemented!()
+		}
+		fn get_bitmap_segment(
+			&self,
+			_hash: Hash,
+			_id: SegmentIdentifier,
+		) -> Result<
+			(
+				crate::core::core::Segment<crate::chain::txhashset::BitmapChunk>,
+				Hash,
+			),
+			chain::Error,
+		> {
+			unimplemented!()
+		}
+		fn get_output_segment(
+			&self,
+			_hash: Hash,
+			_id: SegmentIdentifier,
+		) -> Result<
+			(
+				crate::core::core::Segment<crate::core::core::OutputIdentifier>,
+				Hash,
+			),
+			chain::Error,
+		> {
+			unimplemented!()
+		}
+		fn get_rangeproof_segment(
+			&self,
+			_hash: Hash,
+			_id: SegmentIdentifier,
+		) -> Result<crate::core::core::Segment<crate::util::secp::pedersen::RangeProof>, chain::Error>
+		{
+			unimplemented!()
+		}
+		fn receive_bitmap_segment(
+			&self,
+			_block_hash: Hash,
+			_output_root: Hash,
+			_segment: crate::core::core::Segment<crate::chain::txhashset::BitmapChunk>,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn receive_output_segment(
+			&self,
+			_block_hash: Hash,
+			_bitmap_root: Hash,
+			_segment: crate::core::core::Segment<crate::core::core::OutputIdentifier>,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn receive_rangeproof_segment(
+			&self,
+			_block_hash: Hash,
+			_segment: crate::core::core::Segment<crate::util::secp::pedersen::RangeProof>,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn receive_kernel_segment(
+			&self,
+			_block_hash: Hash,
+			_segment: crate::core::core::Segment<crate::core::core::TxKernel>,
+			_peer_info: &PeerInfo,
+		) -> Result<bool, chain::Error> {
+			unimplemented!()
+		}
+		fn receive_header_segment(
+			&self,
+			_id: SegmentIdentifier,
+			_headers: &[crate::core::core::BlockHeader],
+			_peer_info: &PeerInfo,
+		) -> Result<crate::types::HeaderSegmentAcceptance, chain::Error> {
+			unimplemented!()
+		}
+	}
+
+	impl crate::types::NetAdapter for HeaderProofsTestAdapter {
+		fn find_peer_addrs(&self, _capab: Capabilities) -> Vec<PeerAddr> {
+			unimplemented!()
+		}
+		fn peer_addrs_received(&self, _: Vec<PeerAddr>) {
+			unimplemented!()
+		}
+		fn peer_difficulty(&self, _: PeerAddr, _: Difficulty, _: u64) {
+			unimplemented!()
+		}
+		fn is_banned(&self, _addr: PeerAddr) -> bool {
+			false
+		}
+	}
+
+	#[test]
+	fn get_header_proofs_served_without_requester_capabilities() {
+		// REVIEW fix: HEADER_PROOF_HIST is a server capability; the requester
+		// does not have to advertise HEADER_PROOF_HIST or PIHD_HIST.
+		let adapter = Arc::new(HeaderProofsTestAdapter {
+			proofs: canned_header_proofs(),
+		});
+		let protocol = Protocol::new(
+			adapter,
+			test_peer_info(Capabilities::UNKNOWN),
+			Arc::new(AtomicBool::new(false)),
+		);
+		let consumed = protocol
+			.consume(header_proofs_request(vec![0]))
+			.expect("get header proofs handling");
+		let response = match consumed {
+			Consumed::Response(response) => response,
+			other => panic!("expected header proofs response, got {:?}", other),
+		};
+		// MsgHeader layout: magic(2) | type(1) | msg_len(8); the response must be
+		// a HeaderProofs message.
+		let mut bytes = vec![];
+		write_message(&mut bytes, &response, Arc::new(Tracker::new())).expect("write response");
+		assert_eq!(bytes[2], Type::HeaderProofs as u8);
+	}
+
+	#[test]
+	fn invalid_header_proofs_request_ignored_without_ban() {
+		// The adapter would serve *any* request; invalid shapes must be ignored
+		// by the handler before the adapter is consulted (no error/ban).
+		let adapter = Arc::new(HeaderProofsTestAdapter {
+			proofs: canned_header_proofs(),
+		});
+		let protocol = Protocol::new(
+			adapter,
+			test_peer_info(Capabilities::UNKNOWN),
+			Arc::new(AtomicBool::new(false)),
+		);
+
+		for heights in [
+			vec![],
+			vec![5, 2],
+			vec![5, 5],
+			(0..=(MAX_HEADER_PROOF_ITEMS as u64)).collect::<Vec<u64>>(),
+		] {
+			let consumed = protocol
+				.consume(header_proofs_request(heights))
+				.expect("get header proofs handling");
+			assert!(matches!(consumed, Consumed::None));
+		}
+	}
+
+	#[test]
+	fn received_header_proofs_ignored_without_ban() {
+		let protocol = Protocol::new(
+			Arc::new(DummyAdapter {}),
+			test_peer_info(Capabilities::default()),
+			Arc::new(AtomicBool::new(false)),
+		);
+		let consumed = protocol
+			.consume(Message::HeaderProofs(crate::msg::HeaderProofs {
+				anchor: crate::core::core::hash::ZERO_HASH,
+				mmr_size: 0,
+				items: vec![],
+			}))
+			.expect("header proofs handling");
 		assert!(matches!(consumed, Consumed::None));
 	}
 }

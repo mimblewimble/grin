@@ -44,6 +44,7 @@ fn default_capabilities() {
 	assert!(x.contains(Capabilities::PIBD_HIST));
 	assert!(x.contains(Capabilities::PIBD_HIST_1));
 	assert!(x.contains(Capabilities::PIHD_HIST));
+	assert!(x.contains(Capabilities::HEADER_PROOF_HIST));
 
 	assert_eq!(
 		x,
@@ -54,5 +55,6 @@ fn default_capabilities() {
 			| Capabilities::PIBD_HIST
 			| Capabilities::PIBD_HIST_1
 			| Capabilities::PIHD_HIST
+			| Capabilities::HEADER_PROOF_HIST
 	);
 }

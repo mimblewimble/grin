@@ -39,6 +39,7 @@ extern crate log;
 mod codec;
 mod conn;
 pub mod handshake;
+pub mod header_proof;
 pub mod msg;
 mod peer;
 mod peers;
@@ -55,6 +56,6 @@ pub use crate::store::{PeerData, State};
 pub use crate::types::{
 	pihd_header_segment_capacity, pihd_header_segment_end_height, pihd_header_segment_start_height,
 	Capabilities, ChainAdapter, Direction, Error, P2PConfig, PeerAddr, PeerInfo, ReasonForBan,
-	Seeding, TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
-	PIHD_HEADER_SEGMENT_HEIGHT,
+	Seeding, TxHashSetRead, MAX_BLOCK_HEADERS, MAX_HEADER_PROOF_ITEMS, MAX_HEADER_PROOF_PATH,
+	MAX_LOCATORS, MAX_PEER_ADDRS, PIHD_HEADER_SEGMENT_HEIGHT,
 };

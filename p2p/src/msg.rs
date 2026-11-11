@@ -30,7 +30,7 @@ use crate::core::ser::{
 use crate::core::{consensus, global};
 use crate::types::{
 	AttachmentMeta, AttachmentUpdate, Capabilities, Error, PeerAddr, ReasonForBan,
-	MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	MAX_BLOCK_HEADERS, MAX_HEADER_PROOF_ITEMS, MAX_HEADER_PROOF_PATH, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 use crate::util::secp::pedersen::RangeProof;
 use bytes::Bytes;
@@ -96,6 +96,8 @@ enum_from_primitive! {
 		KernelSegment = 28,
 		GetHeaderSegment = 29,
 		HeaderSegment = 30,
+		GetHeaderProofs = 31,
+		HeaderProofs = 32,
 	}
 }
 
@@ -151,6 +153,15 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::KernelSegment => 2 * max_block_size(),
 		Type::GetHeaderSegment => 9,
 		Type::HeaderSegment => 11 + max_header_size() * MAX_BLOCK_HEADERS as u64,
+		Type::GetHeaderProofs => {
+			// anchor + count + strictly increasing heights
+			32 + 2 + 8 * MAX_HEADER_PROOF_ITEMS as u64
+		}
+		Type::HeaderProofs => {
+			// anchor + mmr_size + count + per item (header + path_len + path)
+			let item = max_header_size() + 1 + 32 * MAX_HEADER_PROOF_PATH as u64;
+			32 + 8 + 2 + item * MAX_HEADER_PROOF_ITEMS as u64
+		}
 	}
 }
 
@@ -938,6 +949,143 @@ impl Writeable for OutputBitmapSegmentResponse {
 	}
 }
 
+/// Request for historical header MMR inclusion proofs (HEADER_PROOF_HIST v1).
+///
+/// `anchor` must be a header on the receiver's main chain. `heights` are
+/// strictly increasing, unique and each below the anchor height.
+pub struct GetHeaderProofs {
+	/// Anchor header hash (must be on the receiver's main chain).
+	pub anchor: Hash,
+	/// Requested header heights, strictly increasing and each < anchor.height.
+	pub heights: Vec<u64>,
+}
+
+impl Writeable for GetHeaderProofs {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if self.heights.is_empty() || self.heights.len() > MAX_HEADER_PROOF_ITEMS as usize {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		self.anchor.write(writer)?;
+		writer.write_u16(self.heights.len() as u16)?;
+		for height in &self.heights {
+			writer.write_u64(*height)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for GetHeaderProofs {
+	fn read<R: Reader>(reader: &mut R) -> Result<GetHeaderProofs, ser::Error> {
+		// Parser enforces wire bounds only. Semantic validation (non-empty,
+		// strictly increasing, unique, each < anchor.height) belongs to the
+		// server handler, so an invalid request is ignored without banning.
+		let anchor = Hash::read(reader)?;
+		let count = reader.read_u16()?;
+		if count > MAX_HEADER_PROOF_ITEMS {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut heights = Vec::with_capacity(count as usize);
+		for _ in 0..count {
+			heights.push(reader.read_u64()?);
+		}
+		Ok(GetHeaderProofs { anchor, heights })
+	}
+}
+
+/// One historical header plus its MMR inclusion proof.
+///
+/// `path` is the Merkle proof path (sibling hashes) for the header leaf at
+/// `insertion_to_pmmr_index(header.height)` against the anchor `prev_root`.
+pub struct HeaderProofItem {
+	/// The full block header (same serialization as the `Header` message).
+	pub header: BlockHeader,
+	/// Merkle proof sibling path, length <= MAX_HEADER_PROOF_PATH.
+	pub path: Vec<Hash>,
+}
+
+impl Writeable for HeaderProofItem {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if self.path.len() > MAX_HEADER_PROOF_PATH as usize {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		self.header.write(writer)?;
+		writer.write_u8(self.path.len() as u8)?;
+		for hash in &self.path {
+			hash.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for HeaderProofItem {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderProofItem, ser::Error> {
+		// Same lightweight validation as the `Header` message.
+		let header: UntrustedBlockHeader = Readable::read(reader)?;
+		let path_len = reader.read_u8()?;
+		if path_len > MAX_HEADER_PROOF_PATH as u8 {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut path = Vec::with_capacity(path_len as usize);
+		for _ in 0..path_len {
+			path.push(Hash::read(reader)?);
+		}
+		Ok(HeaderProofItem {
+			header: header.into(),
+			path,
+		})
+	}
+}
+
+/// Response to a `GetHeaderProofs` request.
+///
+/// Each item proves membership of a historical header leaf in the header MMR
+/// prefix committed to by `anchor.prev_root`. This authenticates membership in
+/// the anchor's MMR only; anchor selection/eclipse defense is separate.
+pub struct HeaderProofs {
+	/// Anchor header hash echoed from the request.
+	pub anchor: Hash,
+	/// Historical header MMR size for the anchor (`insertion_to_pmmr_index(anchor.height)`).
+	pub mmr_size: u64,
+	/// Requested proofs, in the same order as the requested heights.
+	pub items: Vec<HeaderProofItem>,
+}
+
+impl Writeable for HeaderProofs {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if self.items.is_empty() || self.items.len() > MAX_HEADER_PROOF_ITEMS as usize {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		self.anchor.write(writer)?;
+		writer.write_u64(self.mmr_size)?;
+		writer.write_u16(self.items.len() as u16)?;
+		for item in &self.items {
+			item.write(writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for HeaderProofs {
+	fn read<R: Reader>(reader: &mut R) -> Result<HeaderProofs, ser::Error> {
+		// Wire bounds only; the membership/PoW verifier validates semantics.
+		let anchor = Hash::read(reader)?;
+		let mmr_size = reader.read_u64()?;
+		let count = reader.read_u16()?;
+		if count > MAX_HEADER_PROOF_ITEMS {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut items = Vec::with_capacity(count as usize);
+		for _ in 0..count {
+			items.push(HeaderProofItem::read(reader)?);
+		}
+		Ok(HeaderProofs {
+			anchor,
+			mmr_size,
+			items,
+		})
+	}
+}
+
 pub enum Message {
 	Unknown(u8),
 	Ping(Ping),
@@ -969,6 +1117,8 @@ pub enum Message {
 	KernelSegment(SegmentResponse<TxKernel>),
 	GetHeaderSegment(SegmentIdentifier),
 	HeaderSegment(HeaderSegment),
+	GetHeaderProofs(GetHeaderProofs),
+	HeaderProofs(HeaderProofs),
 }
 
 /// We receive 512 headers from a peer.
@@ -1015,6 +1165,8 @@ impl fmt::Display for Message {
 			Message::KernelSegment(_) => write!(f, "kernel segment"),
 			Message::GetHeaderSegment(_) => write!(f, "get header segment"),
 			Message::HeaderSegment(_) => write!(f, "header segment"),
+			Message::GetHeaderProofs(_) => write!(f, "get header proofs"),
+			Message::HeaderProofs(_) => write!(f, "header proofs"),
 		}
 	}
 }

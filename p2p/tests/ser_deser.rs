@@ -54,13 +54,19 @@ fn test_capabilities() {
 		p2p::types::Capabilities::from_bits_truncate(0b10000000_u32),
 		p2p::types::Capabilities::PIHD_HIST
 	);
-
 	assert_eq!(
-		expected,
-		p2p::types::Capabilities::from_bits_truncate(0b11011111_u32),
+		p2p::types::Capabilities::from_bits_truncate(0x100_u32),
+		p2p::types::Capabilities::HEADER_PROOF_HIST
 	);
 
-	assert!(p2p::types::Capabilities::from_bits_truncate(0b11011111_u32).contains(expected));
+	// Default capabilities now include the optional HEADER_PROOF_HIST bit
+	// (0x100) on top of the existing PIHD bits.
+	assert_eq!(
+		expected,
+		p2p::types::Capabilities::from_bits_truncate(0b1_1101_1111_u32),
+	);
+
+	assert!(p2p::types::Capabilities::from_bits_truncate(0b1_1101_1111_u32).contains(expected));
 
 	assert!(p2p::types::Capabilities::from_bits_truncate(0b00101111_u32)
 		.contains(p2p::types::Capabilities::TX_KERNEL_HASH));
