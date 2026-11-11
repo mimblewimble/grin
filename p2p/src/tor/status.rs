@@ -137,18 +137,18 @@ where
 
 fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: Option<&str>) {
 	use OnionServiceState::*;
-	debug!("Onion service status {status:?}, new state: {state:?}");
+
 	*status = match state {
 		Running => ServiceStatus::Running,
 		DegradedReachable => ServiceStatus::Degraded,
 		Recovering => ServiceStatus::Recovering,
 		Bootstrapping => {
-			if matches!(status, ServiceStatus::Starting)
-				&& !matches!(status, ServiceStatus::Degraded)
-			{
-				ServiceStatus::Recovering
-			} else {
+			//TODO: Currently arti is not showing right status when publisher still has
+			// Bootstrapping status, so we set Running after Recovering.
+			if matches!(status, ServiceStatus::Recovering) {
 				ServiceStatus::Running
+			} else {
+				ServiceStatus::Recovering
 			}
 		}
 		Broken | DegradedUnreachable => ServiceStatus::Errored(Error::Generic(
