@@ -266,6 +266,9 @@ mod tests {
 		assert!(config
 			.parse()
 			.unwrap()
+			.0
+			.get(0)
+			.unwrap()
 			.build()
 			.unwrap()
 			.to_string()
@@ -288,7 +291,10 @@ mod tests {
 			bridge_line: Some(valid.clone()),
 			..Default::default()
 		};
-		assert_eq!(config.parse().unwrap().get_transport(), Some("meek_lite"));
+		assert_eq!(
+			config.parse().unwrap().0.get(0).unwrap().get_transport(),
+			Some("meek_lite")
+		);
 		assert!(bridge_line(&valid.replace("front=example.com", "front=127.0.0.1")).is_err());
 		assert!(bridge_line(&valid.replace("disablehpkp=true", "disablehpkp=bad")).is_err());
 	}
@@ -300,9 +306,19 @@ mod tests {
 			client_args: vec!["-log".into(), "snowflake.log".into()],
 			..Default::default()
 		};
-		let parsed = bridge.parse().unwrap();
 		assert_eq!(
-			bridge.arguments(parsed.get_transport().unwrap()).unwrap(),
+			bridge
+				.arguments(
+					bridge
+						.parse()
+						.unwrap()
+						.0
+						.get(0)
+						.unwrap()
+						.get_transport()
+						.unwrap()
+				)
+				.unwrap(),
 			bridge.client_args
 		);
 		assert!(client_args("snowflake", &[]).unwrap().is_empty());

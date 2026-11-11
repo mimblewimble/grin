@@ -266,7 +266,7 @@ mod tests {
 	struct Config {
 		integrated: bool,
 		dir: PathBuf,
-		bridge: Vec<TorBridgeConfig>,
+		bridge: TorBridgeConfig,
 		outbound: Option<TorOutboundProxy>,
 		proxy: TorProxyConfig,
 	}
@@ -284,14 +284,14 @@ mod tests {
 		fn min_circuit_timeout_ms(&self) -> Option<i32> {
 			None
 		}
-		fn bridge_config(&self) -> &[TorBridgeConfig] {
-			&self.bridge
+		fn bridge_config(&self) -> TorBridgeConfig {
+			self.bridge.clone()
+		}
+		fn proxy_config(&self) -> TorProxyConfig {
+			self.proxy.clone()
 		}
 		fn outbound_proxy(&self) -> Option<TorOutboundProxy> {
 			self.outbound.clone()
-		}
-		fn proxy_config(&self) -> &TorProxyConfig {
-			&self.proxy
 		}
 		fn data_dir(&self) -> PathBuf {
 			self.dir.clone()
@@ -474,10 +474,10 @@ mod tests {
 		let config = Config {
 			integrated: true,
 			dir: dir.path().join("tor"),
-			bridge: vec![TorBridgeConfig {
+			bridge: TorBridgeConfig {
 				bridge_line: Some("invalid bridge".into()),
 				..Default::default()
-			}],
+			},
 			..Default::default()
 		};
 		let key = SecretKey::from_slice(&grin_util::secp::Secp256k1::new(), &[3; 32]).unwrap();
@@ -518,10 +518,10 @@ mod tests {
 			integrated: true,
 			dir: dir.path().join("tor"),
 			// Stop before bootstrap so this test needs no network
-			bridge: vec![TorBridgeConfig {
+			bridge: TorBridgeConfig {
 				bridge_line: Some("invalid bridge".into()),
 				..Default::default()
-			}],
+			},
 			..Default::default()
 		};
 		assert!(matches!(start_tor(&config), Err(Error::Config(_))));

@@ -46,10 +46,10 @@ pub trait TorConfig {
 	fn min_circuit_timeout_ms(&self) -> Option<i32>;
 
 	/// Bridge configurations
-	fn bridge_config(&self) -> &[TorBridgeConfig];
+	fn bridge_config(&self) -> TorBridgeConfig;
 
 	/// Upstream proxy for Tor
-	fn proxy_config(&self) -> &TorProxyConfig;
+	fn proxy_config(&self) -> TorProxyConfig;
 
 	/// Existing proxy for outgoing requests, without starting a Tor sender
 	fn outbound_proxy(&self) -> Option<TorOutboundProxy> {
@@ -74,7 +74,6 @@ pub(crate) fn request_timeout<T: TorConfig>(config: &T) -> Duration {
 
 /// Tor Bridge Config
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(deny_unknown_fields)]
 pub struct TorBridgeConfig {
 	/// Path to the bridge binary
 	pub bridge_bin_path: Option<String>,
@@ -86,13 +85,34 @@ pub struct TorBridgeConfig {
 }
 
 impl TorBridgeConfig {
-	pub(crate) fn parse(&self) -> Result<BridgeConfigBuilder, Error> {
+	pub(crate) fn parse(&self) -> Result<(Vec<BridgeConfigBuilder>, Vec<String>), Error> {
+		if self.bridge_line.is_none() {
+			return if self.bridge_bin_path.is_some() {
+				Err(Error::Config("Missing bridge line".into()))
+			} else {
+				Ok((Vec::new(), Vec::new()))
+			};
+		}
 		let line = self
 			.bridge_line
 			.as_ref()
 			.ok_or_else(|| Error::Config("Missing bridge line".into()))?;
-		if line.contains(['\r', '\n']) {
-			return Err(Error::Config("Bad bridge line".into()));
+		let lines_parse = serde_json::from_str::<Vec<String>>(&line);
+		let bridges = lines_parse
+			.unwrap_or_else(|_| line.lines().map(str::to_owned).collect())
+			.into_iter()
+			.filter(|l| !l.trim().is_empty())
+			.collect::<Vec<String>>();
+
+		let mut config_builders: Vec<BridgeConfigBuilder> = vec![];
+		let mut lines = vec![];
+		for line in bridges {
+			let line = bridge::bridge_line(&line)?;
+			let bridge = line
+				.parse()
+				.map_err(|e| Error::Config(format!("Can not parse bridge line {}", e)))?;
+			config_builders.push(bridge);
+			lines.push(line);
 		}
 		if self
 			.bridge_bin_path
@@ -102,17 +122,16 @@ impl TorBridgeConfig {
 		{
 			return Err(Error::Config("Bad bridge client argument".into()));
 		}
-		let bridge: BridgeConfigBuilder = bridge::bridge_line(line)?
-			.parse()
-			.map_err(|e| Error::Config(format!("{:?}", e)))?;
-		if bridge.get_transport().is_none_or(str::is_empty)
-			&& (self.bridge_bin_path.is_some() || !self.client_args.is_empty())
-		{
-			return Err(Error::Config(
-				"Bridge client options require a transport".into(),
-			));
+		for c in &config_builders {
+			if c.get_transport().is_none_or(str::is_empty)
+				&& (self.bridge_bin_path.is_some() || !self.client_args.is_empty())
+			{
+				return Err(Error::Config(
+					"Bridge client options require a transport".into(),
+				));
+			}
 		}
-		Ok(bridge)
+		Ok((config_builders, lines))
 	}
 
 	pub(crate) fn binary(&self, transport: &str) -> Result<String, Error> {
@@ -209,9 +228,6 @@ mod tests {
 
 	#[test]
 	fn bridge_fields() {
-		let json = r#"{"client_option":"-enableLogging"}"#;
-		let error = serde_json::from_str::<TorBridgeConfig>(json).unwrap_err();
-		assert!(error.to_string().contains("unknown field `client_option`"));
 		let bridge = TorBridgeConfig {
 			client_args: vec!["-enableLogging".into()],
 			..Default::default()

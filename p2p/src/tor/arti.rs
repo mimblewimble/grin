@@ -330,14 +330,16 @@ pub(super) async fn connect<T: TorConfig>(
 
 fn configure_bridges(
 	builder: &mut TorClientConfigBuilder,
-	bridges: &[crate::tor::config::TorBridgeConfig],
+	config: crate::tor::config::TorBridgeConfig,
 ) -> Result<(), Error> {
 	let mut transports = HashMap::new();
-	for bridge_config in bridges {
-		let bridge = bridge_config.parse()?;
-		if let Some(protocol) = bridge.get_transport().filter(|p| !p.is_empty()) {
-			let args = bridge_config.arguments(protocol)?;
-			let path = bridge_config.binary(protocol)?;
+	let (bridge_builders, _) = config.parse()?;
+	for b in bridge_builders {
+		builder.bridges().bridges().push(b.clone());
+
+		if let Some(protocol) = b.get_transport().filter(|p| !p.is_empty()) {
+			let args = config.arguments(protocol)?;
+			let path = config.binary(protocol)?;
 			if let Some(previous) =
 				transports.insert(protocol.to_string(), (path.clone(), args.clone()))
 			{
@@ -358,9 +360,7 @@ fn configure_bridges(
 				builder.bridges().transports().push(transport);
 			}
 		}
-		builder.bridges().bridges().push(bridge);
 	}
-
 	Ok(())
 }
 
@@ -375,7 +375,7 @@ where
 {
 	let mut state = ARTI_CLIENT_CONFIG.lock().await;
 	let (cached_client_config, proxy_config) = &mut *state;
-	if proxy_config != config.proxy_config() {
+	if proxy_config != &config.proxy_config() {
 		*proxy_config = config.proxy_config().clone();
 		if proxy_config != &Default::default() {
 			warn!("Integrated Tor proxy configuration is ignored");
@@ -580,16 +580,24 @@ mod tests {
 	#[test]
 	fn bridge_list() {
 		let bridge = TorBridgeConfig {
-			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge".into()),
+			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
+webtunnel 192.0.3.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example2.com/bridge".into()),
 			bridge_bin_path: Some("/tmp/bridge client".into()),
 			client_args: vec!["--test".into()],
 		};
 		let mut builder = TorClientConfigBuilder::default();
-		configure_bridges(&mut builder, &[bridge.clone(), bridge.clone()]).unwrap();
+		configure_bridges(&mut builder, bridge.clone()).unwrap();
 		assert_eq!(builder.bridges().bridges().len(), 2);
 		assert_eq!(builder.bridges().transports().len(), 1);
-		let mut changed = bridge.clone();
-		changed.bridge_bin_path = Some("/tmp/other".into());
-		assert!(configure_bridges(&mut builder, &[bridge, changed]).is_err());
+
+		let mut multiple_protocols = bridge.clone();
+		multiple_protocols.bridge_line = Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
+snowflake 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=http://127.0.0.1:9/ ice=stun:127.0.0.1:9".into());
+		assert!(configure_bridges(&mut builder, bridge.clone()).is_ok());
+
+		let mut bad_protocol = bridge.clone();
+		bad_protocol.bridge_line = Some("192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
+snowflake 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=http://127.0.0.1:9/ ice=stun:127.0.0.1:9".into());
+		assert!(configure_bridges(&mut builder, bridge).is_ok());
 	}
 }

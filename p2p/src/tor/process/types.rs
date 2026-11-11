@@ -96,7 +96,7 @@ pub(crate) struct TorProcess {
 	pub process: Option<Child>,
 	sys: System,
 	dir_lock: Option<LockFileGuard>,
-	sender_config: Option<(String, Vec<TorBridgeConfig>, TorProxyConfig)>,
+	sender_config: Option<(String, TorBridgeConfig, TorProxyConfig)>,
 	pub sender_isolation: SenderIsolation,
 }
 
@@ -191,8 +191,8 @@ impl TorProcess {
 		start_tor(tor_dir_str, &mut tor, config)?;
 		tor.sender_config = Some((
 			config.socks_proxy_addr(),
-			config.bridge_config().to_vec(),
-			config.proxy_config().clone(),
+			config.bridge_config(),
+			config.proxy_config(),
 		));
 		Ok(tor)
 	}
@@ -388,8 +388,8 @@ impl TorProcess {
 				.as_ref()
 				.map(|(socks, bridge, proxy)| {
 					socks == &config.socks_proxy_addr()
-						&& bridge == config.bridge_config()
-						&& proxy == config.proxy_config()
+						&& bridge == &config.bridge_config()
+						&& proxy == &config.proxy_config()
 				})
 				.unwrap_or(false)
 	}
@@ -424,12 +424,12 @@ impl TorProcess {
 type BridgeProxyResult =
 	Result<(Vec<(String, String)>, HashMap<String, String>), crate::tor::types::Error>;
 
-fn bridge_options(bridges: &[TorBridgeConfig]) -> Result<Vec<(String, String)>, crate::tor::Error> {
+fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crate::tor::Error> {
 	let mut hm_tor_bridge = Vec::new();
 	let mut transports = HashMap::new();
-	for config in bridges {
-		let bridge = config.parse()?;
-		if let Some(protocol) = bridge.get_transport().filter(|p| !p.is_empty()) {
+	let (bridge_builders, lines) = config.parse()?;
+	for (index, b) in bridge_builders.iter().enumerate() {
+		if let Some(protocol) = b.get_transport().filter(|p| !p.is_empty()) {
 			let args = config.arguments(protocol)?;
 			let path = config.binary(protocol)?;
 			if std::iter::once(&path)
@@ -451,11 +451,13 @@ fn bridge_options(bridges: &[TorBridgeConfig]) -> Result<Vec<(String, String)>, 
 				hm_tor_bridge.push(("ClientTransportPlugin".into(), command));
 			}
 		}
-		hm_tor_bridge.push((
-			"Bridge".into(),
-			super::bridge::bridge_line(config.bridge_line.as_deref().unwrap_or_default())?,
-		));
+		let line = lines
+			.get(index)
+			.ok_or_else(|| crate::tor::Error::Config("Bad connection line".to_string()))?;
+		hm_tor_bridge.push(("Bridge".into(), super::bridge::bridge_line(line)?));
 	}
+
+	debug!("hm_tor_bridge {:?}", hm_tor_bridge);
 
 	Ok(hm_tor_bridge)
 }
@@ -518,11 +520,12 @@ mod tests {
 	#[test]
 	fn bridge_list() {
 		let bridge = TorBridgeConfig {
-			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge".into()),
+			bridge_line: Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
+webtunnel 192.0.3.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example2.com/bridge".into()),
 			bridge_bin_path: Some("/tmp/bridge-client".into()),
 			client_args: vec!["-enableLogging".into()],
 		};
-		let options = bridge_options(&[bridge.clone(), bridge.clone()]).unwrap();
+		let options = bridge_options(bridge.clone()).unwrap();
 		let dir = tempfile::tempdir().unwrap();
 		output_tor_sender_config(
 			dir.path().to_str().unwrap(),
@@ -536,7 +539,7 @@ mod tests {
 		assert_eq!(
 			torrc
 				.lines()
-				.filter(|line| *line == format!("Bridge {}", bridge.bridge_line.as_ref().unwrap()))
+				.filter(|line| line.starts_with("Bridge"))
 				.count(),
 			2
 		);
@@ -549,17 +552,11 @@ mod tests {
 			vec!["ClientTransportPlugin webtunnel exec /tmp/bridge-client -enableLogging"]
 		);
 
-		let mut changed = bridge.clone();
-		changed.bridge_bin_path = Some("/tmp/other".into());
-		assert!(bridge_options(&[bridge.clone(), changed]).is_err());
-		let mut invalid = bridge.clone();
-		invalid.bridge_bin_path = Some("/tmp/bridge client".into());
-		assert!(bridge_options(&[invalid]).is_err());
 		let mut invalid = bridge;
 		invalid.client_args.push("two words".into());
-		assert!(bridge_options(&[invalid.clone()]).is_err());
+		assert!(bridge_options(invalid.clone()).is_err());
 		invalid.client_args = vec![String::new()];
-		assert!(bridge_options(&[invalid]).is_err());
+		assert!(bridge_options(invalid).is_err());
 	}
 
 	fn command(script: &str) -> Command {
