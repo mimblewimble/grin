@@ -97,7 +97,7 @@ impl TorBridgeConfig {
 			.bridge_line
 			.as_ref()
 			.ok_or_else(|| Error::Config("Missing bridge line".into()))?;
-		let lines_parse = serde_json::from_str::<Vec<String>>(&line);
+		let lines_parse = serde_json::from_str::<Vec<String>>(line);
 		let bridges = lines_parse
 			.unwrap_or_else(|_| line.lines().map(str::to_owned).collect())
 			.into_iter()

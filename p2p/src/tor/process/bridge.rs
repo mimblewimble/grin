@@ -267,7 +267,7 @@ mod tests {
 			.parse()
 			.unwrap()
 			.0
-			.get(0)
+			.first()
 			.unwrap()
 			.build()
 			.unwrap()
@@ -292,7 +292,7 @@ mod tests {
 			..Default::default()
 		};
 		assert_eq!(
-			config.parse().unwrap().0.get(0).unwrap().get_transport(),
+			config.parse().unwrap().0.first().unwrap().get_transport(),
 			Some("meek_lite")
 		);
 		assert!(bridge_line(&valid.replace("front=example.com", "front=127.0.0.1")).is_err());
@@ -313,7 +313,7 @@ mod tests {
 						.parse()
 						.unwrap()
 						.0
-						.get(0)
+						.first()
 						.unwrap()
 						.get_transport()
 						.unwrap()
