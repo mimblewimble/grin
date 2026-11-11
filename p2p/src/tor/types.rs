@@ -50,7 +50,7 @@ pub enum PostError {
 }
 
 /// Onion service status
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ServiceStatus {
 	Starting,
 	/// External Tor has completed bootstrap
