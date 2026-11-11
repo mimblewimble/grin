@@ -440,6 +440,86 @@ where
 		Ok(Some(headers))
 	}
 
+	/// Builds historical header MMR inclusion proofs (HEADER_PROOF_HIST) for an
+	/// anchor on our current main chain.
+	///
+	/// HEADER_PROOF_HIST is a server capability ("this node serves"); the
+	/// requester does not have to advertise any capability. Missing/invalid
+	/// anchors, heights or proof hashes are ignored and never banned (the server
+	/// must fail closed). Requests share the per-IP PIHD request budget; excess
+	/// requests are ignored.
+	fn get_header_proofs(
+		&self,
+		anchor: Hash,
+		heights: &[u64],
+		peer_info: &PeerInfo,
+	) -> Result<Option<p2p::msg::HeaderProofs>, chain::Error> {
+		if !self.header_segment_request_allowed(peer_info.addr.0) {
+			warn!(
+				"throttling HEADER_PROOF_HIST request ({} heights) from {}",
+				heights.len(),
+				peer_info.addr
+			);
+			return Ok(None);
+		}
+		if heights.is_empty() || heights.len() > p2p::MAX_HEADER_PROOF_ITEMS as usize {
+			return Ok(None);
+		}
+		if heights.windows(2).any(|w| w[0] >= w[1]) {
+			return Ok(None);
+		}
+
+		// Anchor must be a header on our current main chain.
+		let anchor_header = match self.chain().get_block_header(&anchor) {
+			Ok(header) => header,
+			Err(_) => return Ok(None),
+		};
+		if heights.iter().any(|height| *height >= anchor_header.height) {
+			return Ok(None);
+		}
+
+		let header_pmmr = self.chain().header_pmmr();
+		let header_pmmr = header_pmmr.read();
+		match header_pmmr.get_header_hash_by_height(anchor_header.height) {
+			Ok(hash) if hash == anchor => {}
+			_ => return Ok(None),
+		}
+
+		// Resolve every requested height to a header on the anchor's chain.
+		let mut headers = Vec::with_capacity(heights.len());
+		for height in heights {
+			let hash = match header_pmmr.get_header_hash_by_height(*height) {
+				Ok(hash) => hash,
+				Err(_) => return Ok(None),
+			};
+			match self.chain().get_block_header(&hash) {
+				Ok(header) => headers.push(header),
+				Err(_) => return Ok(None),
+			}
+		}
+
+		// Build against the historical MMR size of the anchor (never the tip
+		// size). Each proof is verified against anchor.prev_root before serving.
+		//
+		// Unlike the output merkle proofs removed from the foreign API in #3792,
+		// this never touches the txhashset and never rewinds: the header MMR is
+		// not prunable, so a historical view is just a size bound on reads. Only
+		// a read lock on the header MMR is held (as for PIHD header segments),
+		// and the work is bounded: at most 64 leaves, each a path of about
+		// log2(height) hashes.
+		match p2p::header_proof::build_header_proofs(&header_pmmr.backend, &anchor_header, &headers)
+		{
+			Ok(proofs) => Ok(Some(proofs)),
+			Err(e) => {
+				debug!(
+					"header proofs unavailable for anchor {} at height {}: {}",
+					anchor, anchor_header.height, e
+				);
+				Ok(None)
+			}
+		}
+	}
+
 	/// Gets a full block by its hash.
 	/// We only support v3 blocks since HF4.
 	/// If a peer is requesting a block and only appears to support v2

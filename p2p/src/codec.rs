@@ -272,6 +272,8 @@ fn decode_message(
 		Type::KernelSegment => Message::KernelSegment(msg.body()?),
 		Type::GetHeaderSegment => Message::GetHeaderSegment(msg.body()?),
 		Type::HeaderSegment => Message::HeaderSegment(msg.body()?),
+		Type::GetHeaderProofs => Message::GetHeaderProofs(msg.body()?),
+		Type::HeaderProofs => Message::HeaderProofs(msg.body()?),
 		Type::Error | Type::Hand | Type::Shake | Type::Headers => {
 			return Err(Error::UnexpectedMessage)
 		}

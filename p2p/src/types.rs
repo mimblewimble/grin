@@ -60,6 +60,13 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
 
+/// Maximum number of historical header proofs a peer may request in one
+/// `GetHeaderProofs` message (HEADER_PROOF_HIST, protocol v1).
+pub const MAX_HEADER_PROOF_ITEMS: u16 = 64;
+
+/// Maximum length of an MMR inclusion proof path in a `HeaderProofs` item.
+pub const MAX_HEADER_PROOF_PATH: u16 = 64;
+
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
 
@@ -554,6 +561,8 @@ bitflags! {
 		const PIBD_HIST_1 = 0b0100_0000;
 		/// Can provide deterministic historical header segments.
 		const PIHD_HIST = 0b1000_0000;
+		/// Can provide historical header MMR inclusion proofs (HEADER_PROOF_HIST).
+		const HEADER_PROOF_HIST = 0x100;
 	}
 }
 
@@ -567,6 +576,7 @@ impl Default for Capabilities {
 			| Capabilities::PIBD_HIST
 			| Capabilities::PIBD_HIST_1
 			| Capabilities::PIHD_HIST
+			| Capabilities::HEADER_PROOF_HIST
 	}
 }
 
@@ -780,6 +790,21 @@ pub trait ChainAdapter: Sync + Send {
 		id: SegmentIdentifier,
 		peer_info: &PeerInfo,
 	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error>;
+
+	/// Builds historical header MMR inclusion proofs (HEADER_PROOF_HIST) for the
+	/// provided anchor and main-chain heights.
+	///
+	/// Returns `Ok(None)` when the anchor/any requested header/proof is not
+	/// available locally. Unavailable data must never be treated as a peer
+	/// fault (no ban).
+	fn get_header_proofs(
+		&self,
+		_anchor: Hash,
+		_heights: &[u64],
+		_peer_info: &PeerInfo,
+	) -> Result<Option<crate::msg::HeaderProofs>, chain::Error> {
+		Ok(None)
+	}
 
 	/// Gets a full block by its hash.
 	/// Converts block to v2 compatibility if necessary (based on peer protocol version).
