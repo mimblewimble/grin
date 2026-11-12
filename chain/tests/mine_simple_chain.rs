@@ -110,6 +110,7 @@ fn archive_compaction() {
 	.unwrap();
 	let block = prepare_block(&keychain, &chain.head_header().unwrap(), &chain, 1);
 	process_block(&chain, &block);
+	chain.compact().unwrap();
 	let compacted = chain.store().compaction_head().unwrap().unwrap();
 	drop(chain);
 
@@ -124,6 +125,7 @@ fn archive_compaction() {
 	.unwrap();
 	let block = prepare_block(&keychain, &chain.head_header().unwrap(), &chain, 2);
 	process_block(&chain, &block);
+	chain.compact().unwrap();
 	assert_eq!(chain.store().compaction_head().unwrap(), Some(compacted));
 
 	let mut outputs = vec![];
@@ -132,6 +134,7 @@ fn archive_compaction() {
 		outputs.push((block.outputs()[0].commitment(), height));
 		process_block(&chain, &block);
 		if height == 60 {
+			chain.compact().unwrap();
 			assert_eq!(chain.store().compaction_head().unwrap(), Some(compacted));
 		}
 	}
