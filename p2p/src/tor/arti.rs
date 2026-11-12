@@ -420,11 +420,19 @@ where
 					"Stop using the Tor client before changing its configuration".into(),
 				));
 			}
-			debug!("Tor config changed, reconfigure client.");
-			client
-				.reconfigure(&client_config, Reconfigure::AllOrNothing)
-				.map_err(|e| Error::Config(format!("{:?}", e)))?;
-			return Ok((client.clone(), c.clone()));
+			if c.dir_mgr_config()
+				.map_err(|e| Error::Config(format!("{:?}", e)))?
+				.cache_dir == *cache_path
+			{
+				debug!("Tor config changed, reconfigure client.");
+				client
+					.reconfigure(&client_config, Reconfigure::AllOrNothing)
+					.map_err(|e| Error::Config(format!("{:?}", e)))?;
+				*c = arti_config;
+				*timeout = connect_timeout;
+				return Ok((client.clone(), c.clone()));
+			}
+			*cached_client_config = None;
 		}
 	}
 	let (client, runtime) = launch_client(client_config, config).await?;
@@ -596,11 +604,13 @@ webtunnel 192.0.3.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://exa
 		let mut multiple_protocols = bridge.clone();
 		multiple_protocols.bridge_line = Some("webtunnel 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
 snowflake 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=http://127.0.0.1:9/ ice=stun:127.0.0.1:9".into());
-		assert!(configure_bridges(&mut builder, bridge.clone()).is_ok());
+		let mut builder = TorClientConfigBuilder::default();
+		assert!(configure_bridges(&mut builder, multiple_protocols).is_ok());
+		assert_eq!(builder.bridges().transports().len(), 2);
 
-		let mut bad_protocol = bridge.clone();
+		let mut bad_protocol = bridge;
 		bad_protocol.bridge_line = Some("192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=https://example.com/bridge
 snowflake 192.0.2.1:443 0123456789ABCDEF0123456789ABCDEF01234567 url=http://127.0.0.1:9/ ice=stun:127.0.0.1:9".into());
-		assert!(configure_bridges(&mut builder, bridge).is_ok());
+		assert!(configure_bridges(&mut builder, bad_protocol).is_err());
 	}
 }
