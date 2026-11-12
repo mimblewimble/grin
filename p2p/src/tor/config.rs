@@ -52,9 +52,7 @@ pub trait TorConfig {
 	fn proxy_config(&self) -> TorProxyConfig;
 
 	/// Existing proxy for outgoing requests, without starting a Tor sender
-	fn outbound_proxy(&self) -> Option<TorOutboundProxy> {
-		None
-	}
+	fn outbound_proxy(&self) -> Option<TorOutboundProxy>;
 
 	/// Tor data directory.
 	fn data_dir(&self) -> PathBuf;
