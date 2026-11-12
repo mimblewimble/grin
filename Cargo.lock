@@ -157,7 +157,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 [[package]]
 name = "arti-client"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.5",
@@ -644,7 +644,7 @@ checksum = "8ae3f5d315924270530207e2a68396c3cc547f6dca3fbdca317cfb1a51edb593"
 [[package]]
 name = "caret"
 version = "0.11.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 
 [[package]]
 name = "castaway"
@@ -1933,7 +1933,7 @@ dependencies = [
 [[package]]
 name = "fs-mistrust"
 version = "0.16.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive_builder_fork_arti",
  "dirs 6.0.0",
@@ -1970,7 +1970,7 @@ dependencies = [
 [[package]]
 name = "fslock-guard"
 version = "0.9.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "libc",
  "thiserror 2.0.18",
@@ -2023,7 +2023,7 @@ dependencies = [
 [[package]]
 name = "futures-copy"
 version = "0.5.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "extend",
  "futures 0.3.34",
@@ -3852,7 +3852,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 [[package]]
 name = "oneshot-fused-workaround"
 version = "0.8.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "futures 0.3.34",
 ]
@@ -4743,7 +4743,7 @@ dependencies = [
 [[package]]
 name = "retry-error"
 version = "0.14.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "humantime 2.3.0",
  "web-time",
@@ -4952,7 +4952,7 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 [[package]]
 name = "safelog"
 version = "0.10.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive_more",
  "educe",
@@ -4982,7 +4982,7 @@ dependencies = [
 [[package]]
 name = "saturating-time"
 version = "0.6.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "web-time-compat",
 ]
@@ -5402,7 +5402,7 @@ dependencies = [
 [[package]]
 name = "slotmap-careful"
 version = "0.9.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "paste",
  "serde",
@@ -6004,7 +6004,7 @@ checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 [[package]]
 name = "tor-async-utils"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "cfg-if 1.0.5",
  "derive-deftly",
@@ -6029,7 +6029,7 @@ dependencies = [
 [[package]]
 name = "tor-basic-utils"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive-deftly",
  "derive_more",
@@ -6054,7 +6054,7 @@ dependencies = [
 [[package]]
 name = "tor-bytes"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "bytes",
  "derive-deftly",
@@ -6071,7 +6071,7 @@ dependencies = [
 [[package]]
 name = "tor-cell"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "bitflags 2.13.0",
@@ -6101,7 +6101,7 @@ dependencies = [
 [[package]]
 name = "tor-cert"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "caret",
  "derive_builder_fork_arti",
@@ -6118,7 +6118,7 @@ dependencies = [
 [[package]]
 name = "tor-chanmgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "base64ct",
@@ -6160,7 +6160,7 @@ dependencies = [
 [[package]]
 name = "tor-checkable"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "humantime 2.3.0",
  "itertools",
@@ -6173,7 +6173,7 @@ dependencies = [
 [[package]]
 name = "tor-circmgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "async-trait",
@@ -6222,7 +6222,7 @@ dependencies = [
 [[package]]
 name = "tor-config"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "cfg-if 1.0.5",
@@ -6256,7 +6256,7 @@ dependencies = [
 [[package]]
 name = "tor-config-path"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "directories",
  "serde",
@@ -6269,7 +6269,7 @@ dependencies = [
 [[package]]
 name = "tor-consdiff"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive_more",
  "digest 0.11.3",
@@ -6285,7 +6285,7 @@ dependencies = [
 [[package]]
 name = "tor-dirclient"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-compression",
  "base64ct",
@@ -6312,7 +6312,7 @@ dependencies = [
 [[package]]
 name = "tor-dircommon"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "base64ct",
  "derive-deftly",
@@ -6332,7 +6332,7 @@ dependencies = [
 [[package]]
 name = "tor-dirmgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "base64ct",
@@ -6388,7 +6388,7 @@ dependencies = [
 [[package]]
 name = "tor-error"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive_more",
  "futures 0.3.34",
@@ -6405,7 +6405,7 @@ dependencies = [
 [[package]]
 name = "tor-general-addr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive_more",
  "thiserror 2.0.18",
@@ -6415,7 +6415,7 @@ dependencies = [
 [[package]]
 name = "tor-guardmgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "base64ct",
@@ -6459,7 +6459,7 @@ dependencies = [
 [[package]]
 name = "tor-hsclient"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.5",
@@ -6504,7 +6504,7 @@ dependencies = [
 [[package]]
 name = "tor-hscrypto"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "cipher 0.5.2",
  "data-encoding",
@@ -6536,7 +6536,7 @@ dependencies = [
 [[package]]
 name = "tor-hsrproxy"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive-deftly",
  "futures 0.3.34",
@@ -6564,7 +6564,7 @@ dependencies = [
 [[package]]
 name = "tor-hsservice"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "async-trait",
@@ -6622,7 +6622,7 @@ dependencies = [
 [[package]]
 name = "tor-key-forge"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive-deftly",
  "derive_more",
@@ -6643,7 +6643,7 @@ dependencies = [
 [[package]]
 name = "tor-keymgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "arrayvec 0.7.8",
@@ -6684,7 +6684,7 @@ dependencies = [
 [[package]]
 name = "tor-linkspec"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "base64ct",
  "by_address",
@@ -6710,7 +6710,7 @@ dependencies = [
 [[package]]
 name = "tor-llcrypto"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "aes",
  "base64ct",
@@ -6753,7 +6753,7 @@ dependencies = [
 [[package]]
 name = "tor-log-ratelim"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "futures 0.3.34",
  "humantime 2.3.0",
@@ -6768,7 +6768,7 @@ dependencies = [
 [[package]]
 name = "tor-memquota"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "cfg-if 1.0.5",
  "derive-deftly",
@@ -6799,7 +6799,7 @@ dependencies = [
 [[package]]
 name = "tor-memquota-cost"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive-deftly",
  "itertools",
@@ -6810,7 +6810,7 @@ dependencies = [
 [[package]]
 name = "tor-netdir"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "bitflags 2.13.0",
@@ -6842,7 +6842,7 @@ dependencies = [
 [[package]]
 name = "tor-netdoc"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "base64ct",
@@ -6894,7 +6894,7 @@ dependencies = [
 [[package]]
 name = "tor-persist"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "derive-deftly",
@@ -6922,7 +6922,7 @@ dependencies = [
 [[package]]
 name = "tor-proto"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "aes",
  "amplify",
@@ -6989,7 +6989,7 @@ dependencies = [
 [[package]]
 name = "tor-protover"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "caret",
  "derive-deftly",
@@ -7005,7 +7005,7 @@ dependencies = [
 [[package]]
 name = "tor-ptmgr"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "async-trait",
  "cfg-if 1.0.5",
@@ -7034,7 +7034,7 @@ dependencies = [
 [[package]]
 name = "tor-relay-selection"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "rand 0.10.3",
  "serde",
@@ -7047,7 +7047,7 @@ dependencies = [
 [[package]]
 name = "tor-rtcompat"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "amplify",
  "async-native-tls",
@@ -7081,7 +7081,7 @@ dependencies = [
 [[package]]
 name = "tor-socksproto"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "caret",
  "derive-deftly",
@@ -7096,7 +7096,7 @@ dependencies = [
 [[package]]
 name = "tor-units"
 version = "0.48.0"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "derive-deftly",
  "derive_more",
@@ -7420,7 +7420,7 @@ dependencies = [
 [[package]]
 name = "web-time-compat"
 version = "0.3.1"
-source = "git+https://github.com/mimblewimble/arti?rev=7c038125baef924a4bf287429c192c5af606f79c#7c038125baef924a4bf287429c192c5af606f79c"
+source = "git+https://github.com/mimblewimble/arti?rev=8493c4f2a36b8bf7ab37e120b98653d479928cd0#8493c4f2a36b8bf7ab37e120b98653d479928cd0"
 dependencies = [
  "web-time",
 ]
