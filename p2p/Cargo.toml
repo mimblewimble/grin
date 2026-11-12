@@ -23,15 +23,15 @@ chrono = { version = "0.4.11", features = ["serde"] }
 bytes = "1"
 
 # Tor related deps
-arti-client = { version = "0.48.0", features = ["static", "pt-client", "onion-service-service", "onion-service-client"], optional = true }
-tor-rtcompat = { version = "0.48.0", optional = true }
-fs-mistrust = { version = "0.16.1", optional = true }
+arti-client = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", features = ["static", "pt-client", "onion-service-service", "onion-service-client"], optional = true }
+tor-rtcompat = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
+fs-mistrust = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
 fslock-guard = { version = "0.8", optional = true }
-tor-hsservice = { version = "0.48.0", optional = true }
-tor-hsrproxy = { version = "0.48.0", optional = true }
-tor-keymgr = { version = "0.48.0", optional = true }
-tor-llcrypto = { version = "0.48.0", optional = true }
-tor-hscrypto = { version = "0.48.0", optional = true }
+tor-hsservice = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
+tor-hsrproxy = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
+tor-keymgr = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
+tor-llcrypto = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
+tor-hscrypto = { git = "https://github.com/mimblewimble/arti", rev = "7c038125baef924a4bf287429c192c5af606f79c", optional = true }
 sha2 = { version = "0.10.8", optional = true }
 hyper = { version = "1.10.1", features = ["http1", "client"], optional = true }
 hyper-util = { version = "0.1.20", features = ["tokio", "http1", "client-legacy"], optional = true }
