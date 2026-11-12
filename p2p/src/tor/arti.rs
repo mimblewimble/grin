@@ -420,8 +420,11 @@ where
 					"Stop using the Tor client before changing its configuration".into(),
 				));
 			}
-			debug!("Tor config changed, rebuild client.");
-			*cached_client_config = None;
+			debug!("Tor config changed, reconfigure client.");
+			client
+				.reconfigure(&client_config, Reconfigure::AllOrNothing)
+				.map_err(|e| Error::Config(format!("{:?}", e)))?;
+			return Ok((client.clone(), c.clone()));
 		}
 	}
 	let (client, runtime) = launch_client(client_config, config).await?;
