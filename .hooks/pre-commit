@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cargo +1.99.0 clippy --all --workspace --all-targets -- -D warnings
+cargo +1.99.0 clippy --all --workspace --all-targets --features grin_p2p/tor -- -D warnings
 if [ $? != 0 ]; then
   printf "fix clippy errors before commit, check with: \n"
   printf "cargo +1.99.0 clippy --all --workspace --all-targets -- -D warnings"
