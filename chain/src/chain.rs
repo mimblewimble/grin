@@ -213,8 +213,6 @@ impl Chain {
 
 		chain.log_heads()?;
 
-		chain.compact()?;
-
 		Ok(chain)
 	}
 
