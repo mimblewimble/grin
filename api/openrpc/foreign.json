@@ -1,0 +1,1123 @@
+{
+	"openrpc": "1.2.6",
+	"info": {
+		"title": "Grin Node Foreign API",
+		"version": "5.5.2",
+		"description": "JSON-RPC 2.0 API served at /v2/foreign. All params are required by the server; pass null for an absent optional value.",
+		"license": {
+			"name": "Apache-2.0",
+			"url": "https://www.apache.org/licenses/LICENSE-2.0"
+		}
+	},
+	"methods": [
+		{
+			"name": "get_header",
+			"summary": "Block header by height, hash or output commitment.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "hash",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "commit",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "header",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/BlockHeaderPrintable"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_block",
+			"summary": "Block by height, hash or output commitment.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "hash",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "commit",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "block",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/BlockPrintable"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_blocks",
+			"summary": "Blocks in a height range.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "start_height",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "end_height",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "max",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "include_proof",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "blocks",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/BlockListing"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_version",
+			"summary": "Node and block header version.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "version",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/Version"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_tip",
+			"summary": "Current chain tip.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "tip",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/Tip"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_kernel",
+			"summary": "Locate a kernel by excess.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "excess",
+					"required": true,
+					"schema": {
+						"type": "string"
+					}
+				},
+				{
+					"name": "min_height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "max_height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "kernel",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/LocatedTxKernel"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_outputs",
+			"summary": "Outputs by commitment or height range.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "commits",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "array",
+								"items": {
+									"type": "string"
+								}
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "start_height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "end_height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "include_proof",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "include_merkle_proof",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "outputs",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/OutputPrintable"
+									}
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_unspent_outputs",
+			"summary": "Unspent outputs by PMMR index range.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "start_index",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "end_index",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				},
+				{
+					"name": "max",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "include_proof",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "outputs",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/OutputListing"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_pmmr_indices",
+			"summary": "PMMR indices for a block height range.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "start_block_height",
+					"required": true,
+					"schema": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				{
+					"name": "end_block_height",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "listing",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/OutputListing"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_pool_size",
+			"summary": "Number of transactions in the pool.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "size",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "integer",
+									"minimum": 0
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_stempool_size",
+			"summary": "Number of transactions in the stempool.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "size",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "integer",
+									"minimum": 0
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_unconfirmed_transactions",
+			"summary": "Transactions in the pool.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "entries",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/PoolEntry"
+									}
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "push_transaction",
+			"summary": "Submit a transaction to the pool.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "tx",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/Transaction"
+					}
+				},
+				{
+					"name": "fluff",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"type": "boolean"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		}
+	],
+	"components": {
+		"schemas": {
+			"ErrResult": {
+				"type": "object",
+				"properties": {
+					"Err": {
+						"$ref": "#/components/schemas/Error"
+					}
+				},
+				"required": [
+					"Err"
+				]
+			},
+			"Error": {
+				"description": "grin_api::rest::Error, serialized as an externally tagged enum.",
+				"oneOf": [
+					{
+						"type": "string",
+						"enum": [
+							"NotFound"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Internal": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"Internal"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Argument": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"Argument"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"RequestError": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"RequestError"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"ResponseError": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"ResponseError"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Router": {
+								"type": "object"
+							}
+						},
+						"required": [
+							"Router"
+						]
+					}
+				]
+			},
+			"Tip": {
+				"type": "object",
+				"properties": {
+					"height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"last_block_pushed": {
+						"type": "string"
+					},
+					"prev_block_to_last": {
+						"type": "string"
+					},
+					"total_difficulty": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				"required": [
+					"height",
+					"last_block_pushed",
+					"prev_block_to_last",
+					"total_difficulty"
+				]
+			},
+			"Version": {
+				"type": "object",
+				"properties": {
+					"node_version": {
+						"type": "string"
+					},
+					"block_header_version": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				"required": [
+					"node_version",
+					"block_header_version"
+				]
+			},
+			"BlockHeaderPrintable": {
+				"type": "object",
+				"properties": {
+					"hash": {
+						"type": "string"
+					},
+					"version": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"previous": {
+						"type": "string"
+					},
+					"prev_root": {
+						"type": "string"
+					},
+					"timestamp": {
+						"type": "string"
+					},
+					"output_root": {
+						"type": "string"
+					},
+					"output_mmr_size": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"range_proof_root": {
+						"type": "string"
+					},
+					"kernel_root": {
+						"type": "string"
+					},
+					"kernel_mmr_size": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"nonce": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"edge_bits": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"cuckoo_solution": {
+						"type": "array",
+						"items": {
+							"type": "integer",
+							"minimum": 0
+						}
+					},
+					"total_difficulty": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"secondary_scaling": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"total_kernel_offset": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"hash",
+					"version",
+					"height",
+					"previous",
+					"prev_root",
+					"timestamp",
+					"output_root",
+					"output_mmr_size",
+					"range_proof_root",
+					"kernel_root",
+					"kernel_mmr_size",
+					"nonce",
+					"edge_bits",
+					"cuckoo_solution",
+					"total_difficulty",
+					"secondary_scaling",
+					"total_kernel_offset"
+				]
+			},
+			"BlockPrintable": {
+				"type": "object",
+				"properties": {
+					"header": {
+						"$ref": "#/components/schemas/BlockHeaderPrintable"
+					},
+					"inputs": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"outputs": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/OutputPrintable"
+						}
+					},
+					"kernels": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/TxKernelPrintable"
+						}
+					}
+				},
+				"required": [
+					"header",
+					"inputs",
+					"outputs",
+					"kernels"
+				]
+			},
+			"OutputPrintable": {
+				"type": "object",
+				"properties": {
+					"output_type": {
+						"type": "string",
+						"enum": [
+							"Coinbase",
+							"Transaction"
+						]
+					},
+					"commit": {
+						"type": "string"
+					},
+					"spent": {
+						"type": "boolean"
+					},
+					"proof": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"proof_hash": {
+						"type": "string"
+					},
+					"block_height": {
+						"oneOf": [
+							{
+								"type": "integer",
+								"minimum": 0
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"merkle_proof": {
+						"oneOf": [
+							{
+								"type": "object"
+							},
+							{
+								"type": "null"
+							}
+						]
+					},
+					"mmr_index": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				"required": [
+					"output_type",
+					"commit",
+					"spent",
+					"proof",
+					"proof_hash",
+					"block_height",
+					"merkle_proof",
+					"mmr_index"
+				]
+			},
+			"TxKernelPrintable": {
+				"type": "object",
+				"properties": {
+					"features": {
+						"type": "string"
+					},
+					"fee_shift": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"fee": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"lock_height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"excess": {
+						"type": "string"
+					},
+					"excess_sig": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"features",
+					"fee_shift",
+					"fee",
+					"lock_height",
+					"excess",
+					"excess_sig"
+				]
+			},
+			"BlockListing": {
+				"type": "object",
+				"properties": {
+					"last_retrieved_height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"blocks": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/BlockPrintable"
+						}
+					}
+				},
+				"required": [
+					"last_retrieved_height",
+					"blocks"
+				]
+			},
+			"OutputListing": {
+				"type": "object",
+				"properties": {
+					"highest_index": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"last_retrieved_index": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"outputs": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/OutputPrintable"
+						}
+					}
+				},
+				"required": [
+					"highest_index",
+					"last_retrieved_index",
+					"outputs"
+				]
+			},
+			"LocatedTxKernel": {
+				"type": "object",
+				"properties": {
+					"tx_kernel": {
+						"$ref": "#/components/schemas/TxKernel"
+					},
+					"height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"mmr_index": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				"required": [
+					"tx_kernel",
+					"height",
+					"mmr_index"
+				]
+			},
+			"TxKernel": {
+				"type": "object",
+				"description": "grin_core::core::transaction::TxKernel."
+			},
+			"PoolEntry": {
+				"type": "object",
+				"description": "grin_pool::PoolEntry."
+			},
+			"Transaction": {
+				"type": "object",
+				"description": "grin_core::core::transaction::Transaction."
+			}
+		}
+	}
+}
