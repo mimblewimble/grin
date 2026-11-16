@@ -370,6 +370,19 @@ impl<'a> Batch<'a> {
 		})
 	}
 
+	/// Visit output positions directly from the database cursor
+	pub fn for_each_output_pos<F>(&self, mut visit: F) -> Result<(), Error>
+	where
+		F: FnMut(&[u8], CommitPos) -> Result<(), Error>,
+	{
+		let protocol_version = self.db.protocol_version();
+		self.db.for_each(Some(OUTPUT_POS_PREFIX), |key, mut value| {
+			let pos =
+				ser::deserialize(&mut value, protocol_version, DeserializationMode::default())?;
+			visit(key, pos)
+		})
+	}
+
 	/// Get output_pos from index.
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		match self.get_output_pos_height(commit)? {

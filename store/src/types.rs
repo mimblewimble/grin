@@ -507,9 +507,11 @@ where
 		let mut current_pos = 0;
 		let mut prune_pos = prune_pos;
 		while let Ok(elmt) = T::read(&mut streaming_reader) {
-			if prune_pos.binary_search(&current_pos).is_ok() {
+			if prune_pos.first() == Some(&current_pos) {
 				// Pruned pos, moving on.
-				prune_pos = &prune_pos[1..];
+				while prune_pos.first() == Some(&current_pos) {
+					prune_pos = &prune_pos[1..];
+				}
 			} else {
 				// Not pruned, write to file.
 				elmt.write(&mut bin_writer).map_err(io::Error::other)?;

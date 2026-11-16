@@ -36,7 +36,7 @@ use crate::types::{CommitPos, OutputRoots, Tip, TxHashSetRoots, TxHashsetWriteSt
 use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip, StopState};
 use crate::SyncState;
-use croaring::Bitmap;
+use croaring::{Bitmap, Treemap};
 use grin_store::pmmr::{clean_files_by_prefix, PMMRBackend};
 use std::cmp::Ordering;
 use std::fs::{self, File};
@@ -277,6 +277,7 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
+		debug!("txhashset: opening output PMMR and prune caches...");
 		let output_pmmr_h = PMMRHandle::new(
 			Path::new(&root_dir)
 				.join(TXHASHSET_SUBDIR)
@@ -286,6 +287,7 @@ impl TxHashSet {
 			header,
 		)?;
 
+		debug!("txhashset: opening rangeproof PMMR and prune caches...");
 		let rproof_pmmr_h = PMMRHandle::new(
 			Path::new(&root_dir)
 				.join(TXHASHSET_SUBDIR)
@@ -298,6 +300,7 @@ impl TxHashSet {
 		// Initialize the bitmap accumulator from the current output PMMR.
 		let bitmap_accumulator = TxHashSet::bitmap_accumulator(&output_pmmr_h)?;
 
+		debug!("txhashset: opening kernel PMMR...");
 		let mut maybe_kernel_handle: Option<PMMRHandle<TxKernel>> = None;
 		let versions = vec![ProtocolVersion(2), ProtocolVersion(1)];
 		for version in versions {
@@ -551,6 +554,7 @@ impl TxHashSet {
 
 		let head_header = batch.head_header()?;
 
+		debug!("txhashset: preparing compaction rewind positions...");
 		let rewind_rm_pos = input_pos_to_rewind(horizon_header, &head_header, batch)?;
 
 		debug!("txhashset: check_compact output mmr backend...");
@@ -595,6 +599,10 @@ impl TxHashSet {
 		}
 
 		let now = Instant::now();
+		debug!(
+			"verify_kernel_pos_index: rebuilding NRD kernel index from height {}...",
+			from_header.height
+		);
 		let kernel_index = store::nrd_recent_kernel_index();
 		kernel_index.clear(batch)?;
 
@@ -671,19 +679,25 @@ impl TxHashSet {
 		let now = Instant::now();
 
 		let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.size);
+		debug!("init_output_pos_index: checking indexed outputs against the UTXO set...");
 
 		// Iterate over the current output_pos index, removing any entries that
 		// do not point to to the expected output.
+		// Cache validated 64-bit positions for the UTXO scan
+		let mut indexed_pos = Treemap::new();
 		let mut pos_to_delete = vec![];
-		for (key, pos1) in batch.output_pos_iter()?.flatten() {
-			let pos0 = pos1.pos - 1;
-			if let Some(out) = output_pmmr.get_data(pos0) {
-				if batch.is_match_output_pos_key(&key, &out.commitment()) {
-					continue;
+		batch.for_each_output_pos(|key, pos1| {
+			if let Some(pos0) = pos1.pos.checked_sub(1) {
+				if let Some(out) = output_pmmr.get_data(pos0) {
+					if batch.is_match_output_pos_key(key, &out.commitment()) {
+						indexed_pos.add(pos1.pos);
+						return Ok(());
+					}
 				}
 			}
-			pos_to_delete.push(key);
-		}
+			pos_to_delete.push(key.to_vec());
+			Ok(())
+		})?;
 		let mut removed_count = 0;
 		for p in pos_to_delete {
 			batch.delete(Some(store::OUTPUT_POS_PREFIX), &p)?;
@@ -695,20 +709,19 @@ impl TxHashSet {
 		);
 
 		let mut outputs_pos: Vec<(Commitment, u64)> = vec![];
+		let mut utxo_count = 0u64;
+		debug!("init_output_pos_index: checking the UTXO set for missing index entries...");
 		for pos0 in output_pmmr.leaf_pos_iter() {
 			if let Some(out) = output_pmmr.get_data(pos0) {
-				outputs_pos.push((out.commit, 1 + pos0));
+				utxo_count += 1;
+				if !indexed_pos.contains(1 + pos0) {
+					outputs_pos.push((out.commit, 1 + pos0));
+				}
 			}
 		}
 
-		debug!("init_output_pos_index: {} utxos", outputs_pos.len());
-
-		outputs_pos.retain(|x| {
-			batch
-				.get_output_pos_height(&x.0)
-				.map(|p| p.is_none())
-				.unwrap_or(true)
-		});
+		debug!("init_output_pos_index: {} utxos", utxo_count);
+		drop(indexed_pos);
 
 		if outputs_pos.is_empty() {
 			debug!("init_output_pos_index: 0 utxos with missing index entries");
@@ -1799,6 +1812,7 @@ impl<'a> Extension<'a> {
 
 	fn validate_mmrs(&self) -> Result<(), Error> {
 		let now = Instant::now();
+		debug!("txhashset: validating output, rangeproof and kernel PMMRs...");
 
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
@@ -1834,6 +1848,7 @@ impl<'a> Extension<'a> {
 	) -> Result<(Commitment, Commitment), Error> {
 		let now = Instant::now();
 
+		debug!("txhashset: validating UTXO and kernel sums...");
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
 			header.total_overage(genesis.kernel_mmr_size > 0),
 			header.total_kernel_offset(),
@@ -1945,6 +1960,7 @@ impl<'a> Extension<'a> {
 		stop_state: Option<Arc<StopState>>,
 	) -> Result<(), Error> {
 		let now = Instant::now();
+		debug!("txhashset: verifying kernel signatures...");
 		const KERNEL_BATCH_SIZE: usize = 5_000;
 
 		let mut kern_count = 0;
@@ -1995,6 +2011,7 @@ impl<'a> Extension<'a> {
 		stop_state: Option<Arc<StopState>>,
 	) -> Result<u64, Error> {
 		let now = Instant::now();
+		debug!("txhashset: verifying rangeproofs...");
 
 		let batch_size = batch_size.unwrap_or(1_000);
 

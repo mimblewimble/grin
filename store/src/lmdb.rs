@@ -794,6 +794,20 @@ impl<'a> Batch<'a> {
 		res
 	}
 
+	/// Visit borrowed entries in the current write transaction
+	pub fn for_each<F>(&self, db_key: Option<u8>, mut visit: F) -> Result<(), Error>
+	where
+		F: FnMut(&[u8], &[u8]) -> Result<(), Error>,
+	{
+		let read = self.write.nested_read_txn()?;
+		let db = self.store.get_db(db_key)?;
+		for entry in db.iter(&read)? {
+			let (key, value) = entry?;
+			visit(key, value)?;
+		}
+		Ok(())
+	}
+
 	/// Gets a `Readable` value from the database by provided key and deserialization strategy.
 	pub fn get_ser<T: ser::Readable>(
 		&self,

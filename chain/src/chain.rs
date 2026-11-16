@@ -1218,6 +1218,7 @@ impl Chain {
 		txhashset.init_recent_kernel_pos_index(&header_pmmr, &mut batch)?;
 
 		// Commit all the changes to the db.
+		debug!("txhashset_write: committing validated state...");
 		batch.commit()?;
 
 		debug!("txhashset_write: finished committing the batch (head etc.)");
@@ -1295,6 +1296,10 @@ impl Chain {
 		let tail_hash = header_pmmr.get_header_hash_by_height(head.height - horizon)?;
 		let tail = batch.get_block_header(&tail_hash)?;
 
+		debug!(
+			"remove_historical_blocks: scanning and removing blocks below height {}...",
+			tail.height
+		);
 		// Remove old blocks (including short-lived fork blocks) which height < tail.height
 		let mut blocks_to_delete = vec![];
 		let iter = batch.blocks_iter()?;
@@ -1395,6 +1400,7 @@ impl Chain {
 			batch.save_compaction_head(&head)?;
 		}
 		// Commit all the above db changes.
+		debug!("compact: committing database changes...");
 		batch.commit()?;
 		info!("compact: finished in {}ms", now.elapsed().as_millis());
 
