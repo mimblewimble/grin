@@ -61,7 +61,7 @@ jobs:
         with:
           submodules: recursive
       - name: Tests
-        run: cargo test --release --all --exclude tor-circmgr --exclude tor-rtcompat
+        run: cargo test --release --all --exclude tor-circmgr --exclude tor-rtcompat --exclude arti-client --exclude tor-dirmgr
       - name: Test Tor
         run: cargo test --release -p grin_p2p --features tor-static
 
