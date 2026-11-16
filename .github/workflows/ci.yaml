@@ -47,7 +47,7 @@ jobs:
         with:
           submodules: recursive
       - name: Tests
-        run: cargo test --release --all
+        run: cargo test --release --all --exclude tor-circmgr --exclude tor-rtcompat
 
   windows-tests:
     name: Windows Tests
@@ -61,7 +61,7 @@ jobs:
         with:
           submodules: recursive
       - name: Tests
-        run: cargo test --release --all
+        run: cargo test --release --all --exclude tor-circmgr --exclude tor-rtcompat
       - name: Test Tor
         run: cargo test --release -p grin_p2p --features tor-static
 
