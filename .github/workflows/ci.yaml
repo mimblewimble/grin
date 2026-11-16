@@ -6,7 +6,10 @@ jobs:
     name: Cargo clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
       - run: rustup toolchain install 1.99.0 --profile minimal --component clippy
       - run: cargo +1.99.0 clippy --workspace --all-targets --features grin_p2p/tor --exclude tor-error --exclude tor-rtcompat --exclude tor-circmgr -- -D warnings
   linux-tests:
@@ -17,7 +20,10 @@ jobs:
       matrix:
         job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
       - name: Install SQLite
         if: matrix.job_args == 'p2p'
         run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
@@ -37,7 +43,9 @@ jobs:
     needs: clippy
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
       - name: Tests
         run: cargo test --release --all
 
@@ -49,7 +57,9 @@ jobs:
       ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
       - name: Tests
         run: cargo test --release --all
       - name: Test Tor
