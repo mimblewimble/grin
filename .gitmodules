@@ -1,0 +1,4 @@
+[submodule "p2p/tor/arti"]
+	path = p2p/tor/arti
+	url = https://github.com/mimblewimble/arti
+	branch = grin-0.48
