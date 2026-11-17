@@ -335,7 +335,6 @@ impl TorProcess {
 			Regex::new(r"^\[notice] Bootstrapped (?P<perc>[0-9]+)%(.*): ").map_err(Error::Regex)?;
 
 		let timestamp_len = "May 16 02:50:08.792".len();
-		let mut warnings = Vec::new();
 		let mut raw_line = String::new();
 
 		while stdout
@@ -347,9 +346,7 @@ impl TorProcess {
 				if raw_line.len() < timestamp_len + 1 {
 					return Err(Error::InvalidLogLine);
 				}
-				let timestamp = &raw_line[..timestamp_len];
 				let line = &raw_line[timestamp_len + 1..raw_line.len() - 1];
-				debug!("{} {}", timestamp, line);
 				match line.split(' ').nth(0) {
 					Some("[notice]") => {
 						if let Some("Bootstrapped") = line.split(' ').nth(1) {
@@ -357,15 +354,19 @@ impl TorProcess {
 								.captures(line)
 								.and_then(|c| c.name("perc"))
 								.and_then(|pc| pc.as_str().parse::<u8>().ok())
-								.ok_or_else(|| Error::InvalidBootstrapLine(line.to_string()))?;
+								.ok_or_else(|| {
+									Error::InvalidBootstrapLine("Invalid progress".into())
+								})?;
 
+							debug!("Tor bootstrap: {}%", perc);
 							if perc >= completion_perc {
 								return Ok(());
 							}
 						}
 					}
-					Some("[warn]") => warnings.push(line.to_string()),
-					Some("[err]") => return Err(Error::Tor(line.to_string(), warnings)),
+					Some("[err]") => {
+						return Err(Error::Tor("Tor bootstrap failed".into(), Vec::new()))
+					}
 					_ => (),
 				}
 			}
@@ -470,10 +471,8 @@ fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crat
 		let line = lines
 			.get(index)
 			.ok_or_else(|| crate::tor::Error::Config("Bad connection line".to_string()))?;
-		hm_tor_bridge.push(("Bridge".into(), super::bridge::bridge_line(line)?));
+		hm_tor_bridge.push(("Bridge".into(), line.clone()));
 	}
-
-	debug!("hm_tor_bridge {:?}", hm_tor_bridge);
 
 	Ok(hm_tor_bridge)
 }

@@ -25,7 +25,7 @@ use ed25519_dalek::VerifyingKey as DalekPublicKey;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::MAIN_SEPARATOR;
+use std::path::{Path, MAIN_SEPARATOR};
 use std::string::String;
 
 const SEC_KEY_FILE: &str = "hs_ed25519_secret_key";
@@ -79,15 +79,17 @@ impl TorRcConfig {
 	}
 
 	/// write to file
-	pub fn write_to_file(&self, file_path: &str) -> Result<(), Error> {
-		let mut file = File::create(file_path).map_err(Error::IO)?;
+	pub fn write_to_file(&self, dir: &str) -> Result<(), Error> {
+		let mut file = tempfile::NamedTempFile::new_in(dir).map_err(Error::IO)?;
 		for item in &self.items {
 			file.write_all(item.name.as_bytes()).map_err(Error::IO)?;
 			file.write_all(b" ").map_err(Error::IO)?;
 			file.write_all(item.value.as_bytes()).map_err(Error::IO)?;
 			file.write_all(b"\n").map_err(Error::IO)?;
 		}
-		Ok(())
+		file.persist(Path::new(dir).join(TORRC_FILE))
+			.map(drop)
+			.map_err(|e| Error::IO(e.error))
 	}
 }
 
@@ -168,8 +170,6 @@ pub fn output_torrc(
 	hm_tor_bridge: Vec<(String, String)>,
 	hm_tor_proxy: HashMap<String, String>,
 ) -> Result<(), Error> {
-	let torrc_file_path = format!("{}{}{}", tor_config_directory, MAIN_SEPARATOR, TORRC_FILE);
-
 	let tor_data_dir = format!("./{}", TOR_DATA_DIR);
 
 	let mut props = TorRcConfig::new();
@@ -201,9 +201,7 @@ pub fn output_torrc(
 		}
 	}
 
-	props.write_to_file(&torrc_file_path)?;
-
-	Ok(())
+	props.write_to_file(tor_config_directory)
 }
 
 /// output entire tor config for a list of secret keys
@@ -264,6 +262,8 @@ pub fn output_tor_sender_config(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	#[cfg(unix)]
+	use std::os::unix::fs::PermissionsExt;
 
 	use rand::rngs::mock::StepRng;
 
@@ -313,9 +313,21 @@ mod tests {
 		let secp_inst = static_secp_instance();
 		let secp = secp_inst.lock();
 		let mut test_rng = StepRng::new(1_234_567_890_u64, 1);
-		let sec_key = secp::key::SecretKey::new(&secp, &mut test_rng);
-		let hm = HashMap::new();
-		output_tor_listener_config(test_dir, "127.0.0.1:3415", &[sec_key], Vec::new(), hm)?;
+		let keys = [secp::key::SecretKey::new(&secp, &mut test_rng)];
+		output_tor_listener_config(test_dir, "127.0.0.1:3415", &keys, vec![], HashMap::new())?;
+		let path = Path::new(test_dir).join(TORRC_FILE);
+		#[cfg(unix)]
+		fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).map_err(Error::IO)?;
+		output_tor_listener_config(test_dir, "127.0.0.1:3416", &keys, vec![], HashMap::new())?;
+		let torrc = fs::read_to_string(&path).unwrap();
+		assert_eq!(
+			torrc
+				.lines()
+				.find(|line| line.starts_with("HiddenServicePort ")),
+			Some("HiddenServicePort 80 127.0.0.1:3416")
+		);
+		#[cfg(unix)]
+		assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
 		clean_output_dir(test_dir);
 		Ok(())
 	}

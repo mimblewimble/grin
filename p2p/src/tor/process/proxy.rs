@@ -16,11 +16,12 @@ use crate::tor::config::TorProxyConfig;
 use crate::tor::process::types::Error;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt;
 use std::str;
 use url::Host;
 
 /// Tor Proxy
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TorProxy {
 	/// proxy type used for the proxy, e.g. "socks4", "socks5", "http", "https"
 	pub transport: Option<String>,
@@ -32,6 +33,12 @@ pub struct TorProxy {
 	pub password: Option<String>,
 	/// computer goes through a firewall that only allows connections to certain ports
 	pub allowed_port: Option<Vec<u16>>,
+}
+
+impl fmt::Debug for TorProxy {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("TorProxy").finish_non_exhaustive()
+	}
 }
 
 impl TorProxy {

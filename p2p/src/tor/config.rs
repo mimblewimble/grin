@@ -71,7 +71,7 @@ pub(crate) fn request_timeout<T: TorConfig>(config: &T) -> Duration {
 }
 
 /// Tor Bridge Config
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TorBridgeConfig {
 	/// Path to the bridge binary
 	pub bridge_bin_path: Option<String>,
@@ -105,10 +105,11 @@ impl TorBridgeConfig {
 		let mut config_builders: Vec<BridgeConfigBuilder> = vec![];
 		let mut lines = vec![];
 		for line in bridges {
-			let line = bridge::bridge_line(&line)?;
+			let line = bridge::bridge_line(&line)
+				.map_err(|_| Error::Config("Invalid bridge line".into()))?;
 			let bridge = line
 				.parse()
-				.map_err(|e| Error::Config(format!("Can not parse bridge line {}", e)))?;
+				.map_err(|_| Error::Config("Invalid bridge line".into()))?;
 			config_builders.push(bridge);
 			lines.push(line);
 		}
@@ -141,6 +142,13 @@ impl TorBridgeConfig {
 
 	pub(crate) fn arguments(&self, transport: &str) -> Result<Vec<String>, Error> {
 		bridge::client_args(transport, &self.client_args)
+			.map_err(|_| Error::Config("Invalid bridge client arguments".into()))
+	}
+}
+
+impl fmt::Debug for TorBridgeConfig {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("TorBridgeConfig").finish_non_exhaustive()
 	}
 }
 
@@ -151,7 +159,7 @@ impl fmt::Display for TorBridgeConfig {
 }
 
 /// Tor Proxy configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TorProxyConfig {
 	/// socks4 |socks5 | http(s)
 	pub transport: Option<String>,
@@ -163,6 +171,12 @@ pub struct TorProxyConfig {
 	pub password: Option<String>,
 	/// allowed port - proxy
 	pub allowed_port: Option<Vec<u16>>,
+}
+
+impl fmt::Debug for TorProxyConfig {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("TorProxyConfig").finish_non_exhaustive()
+	}
 }
 
 impl fmt::Display for TorProxyConfig {
