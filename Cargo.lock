@@ -339,7 +339,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a860072022177f903e59730004fb5dc13db9275b79bb2aef7ba8ce831956c233"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "futures-sink",
  "futures-util",
  "memchr",
@@ -633,6 +633,12 @@ name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
+name = "bytes"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
 
 [[package]]
 name = "bytes"
@@ -2218,7 +2224,7 @@ dependencies = [
 name = "grin_api"
 version = "5.5.2"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "easy-jsonrpc-mw",
  "futures 0.3.34",
  "grin_chain",
@@ -2292,7 +2298,7 @@ version = "5.5.2"
 dependencies = [
  "blake2-rfc",
  "byteorder",
- "bytes",
+ "bytes 0.5.6",
  "chrono",
  "croaring",
  "enum_primitive",
@@ -2340,7 +2346,7 @@ dependencies = [
  "base64 0.12.3",
  "bitflags 1.3.2",
  "built",
- "bytes",
+ "bytes 0.5.6",
  "chrono",
  "data-encoding",
  "ed25519-dalek 2.2.0",
@@ -2518,7 +2524,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155"
 dependencies = [
  "atomic-waker",
- "bytes",
+ "bytes 1.12.0",
  "fnv",
  "futures-core",
  "futures-sink",
@@ -2576,7 +2582,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2700e3fe555c3310aa7286cac6167449f2c87e0eb58769c9208a1c58a1d106"
 dependencies = [
  "base64 0.22.1",
- "bytes",
+ "bytes 1.12.0",
  "headers-core",
  "http",
  "httpdate",
@@ -2710,7 +2716,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "918d3568bebf352712bc2ef3d46a8bcf1a75b373be6539de198e9105cbbf9ce0"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "itoa",
 ]
 
@@ -2720,7 +2726,7 @@ version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "http",
 ]
 
@@ -2730,7 +2736,7 @@ version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b021d93e26becf5dc7e1b75b1bed1fd93124b374ceb73f43d4d4eafec896a64a"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "futures-core",
  "http",
  "http-body",
@@ -2797,7 +2803,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55281c53a1894c864990125767da440a4e630446785086f52523b20033b74498"
 dependencies = [
  "atomic-waker",
- "bytes",
+ "bytes 1.12.0",
  "futures-channel",
  "futures-core",
  "h2",
@@ -2818,7 +2824,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9043b7b23fb0bc4a1c7014c27b50a4fc42cc76206f71d34fc0dfe5b28ddc3faf"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "futures-util",
  "headers",
  "http",
@@ -2884,7 +2890,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "http-body-util",
  "hyper",
  "hyper-util",
@@ -2900,7 +2906,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "futures-channel",
  "futures-util",
  "http",
@@ -5833,7 +5839,7 @@ version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "libc",
  "mio",
  "parking_lot",
@@ -5881,7 +5887,7 @@ version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "futures-core",
  "futures-io",
  "futures-sink",
@@ -6043,7 +6049,7 @@ dependencies = [
 name = "tor-bytes"
 version = "0.48.0"
 dependencies = [
- "bytes",
+ "bytes 1.12.0",
  "derive-deftly",
  "digest 0.11.3",
  "educe",
@@ -6061,7 +6067,7 @@ version = "0.48.0"
 dependencies = [
  "amplify",
  "bitflags 2.13.0",
- "bytes",
+ "bytes 1.12.0",
  "caret",
  "derive-deftly",
  "derive_more",
@@ -6887,7 +6893,7 @@ dependencies = [
  "async-trait",
  "asynchronous-codec",
  "bitvec",
- "bytes",
+ "bytes 1.12.0",
  "caret",
  "cfg-if 1.0.5",
  "cipher 0.5.2",

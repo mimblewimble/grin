@@ -19,9 +19,8 @@ use crate::tor::{Error, PostError};
 
 use arti_client::StreamPrefs;
 use async_trait::async_trait;
-use bytes::Bytes;
 use http_body_util::{BodyExt, Full, Limited};
-use hyper::body::Body;
+use hyper::body::{Body, Bytes};
 use hyper::{Method, Request, Response, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde::de::StdError;
