@@ -16,7 +16,9 @@ use crate::tor::{Error, ServiceStatus, SERVICE_STATUS};
 
 use futures::StreamExt;
 use std::time::{Duration, Instant};
-use tor_hsservice::status::{Problem as OnionServiceProblem, State as OnionServiceState};
+use tor_hsservice::status::{
+	OnionServiceStatus, Problem as OnionServiceProblem, State as OnionServiceState, State,
+};
 use tor_hsservice::RunningOnionService;
 use tor_rtcompat::{Runtime, SleepProviderExt, SpawnExt};
 
@@ -103,11 +105,11 @@ where
 		.spawn(async move {
 			let mut monitor = StatusLog::default();
 			loop {
-				let state = status.state();
 				let problem = status.current_problem().and_then(onion_service_problem);
 				if let Some(ref service_status) = service_status {
-					update_status(&mut service_status.lock().unwrap(), state, problem.as_deref());
+					update_status(&mut service_status.lock().unwrap(), status.clone(), problem.as_deref());
 				}
+				let state = status.state();
 				if let Some((level, elapsed)) = monitor.update(state, problem, Instant::now()) {
 					if level == log::Level::Info {
 						info!("Onion service recovered after {}s at http://{onion_address}.onion", elapsed.as_secs());
@@ -135,22 +137,29 @@ where
 	Ok(())
 }
 
-fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: Option<&str>) {
+fn update_status(status: &mut ServiceStatus, state: OnionServiceStatus, problem: Option<&str>) {
+	use OnionServiceState::*;
+	update_onion_state_status(status, state.state(), problem);
+	if status.clone() == ServiceStatus::Recovering {
+		//TODO: Currently arti is not showing right status when publisher still has
+		// Bootstrapping status, so we set Running if ipt manager is DegradedReachable or Running.
+		let ipt_mgr_status = state.ipt_mgr_state();
+		*status =
+			if matches!(ipt_mgr_status, Running) || matches!(ipt_mgr_status, DegradedReachable) {
+				ServiceStatus::Running
+			} else {
+				ServiceStatus::Recovering
+			};
+	}
+}
+
+fn update_onion_state_status(status: &mut ServiceStatus, state: State, problem: Option<&str>) {
 	use OnionServiceState::*;
 
 	*status = match state {
 		Running => ServiceStatus::Running,
 		DegradedReachable => ServiceStatus::Degraded,
-		Recovering => ServiceStatus::Recovering,
-		Bootstrapping => {
-			//TODO: Currently arti is not showing right status when publisher still has
-			// Bootstrapping status, so we set Running after Recovering.
-			if matches!(status, ServiceStatus::Recovering) {
-				ServiceStatus::Running
-			} else {
-				ServiceStatus::Recovering
-			}
-		}
+		Recovering | Bootstrapping => ServiceStatus::Recovering,
 		Broken | DegradedUnreachable => ServiceStatus::Errored(Error::Generic(
 			problem
 				.map(str::to_owned)
@@ -159,7 +168,7 @@ fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: 
 		//TODO: arti is sending shutdown first.
 		Shutdown if !matches!(status, ServiceStatus::Starting) => ServiceStatus::Stopped,
 		_ => ServiceStatus::Starting,
-	};
+	}
 }
 
 fn onion_service_problem(problem: &OnionServiceProblem) -> Option<String> {
@@ -181,23 +190,23 @@ mod tests {
 	#[test]
 	fn service_states() {
 		let mut status = ServiceStatus::Starting;
-		update_status(&mut status, Bootstrapping, None);
+		update_onion_state_status(&mut status, Bootstrapping, None);
 		assert!(matches!(status, ServiceStatus::Recovering));
-		update_status(&mut status, Running, None);
+		update_onion_state_status(&mut status, Running, None);
 		assert!(matches!(status, ServiceStatus::Running));
-		update_status(&mut status, DegradedReachable, None);
+		update_onion_state_status(&mut status, DegradedReachable, None);
 		assert!(matches!(status, ServiceStatus::Degraded));
-		update_status(&mut status, Bootstrapping, None);
+		update_onion_state_status(&mut status, Bootstrapping, None);
 		assert!(matches!(status, ServiceStatus::Recovering));
-		update_status(&mut status, Recovering, None);
+		update_onion_state_status(&mut status, Recovering, None);
 		assert!(matches!(status, ServiceStatus::Recovering));
-		update_status(&mut status, DegradedUnreachable, Some("upload failed"));
+		update_onion_state_status(&mut status, DegradedUnreachable, Some("upload failed"));
 		assert!(
 			matches!(status, ServiceStatus::Errored(Error::Generic(ref e)) if e == "upload failed")
 		);
-		update_status(&mut status, Running, None);
+		update_onion_state_status(&mut status, Running, None);
 		assert!(matches!(status, ServiceStatus::Running));
-		update_status(&mut status, Shutdown, None);
+		update_onion_state_status(&mut status, Shutdown, None);
 		assert!(matches!(status, ServiceStatus::Stopped));
 	}
 
