@@ -317,15 +317,8 @@ pub(super) async fn connect<T: TorConfig>(
 	} else {
 		ARTI_CLIENT_CONFIG.lock().await.0.as_mut().unwrap().3 = selected;
 	}
-	let HttpConnection { sender, driver } = HttpConnection::open(TokioIo::new(stream)).await?;
-	Ok(HttpConnection {
-		sender,
-		driver: Box::pin(async move {
-			// Keep the client until the connection closes
-			let _client = client;
-			driver.await
-		}),
-	})
+	// Keep the client until the connection closes
+	HttpConnection::open_held(TokioIo::new(stream), client).await
 }
 
 fn configure_bridges(

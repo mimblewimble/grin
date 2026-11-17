@@ -20,7 +20,6 @@ use crate::tor::{Error, PostError};
 use arti_client::StreamPrefs;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{future::BoxFuture, FutureExt};
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Body;
 use hyper::{Method, Request, Response, StatusCode, Uri};
@@ -28,6 +27,7 @@ use hyper_tls::HttpsConnector;
 use serde::de::StdError;
 use std::collections::HashMap;
 use tokio::sync::{watch, Mutex};
+use tokio::task::JoinHandle;
 use tokio::time::{timeout_at, Instant};
 use tower_service::Service;
 
@@ -369,7 +369,7 @@ async fn connect_http(proxy: Uri, url: &Uri) -> Result<HttpConnection, Error> {
 
 pub(super) struct HttpConnection {
 	pub sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
-	pub driver: BoxFuture<'static, Result<(), hyper::Error>>,
+	driver: JoinHandle<()>,
 }
 
 impl HttpConnection {
@@ -377,12 +377,23 @@ impl HttpConnection {
 	where
 		I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
 	{
+		Self::open_held(io, ()).await
+	}
+
+	pub(super) async fn open_held<I, K>(io: I, keepalive: K) -> Result<Self, PostError>
+	where
+		I: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+		K: Send + 'static,
+	{
 		let (sender, driver) = hyper::client::conn::http1::handshake(io)
 			.await
 			.map_err(|e| PostError::NotSent(format!("Handshake: {:?}", e)))?;
 		Ok(Self {
 			sender,
-			driver: Box::pin(driver.fuse()),
+			driver: tokio::spawn(async move {
+				let _keepalive = keepalive;
+				let _ = driver.await;
+			}),
 		})
 	}
 
@@ -393,6 +404,9 @@ impl HttpConnection {
 		deadline: Instant,
 		closed: &mut watch::Receiver<bool>,
 	) -> Result<Response<String>, PostError> {
+		if self.driver.is_finished() {
+			return Err(PostError::NotSent("Connection closed".into()));
+		}
 		let mut status = None;
 		let result = {
 			let response = async {
@@ -407,20 +421,19 @@ impl HttpConnection {
 				status = Some(response.status());
 				read_response(response, limit).await
 			};
-			let transfer = async {
-				tokio::pin!(response);
-				tokio::select! {
-					result = &mut response => result,
-					_ = &mut self.driver => response.await,
-				}
-			};
 			tokio::select! {
 				biased;
 				_ = closed.changed() => Err("Tor context closed"),
-				result = timeout_at(deadline, transfer) => result.map_err(|_| "Tor request timed out"),
+				result = timeout_at(deadline, response) => result.map_err(|_| "Tor request timed out"),
 			}
 		};
 		result.map_err(|e| PostError::PossiblySent(e.into(), status, None))?
+	}
+}
+
+impl Drop for HttpConnection {
+	fn drop(&mut self) {
+		self.driver.abort();
 	}
 }
 
@@ -657,7 +670,13 @@ mod tests {
 			.unwrap();
 		close.send(()).unwrap();
 		server.await.unwrap();
-		assert!(!connection.sender.is_closed());
+		timeout(Duration::from_secs(1), async {
+			while !connection.sender.is_closed() {
+				tokio::task::yield_now().await;
+			}
+		})
+		.await
+		.unwrap();
 		let result = connection.send(request, 0, deadline, &mut closed).await;
 		assert!(matches!(result, Err(PostError::NotSent(_))), "{:?}", result);
 	}
