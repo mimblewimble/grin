@@ -92,6 +92,7 @@ static RUNNING_PROCESS_SERVICES: LazyLock<Mutex<HashMap<String, ProcessSlot>>> =
 /// Start integrated Tor client or external process to send
 /// Reuse a live sender with the same configuration
 /// Existing outbound proxies do not start a sender
+/// Start Arti outside Tokio
 pub fn start_tor<T>(config: &T) -> Result<(), Error>
 where
 	T: TorConfig,
@@ -170,6 +171,7 @@ fn service_slot(address: &str) -> ProcessSlot {
 }
 
 /// Start Tor service from provided key to forward requests to the given address
+/// Start Arti outside Tokio
 pub fn start_onion_service<T>(sec_key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
 	T: TorConfig,

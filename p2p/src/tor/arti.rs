@@ -109,6 +109,9 @@ impl Drop for ClientRuntime {
 
 /// Get Tor client runtime.
 fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
+	if tokio::runtime::Handle::try_current().is_ok() {
+		return Err(Error::Config("Start Arti outside Tokio".into()));
+	}
 	let mut runtime = ARTI_RUNTIME.lock().unwrap();
 	let r = match runtime.as_ref() {
 		None => runtime.insert(
