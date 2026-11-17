@@ -52,7 +52,11 @@ impl<T> TorContext<T> {
 	/// Further requests require a new context
 	pub async fn close(&self) {
 		self.closed.send_replace(true);
-		*self.state.lock().await = ConnectionState::default();
+		let mut state = self.state.lock().await;
+		if let Some((_, connection)) = state.cached.as_mut() {
+			connection.close().await;
+		}
+		*state = ConnectionState::default();
 	}
 }
 
@@ -370,6 +374,7 @@ async fn connect_http(proxy: Uri, url: &Uri) -> Result<HttpConnection, Error> {
 pub(super) struct HttpConnection {
 	pub sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
 	driver: JoinHandle<()>,
+	_keepalive: Box<dyn Send>,
 }
 
 impl HttpConnection {
@@ -391,10 +396,15 @@ impl HttpConnection {
 		Ok(Self {
 			sender,
 			driver: tokio::spawn(async move {
-				let _keepalive = keepalive;
 				let _ = driver.await;
 			}),
+			_keepalive: Box::new(keepalive),
 		})
+	}
+
+	async fn close(&mut self) {
+		self.driver.abort();
+		let _ = (&mut self.driver).await;
 	}
 
 	async fn send(
@@ -730,7 +740,26 @@ mod tests {
 			.unwrap()
 			.unwrap();
 		assert!(context.state.lock().await.cached.is_none());
-		context.close().await;
+		let (stream, mut peer) = tokio::io::duplex(1024);
+		let keepalive = std::sync::Arc::new(());
+		let released = std::sync::Arc::downgrade(&keepalive);
+		context.state.lock().await.cached = Some((
+			"http://example.onion/".parse().unwrap(),
+			HttpConnection::open_held(TokioIo::new(stream), keepalive)
+				.await
+				.unwrap(),
+		));
+		let close = || async {
+			context.close().await;
+			assert!(released.upgrade().is_none());
+		};
+		timeout(
+			Duration::from_secs(1),
+			futures::future::join(close(), close()),
+		)
+		.await
+		.unwrap();
+		assert_eq!(peer.read(&mut [0]).await.unwrap(), 0);
 	}
 
 	#[tokio::test]
