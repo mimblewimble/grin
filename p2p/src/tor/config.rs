@@ -101,6 +101,9 @@ impl TorBridgeConfig {
 			.into_iter()
 			.filter(|l| !l.trim().is_empty())
 			.collect::<Vec<String>>();
+		if bridges.is_empty() {
+			return Err(Error::Config("Missing bridge line".into()));
+		}
 
 		let mut config_builders: Vec<BridgeConfigBuilder> = vec![];
 		let mut lines = vec![];
