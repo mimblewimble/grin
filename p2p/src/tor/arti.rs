@@ -109,9 +109,6 @@ impl Drop for ClientRuntime {
 
 /// Get Tor client runtime.
 fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
-	if tokio::runtime::Handle::try_current().is_ok() {
-		return Err(Error::Config("Start Arti outside Tokio".into()));
-	}
 	let mut runtime = ARTI_RUNTIME.lock().unwrap();
 	let r = match runtime.as_ref() {
 		None => runtime.insert(
@@ -120,6 +117,14 @@ fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
 		Some(r) => r,
 	};
 	Ok(r.clone())
+}
+
+pub(super) fn outside_tokio(start: impl FnOnce() -> Result<(), Error> + Send) -> Result<(), Error> {
+	if tokio::runtime::Handle::try_current().is_err() {
+		return start();
+	}
+	thread::scope(|scope| scope.spawn(start).join())
+		.map_err(|_| Error::Generic("Arti startup panicked".into()))?
 }
 
 /// Stop running Tor service by onion address as key.

@@ -364,6 +364,16 @@ impl TorProcess {
 							}
 						}
 					}
+					Some("[warn]")
+						if line
+							.trim_end()
+							.ends_with("Failed to bind one of the listener ports.") =>
+					{
+						return Err(Error::Tor(
+							"Could not bind Tor listener port".into(),
+							Vec::new(),
+						));
+					}
 					Some("[err]") => {
 						return Err(Error::Tor("Tor bootstrap failed".into(), Vec::new()))
 					}

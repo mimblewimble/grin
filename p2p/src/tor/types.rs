@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::arti::{start_tor_client, start_tor_service, stop_tor_service};
+use crate::tor::arti::{outside_tokio, start_tor_client, start_tor_service, stop_tor_service};
 use crate::tor::config::TorConfig;
 use crate::tor::ov3::OnionV3Address;
 use crate::tor::process::types::{SenderIsolation, TorProcess};
@@ -92,17 +92,16 @@ static RUNNING_PROCESS_SERVICES: LazyLock<Mutex<HashMap<String, ProcessSlot>>> =
 /// Start integrated Tor client or external process to send
 /// Reuse a live sender with the same configuration
 /// Existing outbound proxies do not start a sender
-/// Start Arti outside Tokio
 pub fn start_tor<T>(config: &T) -> Result<(), Error>
 where
-	T: TorConfig,
+	T: TorConfig + Sync,
 {
 	if let Some(proxy) = config.outbound_proxy() {
 		proxy.uri()?;
 		return Ok(());
 	}
 	if config.use_integrated() {
-		return start_tor_client(config);
+		return outside_tokio(|| start_tor_client(config));
 	}
 	let mut sender = RUNNING_PROCESS_SENDER.lock().unwrap();
 	if let Some(process) = sender.as_mut() {
@@ -171,10 +170,9 @@ fn service_slot(address: &str) -> ProcessSlot {
 }
 
 /// Start Tor service from provided key to forward requests to the given address
-/// Start Arti outside Tokio
 pub fn start_onion_service<T>(sec_key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
 where
-	T: TorConfig,
+	T: TorConfig + Sync,
 {
 	let onion_address = service_address(&sec_key)?;
 	let slot = service_slot(&onion_address);
@@ -207,7 +205,7 @@ where
 		statuses.insert(onion_address.clone(), status.clone());
 	}
 	let result = if config.use_integrated() {
-		start_tor_service(sec_key, addr, config)
+		outside_tokio(|| start_tor_service(sec_key, addr, config))
 	} else {
 		TorProcess::start_listener(sec_key, addr, config).map(|started| *process = Some(started))
 	};

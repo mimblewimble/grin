@@ -139,7 +139,7 @@ impl<T: TorConfig> TorContext<T> {
 		body: String,
 		limit: usize,
 	) -> Result<Response<String>, Error> {
-		let deadline = Instant::now() + request_timeout(&self.config);
+		let deadline = request_deadline(&self.config)?;
 		let (url, request) = build_request(method, body, headers, url).map_err(Error::Post)?;
 		let mut closed = self.closed.subscribe();
 		if *closed.borrow() {
@@ -179,7 +179,7 @@ async fn request_tor<T: TorConfig>(
 	body: String,
 	response_limit: usize,
 ) -> Result<Response<String>, Error> {
-	let deadline = Instant::now() + request_timeout(config);
+	let deadline = request_deadline(config)?;
 	let (url, request) = build_request(method, body, headers, url).map_err(Error::Post)?;
 	let (_close, mut closed) = watch::channel(false);
 	exchange(
@@ -195,6 +195,12 @@ async fn request_tor<T: TorConfig>(
 		&mut closed,
 	)
 	.await
+}
+
+fn request_deadline<T: TorConfig>(config: &T) -> Result<Instant, Error> {
+	Instant::now()
+		.checked_add(request_timeout(config))
+		.ok_or_else(|| Error::Config("Tor request timeout is too large".into()))
 }
 
 async fn exchange<T: TorConfig>(
