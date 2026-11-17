@@ -25,6 +25,7 @@ use hyper::{Method, Request, Response, StatusCode, Uri};
 use hyper_tls::HttpsConnector;
 use serde::de::StdError;
 use std::collections::HashMap;
+use tokio::runtime::{Handle, Id};
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{timeout_at, Instant};
@@ -224,6 +225,7 @@ async fn exchange<T: TorConfig>(
 	let mut cached = state.cached.take().filter(|(target, connection)| {
 		target.scheme() == url.scheme()
 			&& target.authority() == url.authority()
+			&& connection.runtime_id == Handle::current().id()
 			&& !connection.sender.is_closed()
 	});
 	loop {
@@ -379,6 +381,7 @@ async fn connect_http(proxy: Uri, url: &Uri) -> Result<HttpConnection, Error> {
 pub(super) struct HttpConnection {
 	pub sender: hyper::client::conn::http1::SendRequest<Full<Bytes>>,
 	driver: JoinHandle<()>,
+	runtime_id: Id,
 	_keepalive: Box<dyn Send>,
 }
 
@@ -403,6 +406,7 @@ impl HttpConnection {
 			driver: tokio::spawn(async move {
 				let _ = driver.await;
 			}),
+			runtime_id: Handle::current().id(),
 			_keepalive: Box::new(keepalive),
 		})
 	}
