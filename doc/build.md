@@ -43,7 +43,7 @@ brew install openssl
 ## Build steps
 
 ```sh
-git clone https://github.com/mimblewimble/grin.git
+git clone --recurse-submodules https://github.com/mimblewimble/grin.git
 cd grin
 cargo build --release
 ```

@@ -23,7 +23,7 @@ chrono = { version = "0.4.11", features = ["serde"] }
 bytes = "1"
 
 # Tor related deps
-arti-client = { path = "tor/arti/crates/arti-client", features = ["static", "pt-client", "onion-service-service", "onion-service-client"], optional = true }
+arti-client = { path = "tor/arti/crates/arti-client", features = ["pt-client", "onion-service-service", "onion-service-client"], optional = true }
 tor-rtcompat = {  path = "tor/arti/crates/tor-rtcompat", optional = true }
 fs-mistrust = { path = "tor/arti/crates/fs-mistrust", optional = true }
 fslock-guard = { version = "0.8", optional = true }
