@@ -22,6 +22,7 @@ use grin_util::secp::SecretKey;
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use hyper::StatusCode;
 use std::collections::HashMap;
+use std::future::{pending, Future};
 use std::sync::{Arc, LazyLock, Mutex, TryLockError};
 
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
@@ -174,6 +175,19 @@ pub fn start_onion_service<T>(sec_key: SecretKey, addr: &str, config: &T) -> Res
 where
 	T: TorConfig + Sync,
 {
+	start_onion_service_cancellable(sec_key, addr, config, pending()).map(|_| ())
+}
+
+/// Start a service, returning false if the integrated Tor startup was cancelled
+pub fn start_onion_service_cancellable<T>(
+	sec_key: SecretKey,
+	addr: &str,
+	config: &T,
+	cancel: impl Future<Output = ()> + Send,
+) -> Result<bool, Error>
+where
+	T: TorConfig + Sync,
+{
 	let onion_address = service_address(&sec_key)?;
 	let slot = service_slot(&onion_address);
 	let mut process = slot.lock().unwrap();
@@ -205,17 +219,22 @@ where
 		statuses.insert(onion_address.clone(), status.clone());
 	}
 	let result = if config.use_integrated() {
-		outside_tokio(|| start_tor_service(sec_key, addr, config))
+		outside_tokio(|| start_tor_service(sec_key, addr, config, cancel))
 	} else {
-		TorProcess::start_listener(sec_key, addr, config).map(|started| *process = Some(started))
+		TorProcess::start_listener(sec_key, addr, config).map(|started| {
+			*process = Some(started);
+			true
+		})
 	};
-	let mut status = status.lock().unwrap();
 	match &result {
-		Ok(()) if !config.use_integrated() => {
-			*status = ServiceStatus::Bootstrapped;
+		Ok(true) if !config.use_integrated() => {
+			*status.lock().unwrap() = ServiceStatus::Bootstrapped;
+		}
+		Ok(false) => {
+			SERVICE_STATUS.lock().unwrap().remove(&onion_address);
 		}
 		Err(error) => {
-			*status = ServiceStatus::Errored(error.clone());
+			*status.lock().unwrap() = ServiceStatus::Errored(error.clone());
 		}
 		_ => {}
 	}

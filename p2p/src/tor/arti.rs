@@ -35,6 +35,7 @@ use hyper::Uri;
 use hyper_util::rt::TokioIo;
 use sha2::Sha512;
 use std::collections::HashMap;
+use std::future::Future;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -119,7 +120,9 @@ fn runtime() -> Result<TokioNativeTlsRuntime, Error> {
 	Ok(r.clone())
 }
 
-pub(super) fn outside_tokio(start: impl FnOnce() -> Result<(), Error> + Send) -> Result<(), Error> {
+pub(super) fn outside_tokio<T: Send>(
+	start: impl FnOnce() -> Result<T, Error> + Send,
+) -> Result<T, Error> {
 	if tokio::runtime::Handle::try_current().is_err() {
 		return start();
 	}
@@ -168,7 +171,12 @@ where
 }
 
 /// Start Tor service from provided key.
-pub(crate) fn start_tor_service<T>(key: SecretKey, addr: &str, config: &T) -> Result<(), Error>
+pub(crate) fn start_tor_service<T>(
+	key: SecretKey,
+	addr: &str,
+	config: &T,
+	cancel: impl Future<Output = ()>,
+) -> Result<bool, Error>
 where
 	T: TorConfig,
 {
@@ -188,7 +196,16 @@ where
 		));
 	}
 	let (state_path, cache_path) = state_cache_paths(config);
-	let (client, config) = runtime()?.block_on(init_client(&state_path, &cache_path, config))?;
+	let Some((client, config)) = runtime()?.block_on(async {
+		tokio::select! {
+			biased;
+			_ = cancel => Ok(None),
+			client = init_client(&state_path, &cache_path, config) => client.map(Some),
+		}
+	})?
+	else {
+		return Ok(false);
+	};
 
 	// Add service key to keystore.
 	let hs =
@@ -262,7 +279,7 @@ where
 		},
 	);
 
-	Ok(())
+	Ok(true)
 }
 
 /// Start Tor client to send requests.
