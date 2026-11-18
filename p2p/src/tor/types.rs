@@ -56,6 +56,8 @@ pub enum ServiceStatus {
 	Starting,
 	/// External Tor has completed bootstrap
 	Bootstrapped,
+	/// Integrated Tor is preparing to publish the onion service
+	Publishing,
 	Running,
 	Degraded,
 	Recovering,
