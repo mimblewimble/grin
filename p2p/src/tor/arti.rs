@@ -24,7 +24,7 @@ use crate::tor::{service_address, SERVICE_STATUS};
 use grin_util::secp::SecretKey;
 
 use arti_client::config::pt::TransportConfigBuilder;
-use arti_client::config::{Reconfigure, TorClientConfigBuilder};
+use arti_client::config::{BridgesConfig, Reconfigure, TorClientConfigBuilder};
 use arti_client::{TorClient, TorClientConfig};
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::Digest;
@@ -421,7 +421,7 @@ where
 	let client_config = builder
 		.build()
 		.map_err(|e| Error::Config(format!("{:?}", e)))?;
-	if let Some((client, c, timeout, _, _)) = cached_client_config.as_mut() {
+	if let Some((client, c, timeout, _, runtime)) = cached_client_config.as_mut() {
 		if c == &arti_config {
 			// A shorter request must not shorten another request's connect budget
 			if connect_timeout > *timeout {
@@ -438,9 +438,11 @@ where
 					"Stop using the Tor client before changing its configuration".into(),
 				));
 			}
-			if c.dir_mgr_config()
-				.map_err(|e| Error::Config(format!("{:?}", e)))?
-				.cache_dir == *cache_path
+			let bridges_changed = AsRef::<BridgesConfig>::as_ref(c) != arti_config.as_ref();
+			if !bridges_changed
+				&& c.dir_mgr_config()
+					.map_err(|e| Error::Config(format!("{:?}", e)))?
+					.cache_dir == *cache_path
 			{
 				debug!("Tor config changed, reconfigure client.");
 				client
@@ -450,7 +452,19 @@ where
 				*timeout = connect_timeout;
 				return Ok((client.clone(), c.clone()));
 			}
+			let executor = if bridges_changed {
+				runtime.executor.take()
+			} else {
+				None
+			};
 			*cached_client_config = None;
+			if let Some(executor) = executor {
+				// Wait for the state lock to be released
+				outside_tokio(move || {
+					drop(executor);
+					Ok(())
+				})?;
+			}
 		}
 	}
 	let (client, runtime) = launch_client(client_config, config).await?;
