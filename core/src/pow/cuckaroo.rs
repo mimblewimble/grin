@@ -64,14 +64,14 @@ impl PoWContext for CuckarooContext {
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
 		let size = proof.proof_size();
 		if size != global::proofsize() {
-			return Err(Error::Verification("wrong cycle length".to_owned()).into());
+			return Err(Error::Verification("wrong cycle length".to_owned()));
 		}
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * size];
 		let mut xor0: u64 = 0;
 		let mut xor1: u64 = 0;
 		let mask = u64::MAX >> (size as u64).leading_zeros(); // round size up to 2-power - 1
-														// the next three arrays form a linked list of nodes with matching bits 6..1
+															  // the next three arrays form a linked list of nodes with matching bits 6..1
 		let mut headu = vec![2 * size; 1 + mask as usize];
 		let mut headv = vec![2 * size; 1 + mask as usize];
 		let mut prev = vec![0usize; 2 * size];
@@ -193,7 +193,7 @@ mod test {
 		ctx.params.siphash_keys = V1_19_HASH;
 		assert!(ctx.verify(&Proof::new(V1_19_SOL.to_vec())).is_ok());
 		assert!(ctx.verify(&Proof::new(V2_19_SOL.to_vec())).is_err());
-		ctx.params.siphash_keys = V2_19_HASH.clone();
+		ctx.params.siphash_keys = V2_19_HASH;
 		assert!(ctx.verify(&Proof::new(V1_19_SOL.to_vec())).is_err());
 		assert!(ctx.verify(&Proof::new(V2_19_SOL.to_vec())).is_ok());
 		assert!(ctx.verify(&Proof::zero(42)).is_err());

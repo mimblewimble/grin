@@ -32,13 +32,6 @@ use crate::ser::ProtocolVersion;
 use std::cell::Cell;
 use util::OneTime;
 
-/// An enum collecting sets of parameters used throughout the
-/// code wherever mining is needed. This should allow for
-/// different sets of parameters for different purposes,
-/// e.g. CI, User testing, production values
-/// Define these here, as they should be developer-set, not really tweakable
-/// by users
-
 /// The default "local" protocol version for this node.
 /// We negotiate compatible versions with each peer via Hand/Shake.
 /// Note: We also use a specific (possible different) protocol version
@@ -110,7 +103,14 @@ pub const TXHASHSET_ARCHIVE_INTERVAL: u64 = 12 * 60;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+///
+/// An enum collecting sets of parameters used throughout the
+/// code wherever mining is needed. This should allow for
+/// different sets of parameters for different purposes,
+/// e.g. CI, User testing, production values
+/// Define these here, as they should be developer-set, not really tweakable
+/// by users
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
@@ -119,6 +119,7 @@ pub enum ChainTypes {
 	/// Protocol testing network
 	Testnet,
 	/// Main production network
+	#[default]
 	Mainnet,
 }
 
@@ -131,12 +132,6 @@ impl ChainTypes {
 			ChainTypes::Testnet => "test".to_owned(),
 			ChainTypes::Mainnet => "main".to_owned(),
 		}
-	}
-}
-
-impl Default for ChainTypes {
-	fn default() -> ChainTypes {
-		ChainTypes::Mainnet
 	}
 }
 
@@ -164,22 +159,22 @@ lazy_static! {
 
 thread_local! {
 	/// Mainnet|Testnet|UserTesting|AutomatedTesting
-	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = Cell::new(None);
+	pub static CHAIN_TYPE: Cell<Option<ChainTypes>> = const { Cell::new(None) };
 
 	/// minimum transaction fee per unit of transaction weight for mempool acceptance
-	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = Cell::new(None);
+	pub static ACCEPT_FEE_BASE: Cell<Option<u64>> = const { Cell::new(None) };
 
 	/// maximum number of seconds into future for timestamp of block to be acceptable
-	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = Cell::new(None);
+	pub static FUTURE_TIME_LIMIT: Cell<Option<u64>> = const { Cell::new(None) };
 
 	/// Local feature flag for NRD kernel support.
-	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = Cell::new(None);
+	pub static NRD_FEATURE_ENABLED: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 /// One time initialization of the global chain_type.
-/// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_chain_type(new_type: ChainTypes) {
-	GLOBAL_CHAIN_TYPE.init(new_type)
+/// Returns `false` if already was initialized.
+pub fn init_global_chain_type(new_type: ChainTypes) -> bool {
+	GLOBAL_CHAIN_TYPE.init_if_unset(new_type)
 }
 
 /// Set the global chain_type using an override
@@ -194,16 +189,15 @@ pub fn set_local_chain_type(new_type: ChainTypes) {
 
 /// Get the chain type via thread_local, fallback to global chain_type.
 pub fn get_chain_type() -> ChainTypes {
-	CHAIN_TYPE.with(|chain_type| match chain_type.get() {
-		None => {
+	CHAIN_TYPE.with(|chain_type| {
+		chain_type.get().unwrap_or_else(|| {
 			if !GLOBAL_CHAIN_TYPE.is_init() {
 				panic!("GLOBAL_CHAIN_TYPE and CHAIN_TYPE unset. Consider set_local_chain_type() in tests.");
 			}
 			let chain_type = GLOBAL_CHAIN_TYPE.borrow();
 			set_local_chain_type(chain_type);
 			chain_type
-		}
-		Some(chain_type) => chain_type,
+		})
 	})
 }
 
@@ -217,9 +211,9 @@ pub fn get_genesis_block() -> Block {
 }
 
 /// One time initialization of the global future time limit
-/// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_future_time_limit(new_ftl: u64) {
-	GLOBAL_FUTURE_TIME_LIMIT.init(new_ftl)
+/// Returns `false` if already was initialized.
+pub fn init_global_future_time_limit(new_ftl: u64) -> bool {
+	GLOBAL_FUTURE_TIME_LIMIT.init_if_unset(new_ftl)
 }
 
 /// The global future time limit may be reset again using the override
@@ -228,9 +222,9 @@ pub fn set_global_future_time_limit(new_ftl: u64) {
 }
 
 /// One time initialization of the global accept fee base
-/// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_accept_fee_base(new_base: u64) {
-	GLOBAL_ACCEPT_FEE_BASE.init(new_base)
+/// Returns `false` if already was initialized.
+pub fn init_global_accept_fee_base(new_base: u64) -> bool {
+	GLOBAL_ACCEPT_FEE_BASE.init_if_unset(new_base)
 }
 
 /// The global accept fee base may be reset using override.
@@ -240,15 +234,15 @@ pub fn set_global_accept_fee_base(new_base: u64) {
 
 /// Set the accept fee base on a per-thread basis via thread_local storage.
 pub fn set_local_accept_fee_base(new_base: u64) {
-	ACCEPT_FEE_BASE.with(|base| base.set(Some(new_base)))
+	ACCEPT_FEE_BASE.set(Some(new_base))
 }
 
 /// Accept Fee Base
 /// Look at thread local config first. If not set fallback to global config.
 /// Default to grin-cent/20 if global config unset.
 pub fn get_accept_fee_base() -> u64 {
-	ACCEPT_FEE_BASE.with(|base| match base.get() {
-		None => {
+	ACCEPT_FEE_BASE.with(|base| {
+		base.get().unwrap_or_else(|| {
 			let base = if GLOBAL_ACCEPT_FEE_BASE.is_init() {
 				GLOBAL_ACCEPT_FEE_BASE.borrow()
 			} else {
@@ -256,22 +250,21 @@ pub fn get_accept_fee_base() -> u64 {
 			};
 			set_local_accept_fee_base(base);
 			base
-		}
-		Some(base) => base,
+		})
 	})
 }
 
 /// Set the future time limit on a per-thread basis via thread_local storage.
 pub fn set_local_future_time_limit(new_ftl: u64) {
-	FUTURE_TIME_LIMIT.with(|ftl| ftl.set(Some(new_ftl)))
+	FUTURE_TIME_LIMIT.set(Some(new_ftl))
 }
 
 /// Future Time Limit (FTL)
 /// Look at thread local config first. If not set fallback to global config.
 /// Default to false if global config unset.
 pub fn get_future_time_limit() -> u64 {
-	FUTURE_TIME_LIMIT.with(|ftl| match ftl.get() {
-		None => {
+	FUTURE_TIME_LIMIT.with(|ftl| {
+		ftl.get().unwrap_or_else(|| {
 			let ftl = if GLOBAL_FUTURE_TIME_LIMIT.is_init() {
 				GLOBAL_FUTURE_TIME_LIMIT.borrow()
 			} else {
@@ -279,15 +272,14 @@ pub fn get_future_time_limit() -> u64 {
 			};
 			set_local_future_time_limit(ftl);
 			ftl
-		}
-		Some(ftl) => ftl,
+		})
 	})
 }
 
 /// One time initialization of the global NRD feature flag.
-/// Will panic if we attempt to re-initialize this (via OneTime).
-pub fn init_global_nrd_enabled(enabled: bool) {
-	GLOBAL_NRD_FEATURE_ENABLED.init(enabled)
+/// Returns `false` if already was initialized.
+pub fn init_global_nrd_enabled(enabled: bool) -> bool {
+	GLOBAL_NRD_FEATURE_ENABLED.init_if_unset(enabled)
 }
 
 /// Set the global NRD feature flag using override.
@@ -297,7 +289,7 @@ pub fn set_global_nrd_enabled(enabled: bool) {
 
 /// Explicitly enable the local NRD feature flag.
 pub fn set_local_nrd_enabled(enabled: bool) {
-	NRD_FEATURE_ENABLED.with(|flag| flag.set(Some(enabled)))
+	NRD_FEATURE_ENABLED.set(Some(enabled))
 }
 
 /// Is the NRD feature flag enabled?
@@ -428,7 +420,7 @@ pub fn max_block_weight() -> u64 {
 /// Maximum allowed transaction weight (1 weight unit ~= 32 bytes)
 pub fn max_tx_weight() -> u64 {
 	let coinbase_weight = OUTPUT_WEIGHT + KERNEL_WEIGHT;
-	max_block_weight().saturating_sub(coinbase_weight) as u64
+	max_block_weight().saturating_sub(coinbase_weight)
 }
 
 /// Horizon at which we can cut-through and do full local pruning
@@ -461,11 +453,7 @@ pub fn txhashset_archive_interval() -> u64 {
 /// Are we in production mode?
 /// Production defined as a live public network, testnet[n] or mainnet.
 pub fn is_production_mode() -> bool {
-	match get_chain_type() {
-		ChainTypes::Testnet => true,
-		ChainTypes::Mainnet => true,
-		_ => false,
-	}
+	matches!(get_chain_type(), ChainTypes::Testnet | ChainTypes::Mainnet)
 }
 
 /// Are we in testnet?
@@ -473,16 +461,12 @@ pub fn is_production_mode() -> bool {
 /// as possible to "mainnet" configuration as possible.
 /// We want to avoid missing any mainnet only code paths.
 pub fn is_testnet() -> bool {
-	match get_chain_type() {
-		ChainTypes::Testnet => true,
-		_ => false,
-	}
+	matches!(get_chain_type(), ChainTypes::Testnet)
 }
 
 /// Converts an iterator of block difficulty data to more a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
-
 pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderDifficultyInfo>
 where
 	T: IntoIterator<Item = HeaderDifficultyInfo>,

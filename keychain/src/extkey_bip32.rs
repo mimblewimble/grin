@@ -40,7 +40,6 @@ use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 
-use digest::generic_array::GenericArray;
 use digest::Digest;
 use hmac::{Hmac, Mac, NewMac};
 use ripemd160::Ripemd160;
@@ -55,26 +54,18 @@ type HmacSha512 = Hmac<Sha512>;
 pub struct ChainCode([u8; 32]);
 impl_array_newtype!(ChainCode, u8, 32);
 impl_array_newtype_show!(ChainCode);
-impl_array_newtype_encodable!(ChainCode, u8, 32);
 
 /// A fingerprint
+#[derive(Default)]
 pub struct Fingerprint([u8; 4]);
 impl_array_newtype!(Fingerprint, u8, 4);
 impl_array_newtype_show!(Fingerprint);
-impl_array_newtype_encodable!(Fingerprint, u8, 4);
-
-impl Default for Fingerprint {
-	fn default() -> Fingerprint {
-		Fingerprint([0, 0, 0, 0])
-	}
-}
 
 /// Allow different implementations of hash functions used in BIP32 Derivations
 /// Grin uses blake2 everywhere but the spec calls for SHA512/Ripemd160, so allow
 /// this in future and allow us to unit test against published BIP32 test vectors
 /// The function names refer to the place of the hash in the reference BIP32 spec,
 /// not what the actual implementation is
-
 pub trait BIP32Hasher {
 	fn network_priv(&self) -> [u8; 4];
 	fn network_pub(&self) -> [u8; 4];
@@ -97,8 +88,9 @@ impl BIP32GrinHasher {
 	/// New empty hasher
 	pub fn new(is_test: bool) -> BIP32GrinHasher {
 		BIP32GrinHasher {
-			is_test: is_test,
-			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
+			is_test,
+			hmac_sha512: HmacSha512::new_from_slice(&[0u8; 128])
+				.expect("HMAC can take key of any size"),
 		}
 	}
 }
@@ -136,14 +128,14 @@ impl BIP32Hasher for BIP32GrinHasher {
 		let mut sha2_res = [0; 32];
 		let mut sha2 = Sha256::new();
 		sha2.update(input);
-		sha2_res.copy_from_slice(sha2.finalize().as_slice());
+		sha2_res.copy_from_slice(&sha2.finalize());
 		sha2_res
 	}
 	fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
 		let mut ripemd_res = [0; 20];
 		let mut ripemd = Ripemd160::new();
 		ripemd.update(input);
-		ripemd_res.copy_from_slice(ripemd.finalize().as_slice());
+		ripemd_res.copy_from_slice(&ripemd.finalize());
 		ripemd_res
 	}
 }
@@ -209,7 +201,7 @@ impl ChildNumber {
 			"ChildNumber indices have to be within [0, 2^31 - 1], is: {}",
 			index
 		);
-		ChildNumber::Normal { index: index }
+		ChildNumber::Normal { index }
 	}
 
 	/// Create a [`Hardened`] from an index, panics if the index is not within
@@ -223,7 +215,7 @@ impl ChildNumber {
 			"ChildNumber indices have to be within [0, 2^31 - 1], is: {}",
 			index
 		);
-		ChildNumber::Hardened { index: index }
+		ChildNumber::Hardened { index }
 	}
 
 	/// Returns `true` if the child number is a [`Normal`] value.
@@ -521,7 +513,7 @@ impl ExtendedPubKey {
 			parent_fingerprint: self.fingerprint(secp, hasher),
 			child_number: i,
 			public_key: pk,
-			chain_code: chain_code,
+			chain_code,
 		})
 	}
 
@@ -549,7 +541,7 @@ impl fmt::Display for ExtendedPrivKey {
 	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
-		ret[4] = self.depth as u8;
+		ret[4] = self.depth;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
 		BigEndian::write_u32(&mut ret[9..13], u32::from(self.child_number));
@@ -579,10 +571,10 @@ impl FromStr for ExtendedPrivKey {
 		network.copy_from_slice(&data[0..4]);
 
 		Ok(ExtendedPrivKey {
-			network: network,
+			network,
 			depth: data[4],
 			parent_fingerprint: Fingerprint::from(&data[5..9]),
-			child_number: child_number,
+			child_number,
 			chain_code: ChainCode::from(&data[13..45]),
 			secret_key: SecretKey::from_slice(&s, &data[46..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,
@@ -595,7 +587,7 @@ impl fmt::Display for ExtendedPubKey {
 		let secp = Secp256k1::without_caps();
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
-		ret[4] = self.depth as u8;
+		ret[4] = self.depth;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
 		BigEndian::write_u32(&mut ret[9..13], u32::from(self.child_number));
@@ -624,10 +616,10 @@ impl FromStr for ExtendedPubKey {
 		network.copy_from_slice(&data[0..4]);
 
 		Ok(ExtendedPubKey {
-			network: network,
+			network,
 			depth: data[4],
 			parent_fingerprint: Fingerprint::from(&data[5..9]),
-			child_number: child_number,
+			child_number,
 			chain_code: ChainCode::from(&data[13..45]),
 			public_key: PublicKey::from_slice(&s, &data[45..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,
@@ -646,7 +638,6 @@ mod tests {
 
 	use super::*;
 
-	use digest::generic_array::GenericArray;
 	use digest::Digest;
 	use hmac::{Hmac, Mac};
 	use ripemd160::Ripemd160;
@@ -661,7 +652,8 @@ mod tests {
 		/// New empty hasher
 		pub fn new() -> BIP32ReferenceHasher {
 			BIP32ReferenceHasher {
-				hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
+				hmac_sha512: HmacSha512::new_from_slice(&[0u8; 128])
+					.expect("HMAC can take key of any size"),
 			}
 		}
 	}
@@ -694,14 +686,14 @@ mod tests {
 			let mut sha2_res = [0; 32];
 			let mut sha2 = Sha256::new();
 			sha2.update(input);
-			sha2_res.copy_from_slice(sha2.finalize().as_slice());
+			sha2_res.copy_from_slice(&sha2.finalize());
 			sha2_res
 		}
 		fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
 			let mut ripemd_res = [0; 20];
 			let mut ripemd = Ripemd160::new();
 			ripemd.update(input);
-			ripemd_res.copy_from_slice(ripemd.finalize().as_slice());
+			ripemd_res.copy_from_slice(&ripemd.finalize());
 			ripemd_res
 		}
 	}

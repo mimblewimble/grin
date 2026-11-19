@@ -358,7 +358,7 @@ fn remove_coinbase_kernel_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
 
-	let mut kernel = b.kernels()[0].clone();
+	let mut kernel = b.kernels()[0];
 	kernel.features = KernelFeatures::Plain {
 		fee: FeeFields::zero(),
 	};
@@ -637,7 +637,13 @@ fn compact_block_hash_with_nonce() {
 	let tx = tx1i2o();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let b = new_block(&[tx.clone()], &keychain, &builder, &prev, &key_id);
+	let b = new_block(
+		std::slice::from_ref(&tx),
+		&keychain,
+		&builder,
+		&prev,
+		&key_id,
+	);
 	let cb1: CompactBlock = b.clone().into();
 	let cb2: CompactBlock = b.clone().into();
 
@@ -764,7 +770,7 @@ fn same_amount_outputs_copy_range_proof() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	match b.validate(&BlindingFactor::zero()) {
-		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidBulletproof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
 }
@@ -816,7 +822,7 @@ fn wrong_amount_range_proof() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	match b.validate(&BlindingFactor::zero()) {
-		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidRangeProof))) => {}
+		Err(Error::Transaction(transaction::Error::Secp(secp::Error::InvalidBulletproof))) => {}
 		_ => panic!("Bad range proof should be invalid"),
 	}
 }

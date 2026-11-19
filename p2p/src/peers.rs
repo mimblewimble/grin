@@ -28,7 +28,6 @@ use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::{OutputIdentifier, Segment, SegmentIdentifier, TxKernel};
 use crate::core::global;
 use crate::core::pow::Difficulty;
-use crate::msg::PeerAddrs;
 use crate::peer::Peer;
 use crate::store::{PeerData, PeerStore, State};
 use crate::types::{
@@ -231,7 +230,7 @@ impl Peers {
 				Err(e) => {
 					debug!(
 						"Error sending {:?} to peer {:?}: {:?}",
-						obj_name, &p.info.addr, e
+						obj_name, p.info.addr, e
 					);
 
 					let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
@@ -293,7 +292,7 @@ impl Peers {
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
 		for p in self.iter().connected() {
 			if let Err(e) = p.send_ping(total_difficulty, height) {
-				debug!("Error pinging peer {:?}: {:?}", &p.info.addr, e);
+				debug!("Error pinging peer {:?}: {:?}", p.info.addr, e);
 				let mut peers = match self.peers.try_write_for(LOCK_TIMEOUT) {
 					Some(peers) => peers,
 					None => {
@@ -345,16 +344,13 @@ impl Peers {
 
 	/// Get peer in store by address
 	pub fn get_peer(&self, peer_addr: PeerAddr) -> Result<PeerData, Error> {
-		let (p, _) = self.store.get_peer(peer_addr).map_err(|e| Error::from(e))?;
+		let (p, _) = self.store.get_peer(peer_addr).map_err(Error::from)?;
 		Ok(p)
 	}
 
 	/// Whether we've already seen a peer with the provided address
 	pub fn exists_peer(&self, peer_addr: PeerAddr) -> Result<bool, Error> {
-		let (e, _) = self
-			.store
-			.exists_peer(peer_addr)
-			.map_err(|e| Error::from(e))?;
+		let (e, _) = self.store.exists_peer(peer_addr).map_err(Error::from)?;
 		Ok(e)
 	}
 
@@ -388,14 +384,14 @@ impl Peers {
 		max_outbound_count: usize,
 		config: P2PConfig,
 	) {
-		let preferred_peers = config.peers_preferred.unwrap_or(PeerAddrs::default());
+		let preferred_peers = config.peers_preferred.unwrap_or_default();
 
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
 		{
 			for peer in self.iter() {
-				let ref peer: &Peer = peer.as_ref();
+				let peer: &Peer = peer.as_ref();
 				if peer.is_banned() {
 					debug!("clean_peers {:?}, peer banned", peer.info.addr);
 					rm.push((peer.info.addr, "peer banned"));
@@ -949,7 +945,7 @@ impl<I: Iterator> IntoIterator for PeersIter<I> {
 	type IntoIter = I;
 
 	fn into_iter(self) -> Self::IntoIter {
-		self.iter.into_iter()
+		self.iter
 	}
 }
 

@@ -37,7 +37,7 @@ impl HTTPNodeClient {
 	pub fn new(node_url: &str, node_api_secret: Option<String>) -> HTTPNodeClient {
 		HTTPNodeClient {
 			node_url: node_url.to_owned(),
-			node_api_secret: node_api_secret,
+			node_api_secret,
 		}
 	}
 	fn send_json_request<D: serde::de::DeserializeOwned>(

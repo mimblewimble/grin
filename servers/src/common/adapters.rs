@@ -111,11 +111,7 @@ where
 		Ok(self.chain().head()?.height)
 	}
 
-	fn transaction_received(
-		&self,
-		tx: core::Transaction,
-		stem: bool,
-	) -> Result<bool, chain::Error> {
+	fn transaction_received(&self, tx: Transaction, stem: bool) -> Result<bool, chain::Error> {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
 			return Ok(true);
@@ -141,7 +137,7 @@ where
 		}
 	}
 
-	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<Transaction> {
 		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
 	}
 
@@ -167,7 +163,7 @@ where
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		opts: chain::Options,
+		opts: Options,
 	) -> Result<bool, chain::Error> {
 		if self.chain().is_known(&b.header).is_err() {
 			return Ok(true);
@@ -187,7 +183,7 @@ where
 
 	fn compact_block_received(
 		&self,
-		cb: core::CompactBlock,
+		cb: CompactBlock,
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		// No need to process this compact block if we have previously accepted the _full block_.
@@ -222,19 +218,16 @@ where
 							hook.on_block_received(&block, &peer_info.addr);
 						}
 					}
-					self.process_block(block, peer_info, chain::Options::NONE)
+					self.process_block(block, peer_info, Options::NONE)
 				}
 				Err(e) => {
 					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
-					return Ok(false);
+					Ok(false)
 				}
 			}
 		} else {
 			// check at least the header is valid before hydrating
-			if let Err(e) = self
-				.chain()
-				.process_block_header(&cb.header, chain::Options::NONE)
-			{
+			if let Err(e) = self.chain().process_block_header(&cb.header, Options::NONE) {
 				debug!("Invalid compact block header {}: {:?}", cb_hash, e);
 				return Ok(!e.is_bad_data());
 			}
@@ -253,7 +246,7 @@ where
 
 			// If we have missing kernels then we know we cannot hydrate this compact block.
 			if !missing_short_ids.is_empty() {
-				self.request_block(&cb.header, peer_info, chain::Options::NONE);
+				self.request_block(&cb.header, peer_info, Options::NONE);
 				return Ok(true);
 			}
 
@@ -280,10 +273,10 @@ where
 						block.header.height,
 						block.inputs().version_str(),
 					);
-					self.process_block(block, peer_info, chain::Options::NONE)
+					self.process_block(block, peer_info, Options::NONE)
 				} else if self.sync_state.status() == SyncStatus::NoSync {
 					debug!("adapter: block invalid after hydration, requesting full block");
-					self.request_block(&cb.header, peer_info, chain::Options::NONE);
+					self.request_block(&cb.header, peer_info, Options::NONE);
 					Ok(true)
 				} else {
 					debug!("block invalid after hydration, ignoring it, cause still syncing");
@@ -296,11 +289,7 @@ where
 		}
 	}
 
-	fn header_received(
-		&self,
-		bh: core::BlockHeader,
-		peer_info: &PeerInfo,
-	) -> Result<bool, chain::Error> {
+	fn header_received(&self, bh: BlockHeader, peer_info: &PeerInfo) -> Result<bool, chain::Error> {
 		// No need to process this header if we have previously accepted the _full block_.
 		if self.chain().block_exists(bh.hash())? {
 			return Ok(true);
@@ -313,7 +302,7 @@ where
 
 		// pushing the new block header through the header chain pipeline
 		// we will go ask for the block if this is a new header
-		let res = self.chain().process_block_header(&bh, chain::Options::NONE);
+		let res = self.chain().process_block_header(&bh, Options::NONE);
 
 		if let Err(e) = res {
 			debug!("Block header {} refused by chain: {:?}", bh.hash(), e);
@@ -336,7 +325,7 @@ where
 
 	fn headers_received(
 		&self,
-		bhs: &[core::BlockHeader],
+		bhs: &[BlockHeader],
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		info!(
@@ -362,7 +351,7 @@ where
 		self.process_header_batch(bhs, sync_head)
 	}
 
-	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<core::BlockHeader>, chain::Error> {
+	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<BlockHeader>, chain::Error> {
 		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
@@ -401,7 +390,7 @@ where
 		&self,
 		id: SegmentIdentifier,
 		peer_info: &PeerInfo,
-	) -> Result<Option<Vec<core::BlockHeader>>, chain::Error> {
+	) -> Result<Option<Vec<BlockHeader>>, chain::Error> {
 		if !peer_info
 			.capabilities
 			.contains(p2p::Capabilities::PIHD_HIST)
@@ -469,10 +458,10 @@ where
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<p2p::TxHashSetRead> {
-		match self.chain().txhashset_read(h.clone()) {
+		match self.chain().txhashset_read(h) {
 			Ok((out_index, kernel_index, read)) => Some(p2p::TxHashSetRead {
 				output_index: out_index,
-				kernel_index: kernel_index,
+				kernel_index,
 				reader: read,
 			}),
 			Err(e) => {
@@ -482,15 +471,15 @@ where
 		}
 	}
 
-	fn txhashset_archive_header(&self) -> Result<core::BlockHeader, chain::Error> {
+	fn txhashset_archive_header(&self) -> Result<BlockHeader, chain::Error> {
 		self.chain().txhashset_archive_header()
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
-		match self.sync_state.status() {
-			SyncStatus::TxHashsetDownload { .. } => true,
-			_ => false,
-		}
+		matches!(
+			self.sync_state.status(),
+			SyncStatus::TxHashsetDownload { .. }
+		)
 	}
 
 	fn txhashset_download_update(
@@ -672,7 +661,7 @@ where
 	fn receive_header_segment(
 		&self,
 		id: SegmentIdentifier,
-		headers: &[core::BlockHeader],
+		headers: &[BlockHeader],
 		peer_info: &PeerInfo,
 	) -> Result<HeaderSegmentAcceptance, chain::Error> {
 		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
@@ -842,7 +831,7 @@ where
 	/// Initialize a NetToChainAdaptor with reference to a Peers object.
 	/// Should only be called once.
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(Arc::downgrade(&peers));
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1152,7 +1141,7 @@ where
 		let header_pmmr = header_pmmr.read();
 
 		for hash in locator {
-			if let Ok(header) = self.chain().get_block_header(&hash) {
+			if let Ok(header) = self.chain().get_block_header(hash) {
 				if let Ok(hash_at_height) = header_pmmr.get_header_hash_by_height(header.height) {
 					if let Ok(header_at_height) = self.chain().get_block_header(&hash_at_height) {
 						if header.hash() == header_at_height.hash() {
@@ -1171,7 +1160,7 @@ where
 		&self,
 		b: core::Block,
 		peer_info: &PeerInfo,
-		opts: chain::Options,
+		opts: Options,
 	) -> Result<bool, chain::Error> {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
@@ -1206,7 +1195,7 @@ where
 								&& !self.sync_state.is_syncing()
 							{
 								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
-								self.request_block(&previous, peer_info, chain::Options::NONE)
+								self.request_block(&previous, peer_info, Options::NONE)
 							}
 						}
 						Ok(true)
@@ -1354,7 +1343,7 @@ where
 		}
 
 		// Suppress broadcast of new blocks received during sync.
-		if !opts.contains(chain::Options::SYNC) {
+		if !opts.contains(Options::SYNC) {
 			// If we mined the block then we want to broadcast the compact block.
 			// If we received the block from another node then broadcast "header first"
 			// to minimize network traffic.
@@ -1369,7 +1358,7 @@ where
 		}
 
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
-		// This may be slow and we do not want to delay block propagation.
+		// This may be slow, and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
 
 		if status.is_next() || status.is_reorg() {
@@ -1401,14 +1390,14 @@ where
 		ChainToPoolAndNetAdapter {
 			tx_pool,
 			peers: OneTime::new(),
-			hooks: hooks,
+			hooks,
 		}
 	}
 
 	/// Initialize a ChainToPoolAndNetAdapter instance with handle to a Peers
 	/// object. Should only be called once.
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(Arc::downgrade(&peers));
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1500,7 +1489,7 @@ impl PoolToNetAdapter {
 
 	/// Setup the p2p server on the adapter
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(Arc::downgrade(&peers));
+		self.peers.init(Arc::downgrade(&peers))
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
@@ -1519,6 +1508,12 @@ pub struct PoolToChainAdapter {
 	chain: OneTime<Weak<chain::Chain>>,
 }
 
+impl Default for PoolToChainAdapter {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl PoolToChainAdapter {
 	/// Create a new pool adapter
 	pub fn new() -> PoolToChainAdapter {
@@ -1529,7 +1524,7 @@ impl PoolToChainAdapter {
 
 	/// Set the pool adapter's chain. Should only be called once.
 	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
-		self.chain.init(Arc::downgrade(&chain_ref));
+		self.chain.init(Arc::downgrade(&chain_ref))
 	}
 
 	fn chain(&self) -> Arc<chain::Chain> {
@@ -1540,7 +1535,32 @@ impl PoolToChainAdapter {
 	}
 }
 
-impl pool::BlockChain for PoolToChainAdapter {
+impl BlockChain for PoolToChainAdapter {
+	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), pool::PoolError> {
+		self.chain()
+			.verify_coinbase_maturity(inputs)
+			.map_err(|_| pool::PoolError::ImmatureCoinbase)
+	}
+
+	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+		self.chain()
+			.verify_tx_lock_height(tx)
+			.map_err(|_| pool::PoolError::ImmatureTransaction)
+	}
+
+	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+		self.chain()
+			.validate_tx(tx)
+			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
+	}
+
+	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
+		self.chain()
+			.validate_inputs(inputs)
+			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
+			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
+	}
+
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
 		self.chain()
 			.head_header()
@@ -1557,30 +1577,5 @@ impl pool::BlockChain for PoolToChainAdapter {
 		self.chain()
 			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other("failed to get block_sums".to_string()))
-	}
-
-	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain()
-			.validate_tx(tx)
-			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
-	}
-
-	fn validate_inputs(&self, inputs: &Inputs) -> Result<Vec<OutputIdentifier>, pool::PoolError> {
-		self.chain()
-			.validate_inputs(inputs)
-			.map(|outputs| outputs.into_iter().map(|(out, _)| out).collect::<Vec<_>>())
-			.map_err(|_| pool::PoolError::Other("failed to validate tx".to_string()))
-	}
-
-	fn verify_coinbase_maturity(&self, inputs: &Inputs) -> Result<(), pool::PoolError> {
-		self.chain()
-			.verify_coinbase_maturity(inputs)
-			.map_err(|_| pool::PoolError::ImmatureCoinbase)
-	}
-
-	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain()
-			.verify_tx_lock_height(tx)
-			.map_err(|_| pool::PoolError::ImmatureTransaction)
 	}
 }
