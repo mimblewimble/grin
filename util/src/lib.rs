@@ -188,6 +188,12 @@ impl StopState {
 	pub fn resume(&self) {
 		self.paused.store(false, Ordering::Relaxed)
 	}
+
+	/// Reset state.
+	pub fn reset(&self) {
+		self.stopped.store(false, Ordering::Relaxed);
+		self.paused.store(false, Ordering::Relaxed);
+	}
 }
 
 #[test]

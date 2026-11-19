@@ -988,13 +988,12 @@ impl WorkersList {
 	}
 }
 
-// ----------------------------------------
-// Grin Stratum Server
-
+/// Grin Stratum Server
 pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
+	/// Transaction pool.
 	pub tx_pool: ServerTxPool,
 	sync_state: Arc<SyncState>,
 	stratum_stats: Arc<RwLock<StratumStats>>,
