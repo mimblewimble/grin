@@ -17,7 +17,7 @@
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime::Runtime;
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::{mpsc, watch, Semaphore};
 use tokio::task::JoinSet;
 use tokio::time::{timeout, Instant};
 use tokio_util::codec::{Framed, LinesCodec};
@@ -212,6 +212,7 @@ struct Handler {
 	sync_state: Arc<SyncState>,
 	chain: Arc<chain::Chain>,
 	current_state: Arc<RwLock<State>>,
+	job_ready: watch::Sender<bool>,
 }
 
 impl Handler {
@@ -228,6 +229,7 @@ impl Handler {
 			sync_state,
 			chain,
 			current_state: Arc::new(RwLock::new(State::new(minimum_share_difficulty))),
+			job_ready: watch::Sender::new(false),
 		}
 	}
 	pub fn from_stratum(stratum: &StratumServer) -> Self {
@@ -319,6 +321,10 @@ impl Handler {
 	fn handle_getjobtemplate(&self) -> Result<Value, RpcError> {
 		// Build a JobTemplate from a BlockHeader and return JSON
 		let job_template = self.build_block_template();
+		// Height zero is the startup placeholder
+		if job_template.height == 0 {
+			return Err(RpcError::node_is_syncing());
+		}
 		let response = serde_json::to_value(&job_template).unwrap();
 		debug!(
 			"(Server ID: {}) sending block {} with id {} to single worker",
@@ -614,6 +620,7 @@ impl Handler {
 					// Add this new block candidate onto our list of block versions for this height
 					state.current_block_versions.push(new_block);
 				}
+				self.job_ready.send_replace(true);
 				// Send this job to all connected workers
 				self.broadcast_job();
 			}
@@ -674,6 +681,11 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 			let request: RpcRequest = serde_json::from_str(&line).map_err(|e| {
 				error!("Worker {} invalid JSON: {}", worker_id, e);
 			})?;
+			if request.method == "getjobtemplate" && !reader_handler.sync_state.is_syncing() {
+				let mut job_ready = reader_handler.job_ready.subscribe();
+				// The worker idle timeout still applies
+				let _ = job_ready.wait_for(|ready| *ready).await;
+			}
 			let resp = reader_handler.handle_rpc_requests(request, worker_id);
 			if !reader_handler.workers.send_to(worker_id, resp).await {
 				warn!("Worker {} outbound queue closed", worker_id);
@@ -1936,26 +1948,46 @@ mod tests {
 		assert_eq!(err["message"], "Node is syncing - Please wait");
 	}
 
-	#[test]
-	fn test_handle_getjobtemplate_ok() {
+	#[tokio::test]
+	async fn test_first_job() {
 		let handler = shared_handler();
 		// Non-default difficulty so the template path is not only asserting the const.
 		let job_difficulty = 7;
 		handler.current_state.write().minimum_share_difficulty = job_difficulty;
-		let worker_id = add_dummy_worker(&handler.workers);
+		let (client, socket) = tcp_pair().await;
+		let task = tokio::spawn(handle_connection(
+			socket,
+			handler.clone(),
+			Duration::from_secs(5),
+		));
+		let mut client = Framed::new(client, LinesCodec::new());
+		let request = serde_json::to_string(&rpc_request("getjobtemplate", None)).unwrap();
+		client.send(request).await.unwrap();
+		assert!(timeout(Duration::from_millis(50), client.try_next())
+			.await
+			.is_err());
 
-		let resp = parse_rpc_response(
-			&handler.handle_rpc_requests(rpc_request("getjobtemplate", None), worker_id),
-		);
+		handler.current_state.write().current_block_versions[0]
+			.header
+			.height = 1;
+		handler.job_ready.send_replace(true);
+		let line = timeout(Duration::from_secs(1), client.try_next())
+			.await
+			.unwrap()
+			.unwrap()
+			.unwrap();
+		let resp = parse_rpc_response(&line);
 		assert!(resp.error.is_none());
 		let result = resp.result.unwrap();
-		assert_eq!(result["height"], 0);
+		assert_eq!(result["height"], 1);
 		assert_eq!(result["job_id"], 0);
 		assert_eq!(result["difficulty"], job_difficulty);
 		// pre_pow is hex-encoded header bytes.
 		let pre_pow = result["pre_pow"].as_str().unwrap();
 		assert!(!pre_pow.is_empty());
 		assert!(pre_pow.chars().all(|c| c.is_ascii_hexdigit()));
+		drop(client);
+		task.await.unwrap();
 	}
 
 	#[test]
