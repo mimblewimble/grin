@@ -165,8 +165,17 @@ where
 {
 	let mut tor_dir = config.data_dir();
 	tor_dir.push("arti");
-	let state_path = tor_dir.join("state");
-	let cache_path = tor_dir.join("cache");
+
+	let bridge_dir = config.bridge_config().parse_transport_name().ok();
+
+	let mut state_path = tor_dir.join("state");
+	if let Some(bridge_dir) = &bridge_dir {
+		state_path.push(bridge_dir);
+	}
+	let mut cache_path = tor_dir.join("cache");
+	if let Some(bridge_dir) = &bridge_dir {
+		cache_path.push(bridge_dir);
+	}
 	(state_path, cache_path)
 }
 
@@ -442,7 +451,8 @@ where
 			if !bridges_changed
 				&& c.dir_mgr_config()
 					.map_err(|e| Error::Config(format!("{:?}", e)))?
-					.cache_dir == *cache_path
+					.cache_dir
+					== *cache_path
 			{
 				debug!("Tor config changed, reconfigure client.");
 				client

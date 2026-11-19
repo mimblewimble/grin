@@ -91,16 +91,7 @@ impl TorBridgeConfig {
 				Ok((Vec::new(), Vec::new()))
 			};
 		}
-		let line = self
-			.bridge_line
-			.as_ref()
-			.ok_or_else(|| Error::Config("Missing bridge line".into()))?;
-		let lines_parse = serde_json::from_str::<Vec<String>>(line);
-		let bridges = lines_parse
-			.unwrap_or_else(|_| line.lines().map(str::to_owned).collect())
-			.into_iter()
-			.filter(|l| !l.trim().is_empty())
-			.collect::<Vec<String>>();
+		let bridges = self.parse_bridge_lines()?;
 		if bridges.is_empty() {
 			return Err(Error::Config("Missing bridge line".into()));
 		}
@@ -134,6 +125,30 @@ impl TorBridgeConfig {
 			}
 		}
 		Ok((config_builders, lines))
+	}
+
+	pub fn parse_transport_name(&self) -> Result<String, Error> {
+		let bridges = self.parse_bridge_lines()?;
+		if let Some(b) = bridges.first() {
+			let first = b.split_whitespace().next().unwrap_or("");
+			let transport = first.to_ascii_lowercase();
+			return Ok(transport);
+		}
+		Err(Error::Config("Can not parse transport name.".to_string()))
+	}
+
+	fn parse_bridge_lines(&self) -> Result<Vec<String>, Error> {
+		let line = self
+			.bridge_line
+			.as_ref()
+			.ok_or_else(|| Error::Config("Missing bridge line".into()))?;
+		let lines_parse = serde_json::from_str::<Vec<String>>(line);
+		let bridges = lines_parse
+			.unwrap_or_else(|_| line.lines().map(str::to_owned).collect())
+			.into_iter()
+			.filter(|l| !l.trim().is_empty())
+			.collect::<Vec<String>>();
+		Ok(bridges)
 	}
 
 	pub(crate) fn binary(&self, transport: &str) -> Result<String, Error> {
