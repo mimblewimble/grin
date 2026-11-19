@@ -63,7 +63,7 @@ pub struct CbData {
 	pub output: Output,
 	/// Kernel
 	pub kernel: TxKernel,
-	/// Key Id
+	/// Key id
 	pub key_id: Option<Identifier>,
 }
 
@@ -117,7 +117,7 @@ fn get_block_internal(
 		}
 		let mut new_key_id = key_id.to_owned();
 		match e {
-			self::Error::Chain(c) => match c {
+			Error::Chain(c) => match c {
 				chain::Error::DuplicateCommitment(_) => {
 					debug!(
 						"Duplicate commit for potential coinbase detected. Trying next derivation."
@@ -129,7 +129,7 @@ fn get_block_internal(
 					error!("Chain Error: {}", c);
 				}
 			},
-			self::Error::WalletComm(_) => {
+			Error::WalletComm(_) => {
 				error!(
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
@@ -202,17 +202,17 @@ fn build_block(
 	// If this fails for *any* reason then fallback to an empty vec of txs.
 	// This will allow us to mine an "empty" block if the txpool is in an
 	// invalid (and unexpected) state.
-	let txs = match tx_pool.read().prepare_mineable_transactions() {
-		Ok(txs) => txs,
-		Err(e) => {
+	let txs = tx_pool
+		.read()
+		.prepare_mineable_transactions()
+		.unwrap_or_else(|e| {
 			error!(
 				"build_block: Failed to prepare mineable txs from txpool: {:?}",
 				e
 			);
 			warn!("build_block: Falling back to mining empty block.");
 			vec![]
-		}
-	};
+		});
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -270,7 +270,7 @@ fn build_block(
 ///
 /// Probably only want to do this when testing.
 ///
-fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
+fn burn_reward(block_fees: BlockFees) -> Result<(Output, TxKernel, BlockFees), Error> {
 	warn!("Burning block fees: {:?}", block_fees);
 	let keychain = ExtKeychain::from_random_seed(global::is_testnet())?;
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -291,11 +291,11 @@ fn get_coinbase(
 	wallet_listener_url: Option<String>,
 	block_fees: BlockFees,
 	should_stop: &impl Fn() -> bool,
-) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
+) -> Result<(Output, TxKernel, BlockFees), Error> {
 	match wallet_listener_url {
 		None => {
 			// Burn it
-			return burn_reward(block_fees);
+			burn_reward(block_fees)
 		}
 		Some(wallet_listener_url) => {
 			let res = create_coinbase(&wallet_listener_url, &block_fees, should_stop)?;
@@ -303,12 +303,12 @@ fn get_coinbase(
 			let kernel = res.kernel;
 			let key_id = res.key_id;
 			let block_fees = BlockFees {
-				key_id: key_id,
+				key_id,
 				..block_fees
 			};
 
 			debug!("get_coinbase: {:?}", block_fees);
-			return Ok((output, kernel, block_fees));
+			Ok((output, kernel, block_fees))
 		}
 	}
 }
