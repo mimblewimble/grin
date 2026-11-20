@@ -12,9 +12,8 @@ build = "src/build/build.rs"
 edition = "2021"
 
 [workspace]
-# Keep p2p implicit to exclude Arti
-members = ["api", "chain", "config", "core", "keychain", "servers", "store", "util", "pool"]
-exclude = ["etc/gen_gen", "p2p/tor/arti"]
+members = ["api", "chain", "config", "core", "keychain", "p2p", "servers", "store", "util", "pool"]
+exclude = ["etc/gen_gen", "tor"]
 
 [[bin]]
 name = "grin"

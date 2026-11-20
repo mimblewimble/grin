@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::process::proxy::TorProxy;
-use crate::tor::Error;
+use crate::process::proxy::TorProxy;
+use crate::Error;
 use std::ffi::OsStr;
 use url::{Host, Url};
 
@@ -234,7 +234,7 @@ fn parse_loglevel_arg(arg: &str) -> Result<String, Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tor::config::TorBridgeConfig;
+	use crate::config::TorBridgeConfig;
 
 	#[test]
 	fn client_path() {

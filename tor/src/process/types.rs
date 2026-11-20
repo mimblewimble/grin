@@ -45,10 +45,10 @@
 //! Tor process control
 //! Derived from https://github.com/Dhole/rust-tor-controller.git
 
-use crate::tor::config::{TorBridgeConfig, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS};
-use crate::tor::ov3::OnionV3Error;
-use crate::tor::process::config::{output_tor_listener_config, output_tor_sender_config};
-use crate::tor::process::proxy::TorProxy;
+use crate::config::{TorBridgeConfig, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS};
+use crate::ov3::OnionV3Error;
+use crate::process::config::{output_tor_listener_config, output_tor_sender_config};
+use crate::process::proxy::TorProxy;
 
 use fslock_guard::LockFileGuard;
 use grin_util::secp::SecretKey;
@@ -123,11 +123,11 @@ impl TorProcess {
 		sec_key: SecretKey,
 		addr: &str,
 		config: &T,
-	) -> Result<TorProcess, crate::tor::types::Error>
+	) -> Result<TorProcess, crate::types::Error>
 	where
 		T: TorConfig,
 	{
-		use crate::tor::types::Error;
+		use crate::types::Error;
 		info!("Starting external Tor Process listener at {}.", addr);
 
 		let mut tor = TorProcess::default();
@@ -137,7 +137,7 @@ impl TorProcess {
 		let tor_dir = config
 			.data_dir()
 			.join("listener")
-			.join(crate::tor::service_address(&sec_key)?);
+			.join(crate::service_address(&sec_key)?);
 		let tor_dir_str = tor_dir
 			.to_str()
 			.ok_or(Error::Config(format!("Bad tor dir {}", tor_dir.display())))?;
@@ -152,11 +152,11 @@ impl TorProcess {
 	}
 
 	/// Start Tor process to send requests.
-	pub fn start_sender<T>(config: &T) -> Result<TorProcess, crate::tor::types::Error>
+	pub fn start_sender<T>(config: &T) -> Result<TorProcess, crate::types::Error>
 	where
 		T: TorConfig,
 	{
-		use crate::tor::types::Error;
+		use crate::types::Error;
 
 		let socks_proxy_addr = SocketAddr::V4(
 			config
@@ -449,9 +449,9 @@ impl TorProcess {
 }
 
 type BridgeProxyResult =
-	Result<(Vec<(String, String)>, HashMap<String, String>), crate::tor::types::Error>;
+	Result<(Vec<(String, String)>, HashMap<String, String>), crate::types::Error>;
 
-fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crate::tor::Error> {
+fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crate::Error> {
 	let mut hm_tor_bridge = Vec::new();
 	let mut transports = HashMap::new();
 	let (bridge_builders, lines) = config.parse()?;
@@ -463,14 +463,14 @@ fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crat
 				.chain(args.iter())
 				.any(|arg| arg.is_empty() || arg.chars().any(char::is_whitespace))
 			{
-				return Err(crate::tor::Error::Config(
+				return Err(crate::Error::Config(
 					"External Tor bridge arguments cannot be empty or contain whitespace".into(),
 				));
 			}
 			let command = format!("{} exec {} {}", protocol, path, args.join(" "));
 			if let Some(previous) = transports.insert(protocol.to_string(), command.clone()) {
 				if previous != command {
-					return Err(crate::tor::Error::Config(
+					return Err(crate::Error::Config(
 						"Conflicting bridge binaries or options".into(),
 					));
 				}
@@ -480,7 +480,7 @@ fn bridge_options(config: TorBridgeConfig) -> Result<Vec<(String, String)>, crat
 		}
 		let line = lines
 			.get(index)
-			.ok_or_else(|| crate::tor::Error::Config("Bad connection line".to_string()))?;
+			.ok_or_else(|| crate::Error::Config("Bad connection line".to_string()))?;
 		hm_tor_bridge.push(("Bridge".into(), line.clone()));
 	}
 
@@ -497,24 +497,24 @@ where
 	let proxy_config = config.proxy_config();
 	if proxy_config.transport.is_some() || proxy_config.allowed_port.is_some() {
 		let proxy = TorProxy::try_from(proxy_config.clone())
-			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+			.map_err(|e| crate::Error::Config(format!("{:?}", e)))?;
 		hm_tor_proxy = proxy
 			.to_hashmap()
-			.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?;
+			.map_err(|e| crate::Error::Config(format!("{:?}", e)))?;
 	}
 	Ok((hm_tor_bridge, hm_tor_proxy))
 }
 
-fn start_tor<T>(tor_dir: &str, tor: &mut TorProcess, config: &T) -> Result<(), crate::tor::Error>
+fn start_tor<T>(tor_dir: &str, tor: &mut TorProcess, config: &T) -> Result<(), crate::Error>
 where
 	T: TorConfig,
 {
 	let rc_path = fs::canonicalize(tor_dir)
-		.map_err(|e| crate::tor::Error::Config(format!("{:?}", e)))?
+		.map_err(|e| crate::Error::Config(format!("{:?}", e)))?
 		.join("torrc");
 	let rc_path = rc_path
 		.to_str()
-		.ok_or_else(|| crate::tor::Error::Config(format!("Bad tor dir {}", rc_path.display())))?;
+		.ok_or_else(|| crate::Error::Config(format!("Bad tor dir {}", rc_path.display())))?;
 	tor.torrc_path(rc_path)
 		.timeout(
 			config
@@ -524,7 +524,7 @@ where
 		)
 		.completion_percent(100)
 		.launch()
-		.map_err(|e| crate::tor::Error::Generic(format!("{:?}", e)))?;
+		.map_err(|e| crate::Error::Generic(format!("{:?}", e)))?;
 	Ok(())
 }
 

@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::config::TorProxyConfig;
-use crate::tor::process::types::Error;
+use crate::config::TorProxyConfig;
+use crate::process::types::Error;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;

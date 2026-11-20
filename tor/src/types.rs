@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::arti::{outside_tokio, start_tor_client, start_tor_service, stop_tor_service};
-use crate::tor::config::TorConfig;
-use crate::tor::ov3::OnionV3Address;
-use crate::tor::process::types::{SenderIsolation, TorProcess};
+use crate::arti::{outside_tokio, start_tor_client, start_tor_service, stop_tor_service};
+use crate::config::TorConfig;
+use crate::ov3::OnionV3Address;
+use crate::process::types::{SenderIsolation, TorProcess};
 
 use grin_util::secp::SecretKey;
 
@@ -138,7 +138,7 @@ pub fn stop_tor() -> Result<(), Error> {
 	stop_process(&mut RUNNING_PROCESS_SENDER.lock().unwrap())
 }
 
-fn process_error(error: crate::tor::process::types::Error) -> Error {
+fn process_error(error: crate::process::types::Error) -> Error {
 	Error::Generic(format!("{:?}", error))
 }
 
@@ -280,7 +280,7 @@ pub fn onion_service_status(onion_address: String) -> ServiceStatus {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tor::config::{TorBridgeConfig, TorOutboundProxy, TorProxyConfig};
+	use crate::config::{TorBridgeConfig, TorOutboundProxy, TorProxyConfig};
 	use std::path::PathBuf;
 
 	#[derive(Default)]
@@ -322,7 +322,7 @@ mod tests {
 		}
 	}
 
-	impl crate::tor::TorHttpClient<Config> for Config {
+	impl crate::TorHttpClient<Config> for Config {
 		fn tor_config(&self) -> &Config {
 			self
 		}
@@ -330,7 +330,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn existing_proxy() {
-		use crate::tor::{TorContext, TorHttpClient};
+		use crate::{TorContext, TorHttpClient};
 		use tokio::io::{AsyncReadExt, AsyncWriteExt};
 		let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
 		let proxy = listener.local_addr().unwrap();
@@ -374,7 +374,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn reject_https() {
-		use crate::tor::TorHttpClient;
+		use crate::TorHttpClient;
 		let config = Config {
 			integrated: true,
 			..Default::default()
@@ -516,7 +516,7 @@ mod tests {
 			let output = std::process::Command::new(std::env::current_exe().unwrap())
 				.args([
 					"--exact",
-					"tor::types::tests::ignored_proxy_warning",
+					"types::tests::ignored_proxy_warning",
 					"--nocapture",
 				])
 				.env("GRIN_TOR_PROXY_WARNING_TEST", "1")

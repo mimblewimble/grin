@@ -6,12 +6,13 @@ jobs:
     name: Cargo clippy
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
+      - uses: actions/checkout@v3
       - run: rustup toolchain install 1.99.0 --profile minimal --component clippy
-      - run: cargo +1.99.0 clippy -p 'grin*' --all-targets --no-deps --features grin_p2p/tor -- -D warnings
+      - run: cargo +1.99.0 clippy --workspace --all-targets -- -D warnings
+      - name: Check Tor
+        run: |
+          git submodule update --init tor/arti
+          cargo +1.99.0 clippy --locked --manifest-path tor/Cargo.toml --all-targets --no-deps -- -D warnings
   linux-tests:
     name: Linux Tests
     runs-on: ubuntu-latest
@@ -20,22 +21,17 @@ jobs:
       matrix:
         job_args: [servers, chain, core, keychain, pool, p2p, src, api, util, store]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-      - name: Install SQLite
-        if: matrix.job_args == 'p2p'
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - uses: actions/checkout@v3
       - name: Test ${{ matrix.job_args }}
         working-directory: ${{ matrix.job_args }}
         run: cargo test --release
       - name: Test Tor
         if: matrix.job_args == 'p2p'
-        working-directory: p2p
         run: |
-          cargo test --release --features tor
-          cargo test --release --features tor-static
+          sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+          git submodule update --init tor/arti
+          cargo test --locked --release --manifest-path tor/Cargo.toml
+          cargo test --locked --release --manifest-path tor/Cargo.toml --features tor-static
 
   macos-tests:
     name: macOS Tests
@@ -43,13 +39,13 @@ jobs:
     needs: clippy
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
+        uses: actions/checkout@v3
       - name: Tests
-        run: cargo test --release -p 'grin*'
+        run: cargo test --release --all
       - name: Test Tor
-        run: cargo test --release -p grin_p2p --features tor-static
+        run: |
+          git submodule update --init tor/arti
+          cargo test --locked --release --manifest-path tor/Cargo.toml --features tor-static
 
   windows-tests:
     name: Windows Tests
@@ -59,13 +55,13 @@ jobs:
       ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
+        uses: actions/checkout@v3
       - name: Tests
-        run: cargo test --release -p 'grin*'
+        run: cargo test --release --all
       - name: Test Tor
-        run: cargo test --release -p grin_p2p --features tor-static
+        run: |
+          git submodule update --init tor/arti
+          cargo test --locked --release --manifest-path tor/Cargo.toml --features tor-static
 
   telegram-notify:
     name: Telegram Notification

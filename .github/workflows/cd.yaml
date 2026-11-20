@@ -10,10 +10,7 @@ jobs:
         name: Linux Release
         runs-on: ubuntu-latest
         steps:
-          - name: Checkout
-            uses: actions/checkout@v6
-            with:
-              submodules: recursive
+          - uses: actions/checkout@v3
           - name: Build
             run: cargo build --release
           - name: Archive
@@ -37,9 +34,7 @@ jobs:
           - name: Install Rust Target
             run: rustup target add x86_64-apple-darwin
           - name: Checkout
-            uses: actions/checkout@v6
-            with:
-              submodules: recursive
+            uses: actions/checkout@v3
           - name: Build
             run: cargo build --release --target x86_64-apple-darwin
           - name: Archive
@@ -60,9 +55,7 @@ jobs:
         runs-on: macos-latest
         steps:
           - name: Checkout
-            uses: actions/checkout@v6
-            with:
-              submodules: recursive
+            uses: actions/checkout@v3
           - name: Build
             run: cargo build --release
           - name: Archive
@@ -86,8 +79,6 @@ jobs:
         steps:
           - name: Checkout
             uses: actions/checkout@v3
-            with:
-              submodules: recursive
           - name: Build
             run: cargo build --release
           - name: Archive

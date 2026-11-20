@@ -13,12 +13,12 @@
 // limitations under the License.
 
 //! Tor Configuration + Onion (Hidden) Service operations
-use crate::util::secp::key::SecretKey;
+use grin_util::secp::key::SecretKey;
 
-use crate::tor::config::NATIVE_INITIAL_CIRCUIT_TIMEOUT_SECS;
-use crate::tor::ov3::OnionV3Address;
-use crate::tor::process::types::Error;
-use crate::tor::types::exp_sec_key_bytes;
+use crate::config::NATIVE_INITIAL_CIRCUIT_TIMEOUT_SECS;
+use crate::ov3::OnionV3Address;
+use crate::process::types::Error;
+use crate::types::exp_sec_key_bytes;
 use ed25519_dalek::hazmat::ExpandedSecretKey;
 use ed25519_dalek::SigningKey as DalekSecretKey;
 use ed25519_dalek::VerifyingKey as DalekPublicKey;
@@ -267,7 +267,7 @@ mod tests {
 
 	use rand::rngs::mock::StepRng;
 
-	use crate::util::{self, secp, static_secp_instance};
+	use grin_util::{self as util, secp, static_secp_instance};
 
 	pub fn clean_output_dir(test_dir: &str) {
 		let _ = fs::remove_dir_all(test_dir);

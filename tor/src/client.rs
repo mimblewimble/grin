@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::config::{
+use crate::config::{
 	request_timeout, TorConfig, TorOutboundProxy, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
 };
-use crate::tor::{Error, PostError};
+use crate::{Error, PostError};
 
 use arti_client::StreamPrefs;
 use async_trait::async_trait;
@@ -250,7 +250,7 @@ async fn exchange<T: TorConfig>(
 						}
 					} else if config.use_integrated() {
 						let prefs = isolation.1.as_ref().map(|_| &mut isolation.0);
-						crate::tor::arti::connect(config, &url, prefs, deadline)
+						crate::arti::connect(config, &url, prefs, deadline)
 							.await
 							.map_err(Error::Post)
 					} else {
@@ -296,8 +296,8 @@ async fn connect_native<T: TorConfig>(
 	let onion = url
 		.host()
 		.filter(|host| host.ends_with(".onion"))
-		.and_then(|host| crate::tor::ov3::OnionV3Address::try_from(host).ok());
-	let Some((shared_isolation, _)) = crate::tor::types::sender_isolation(config).zip(onion) else {
+		.and_then(|host| crate::ov3::OnionV3Address::try_from(host).ok());
+	let Some((shared_isolation, _)) = crate::types::sender_isolation(config).zip(onion) else {
 		return connect_socks(config.socks_proxy_addr(), url, isolation.as_deref()).await;
 	};
 	let shared = isolation.is_none();

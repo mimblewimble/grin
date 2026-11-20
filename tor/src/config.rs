@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::process::bridge;
-use crate::tor::Error;
+use crate::process::bridge;
+use crate::Error;
 
 use arti_client::config::BridgeConfigBuilder;
 use hyper::Uri;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;

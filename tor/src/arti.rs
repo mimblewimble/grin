@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::tor::client::HttpConnection;
-use crate::tor::config::{
+use crate::client::HttpConnection;
+use crate::config::{
 	request_timeout, TorConfig, TorProxyConfig, BOOTSTRAP_TIMEOUT_SECS, CONNECT_RETRY_INTERVAL,
 	CONNECT_TIMEOUT, MIN_CIRCUIT_TIMEOUT_MS,
 };
-use crate::tor::status::spawn_status_logger;
-use crate::tor::types::{exp_sec_key_bytes, Error, PostError};
-use crate::tor::{service_address, SERVICE_STATUS};
+use crate::status::spawn_status_logger;
+use crate::types::{exp_sec_key_bytes, Error, PostError};
+use crate::{service_address, SERVICE_STATUS};
 
 use grin_util::secp::SecretKey;
 
@@ -357,7 +357,7 @@ pub(super) async fn connect<T: TorConfig>(
 
 fn configure_bridges(
 	builder: &mut TorClientConfigBuilder,
-	config: crate::tor::config::TorBridgeConfig,
+	config: crate::config::TorBridgeConfig,
 ) -> Result<(), Error> {
 	let mut transports = HashMap::new();
 	let (bridge_builders, _) = config.parse()?;
@@ -451,8 +451,7 @@ where
 			if !bridges_changed
 				&& c.dir_mgr_config()
 					.map_err(|e| Error::Config(format!("{:?}", e)))?
-					.cache_dir
-					== *cache_path
+					.cache_dir == *cache_path
 			{
 				debug!("Tor config changed, reconfigure client.");
 				client
@@ -604,7 +603,7 @@ fn add_service_key(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::tor::config::TorBridgeConfig;
+	use crate::config::TorBridgeConfig;
 
 	#[tokio::test]
 	async fn runtime_drop() {

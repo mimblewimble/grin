@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Tor transport and onion services for Grin applications.
+
+#[macro_use]
+extern crate log;
+
 pub mod arti;
 pub mod config;
 pub mod ov3;

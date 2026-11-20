@@ -16,6 +16,7 @@ use data_encoding::BASE32;
 use ed25519_dalek::SigningKey as DalekSecretKey;
 use ed25519_dalek::VerifyingKey as DalekPublicKey;
 use grin_util::from_hex;
+use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 use std::convert::TryFrom;
 use std::fmt;
@@ -175,7 +176,7 @@ pub fn complete_tor_address(input: &str) -> Result<String, OnionV3Error> {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use crate::tor::Error;
+	use crate::Error;
 	use std::convert::TryInto;
 
 	#[test]
