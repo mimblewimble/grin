@@ -129,13 +129,12 @@ impl TorBridgeConfig {
 	}
 
 	pub fn parse_transport_name(&self) -> Result<String, Error> {
-		let bridges = self.parse_bridge_lines()?;
-		if let Some(b) = bridges.first() {
-			let first = b.split_whitespace().next().unwrap_or("");
-			let transport = first.to_ascii_lowercase();
-			return Ok(transport);
-		}
-		Err(Error::Config("Can not parse transport name.".to_string()))
+		let (bridges, _) = self.parse()?;
+		bridges
+			.first()
+			.and_then(BridgeConfigBuilder::get_transport)
+			.map(|name| if name.is_empty() { "built-in" } else { name }.to_owned())
+			.ok_or_else(|| Error::Config("Missing bridge transport".into()))
 	}
 
 	fn parse_bridge_lines(&self) -> Result<Vec<String>, Error> {
@@ -282,7 +281,13 @@ mod tests {
 		)
 		.unwrap();
 		assert!(bridge.parse().is_ok());
+		assert_eq!(bridge.parse_transport_name().unwrap(), "built-in");
 		bridge.client_args.push("--test".into());
 		assert!(bridge.parse().is_err());
+		bridge.client_args.clear();
+		bridge.bridge_line = bridge
+			.bridge_line
+			.map(|line| format!("Bridge webtunnel {line} url=https://example.com"));
+		assert_eq!(bridge.parse_transport_name().unwrap(), "webtunnel");
 	}
 }
