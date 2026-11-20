@@ -148,13 +148,8 @@ fn update_status(status: &mut ServiceStatus, state: OnionServiceState, problem: 
 				.map(str::to_owned)
 				.unwrap_or_else(|| format!("Onion service is {:?}", state)),
 		)),
-		//TODO: arti is sending shutdown first.
-		Shutdown
-			if !matches!(status, ServiceStatus::Starting)
-				&& !matches!(status, ServiceStatus::Stopped) =>
-		{
-			ServiceStatus::Stopped
-		}
+		// Arti starts with Shutdown before bootstrapping.
+		Shutdown if !matches!(status, ServiceStatus::Starting) => ServiceStatus::Stopped,
 		_ => ServiceStatus::Starting,
 	};
 }
@@ -196,6 +191,8 @@ mod tests {
 		);
 		update_status(&mut status, Running, None);
 		assert!(matches!(status, ServiceStatus::Running));
+		update_status(&mut status, Shutdown, None);
+		assert!(matches!(status, ServiceStatus::Stopped));
 		update_status(&mut status, Shutdown, None);
 		assert!(matches!(status, ServiceStatus::Stopped));
 	}
