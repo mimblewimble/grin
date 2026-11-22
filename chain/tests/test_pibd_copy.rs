@@ -25,7 +25,7 @@ use crate::chain::txhashset::BitmapChunk;
 use crate::chain::types::{NoopAdapter, Options};
 use crate::core::core::{
 	hash::{Hash, Hashed},
-	pmmr::segment::{Segment, SegmentIdentifier, SegmentType},
+	pmmr::segment::{Segment, SegmentIdentifier, SegmentType, SegmentTypeIdentifier},
 	Block, OutputIdentifier, TxKernel,
 };
 use crate::core::{genesis, global, pow};
@@ -34,6 +34,7 @@ use crate::util::secp::pedersen::RangeProof;
 use self::chain_test_helper::clean_output_dir;
 
 mod chain_test_helper;
+mod pibd;
 
 // Canned segmenter responder, which will simulate feeding back segments as requested
 // by the desegmenter
@@ -167,7 +168,7 @@ impl DesegmenterRequestor {
 
 	// Emulate `continue_pibd` function, which would be called from state sync
 	// return whether is complete
-	pub fn continue_pibd(&mut self) -> bool {
+	pub fn continue_pibd(&mut self, previous_requests: &mut Vec<SegmentTypeIdentifier>) -> bool {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
@@ -187,6 +188,13 @@ impl DesegmenterRequestor {
 			// main pmmrs. Bitmaps segments will always be requested first)
 			next_segment_ids = d.next_desired_segments(12);
 			is_complete = d.is_complete()
+		}
+
+		if !is_complete && !next_segment_ids.is_empty() {
+			assert_ne!(
+				next_segment_ids, *previous_requests,
+				"PIBD requested the same segments again"
+			);
 		}
 
 		debug!("Next segment IDS: {:?}", next_segment_ids);
@@ -221,6 +229,7 @@ impl DesegmenterRequestor {
 				}
 			};
 		}
+		*previous_requests = next_segment_ids;
 		is_complete
 	}
 
@@ -257,8 +266,8 @@ fn test_pibd_copy_impl(is_fixture: bool, src_root_dir: &str, dest_root_dir: &str
 
 	dest_requestor.copy_headers_from_responder();
 
-	// Perform until desegmenter reports it's done
-	while !dest_requestor.continue_pibd() {}
+	let mut previous_requests = vec![];
+	while !dest_requestor.continue_pibd(&mut previous_requests) {}
 
 	dest_requestor.check_roots();
 }
@@ -279,12 +288,14 @@ fn test_pibd_copy_sample() {
 
 #[test]
 #[ignore]
-// Run with --ignored and set GRIN_CHAIN_DATA to a synced testnet chain_data directory
+// Run with --ignored and set GRIN_CHAIN_DATA to a synced, offline Testnet chain
 fn test_pibd_copy_real() {
 	util::init_test_logger();
-	let src_root_dir = std::env::var("GRIN_CHAIN_DATA").expect("GRIN_CHAIN_DATA must be set");
-	let dest_root_dir = "./tests/test_output/.segment_copy_real".to_string();
-	clean_output_dir(&dest_root_dir);
-	test_pibd_copy_impl(false, &src_root_dir, &dest_root_dir);
-	clean_output_dir(&dest_root_dir);
+	let source = pibd::copy_testnet_chain();
+	let destination = tempfile::tempdir().unwrap();
+	test_pibd_copy_impl(
+		false,
+		source.path().to_str().unwrap(),
+		destination.path().to_str().unwrap(),
+	);
 }

@@ -1402,8 +1402,8 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply an output segment to the output PMMR. must be called in order
-	/// Sort and apply hashes and leaves within a segment to output pmmr, skipping over
-	/// genesis position.
+	/// Sort and apply hashes and leaves within a segment to output pmmr, skipping an
+	/// existing genesis position
 	/// NB: Would like to make this more generic but the hard casting of pmmrs
 	/// held by this struct makes it awkward to do so
 	pub fn apply_output_segment(

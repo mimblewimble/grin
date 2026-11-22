@@ -1089,6 +1089,7 @@ dependencies = [
  "croaring",
  "enum_primitive",
  "env_logger",
+ "fs2",
  "grin_core",
  "grin_keychain",
  "grin_store",
@@ -1099,6 +1100,7 @@ dependencies = [
  "rand 0.6.5",
  "serde",
  "serde_derive",
+ "tempfile",
  "thiserror 1.0.69",
 ]
 

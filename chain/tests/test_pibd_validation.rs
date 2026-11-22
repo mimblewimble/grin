@@ -26,7 +26,11 @@ use crate::core::{genesis, global, pow};
 
 use croaring::Bitmap;
 
-mod chain_test_helper;
+mod pibd;
+
+fn bitmap_pmmr_size(output_mmr_size: u64) -> u64 {
+	pmmr::insertion_to_pmmr_index(pmmr::n_leaves(output_mmr_size).div_ceil(1024))
+}
 
 fn test_pibd_chain_validation_impl(is_fixture: bool, src_root_dir: &str) {
 	global::set_local_chain_type(global::ChainTypes::Testnet);
@@ -83,15 +87,7 @@ fn test_pibd_chain_validation_impl(is_fixture: bool, src_root_dir: &str) {
 		let segmenter = src_chain.segmenter().unwrap();
 
 		// BITMAP - Read + Validate, Also recreate bitmap accumulator for target tx hash set
-		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
-		let bitmap_mmr_num_leaves =
-			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
-		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
-
-		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = *pmmr::peaks(bitmap_mmr_num_leaves)
-			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves));
+		let bitmap_pmmr_size = bitmap_pmmr_size(horizon_header.output_mmr_size);
 		println!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
 		println!(
 			"Bitmap Segments required: {}",
@@ -212,6 +208,14 @@ fn test_pibd_chain_validation_impl(is_fixture: bool, src_root_dir: &str) {
 }
 
 #[test]
+fn bitmap_size() {
+	assert_eq!(bitmap_pmmr_size(1), 1);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(1024)), 1);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(1025)), 3);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(2049)), 4);
+}
+
+#[test]
 fn test_pibd_chain_validation_sample() {
 	util::init_test_logger();
 	// Generate and validate PIBD segments from both fixtures
@@ -223,9 +227,9 @@ fn test_pibd_chain_validation_sample() {
 
 #[test]
 #[ignore]
-// Run with --ignored and set GRIN_CHAIN_DATA to a synced testnet chain_data directory
+// Run with --ignored and set GRIN_CHAIN_DATA to a synced, offline Testnet chain
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
-	let src_root_dir = std::env::var("GRIN_CHAIN_DATA").expect("GRIN_CHAIN_DATA must be set");
-	test_pibd_chain_validation_impl(false, &src_root_dir);
+	let source = pibd::copy_testnet_chain();
+	test_pibd_chain_validation_impl(false, source.path().to_str().unwrap());
 }
