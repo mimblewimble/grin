@@ -40,9 +40,7 @@ pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
-	/// Live Stratum stats provider
-	///
-	/// Use [`Owner::new`] to construct an owner without a provider
+	/// Optional Stratum stats provider
 	pub mining_stats: Option<MiningStatsProvider>,
 }
 
@@ -61,12 +59,7 @@ impl Owner {
 	///
 
 	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
-		Owner {
-			chain,
-			peers,
-			sync_state,
-			mining_stats: None,
-		}
+		Self::with_mining_stats(chain, peers, sync_state, None)
 	}
 
 	/// Create a new Owner API instance with a mining stats provider.
@@ -244,10 +237,8 @@ impl Owner {
 mod test {
 	use super::*;
 	use crate::owner_rpc::OwnerRpc;
-	use crate::types::{MiningStatus, WorkerInfo};
 	use easy_jsonrpc_mw::{Handler, MaybeReply};
 	use serde_json::json;
-	use std::sync::Arc;
 
 	fn mining_status_request() -> serde_json::Value {
 		json!({
@@ -278,28 +269,28 @@ mod test {
 
 	#[test]
 	fn mining_status() {
-		let expected = MiningStatus {
-			is_enabled: true,
-			is_running: true,
-			num_workers: 1,
-			block_height: 50,
-			network_difficulty: 10,
-			edge_bits: 29,
-			blocks_found: 1,
-			network_hashrate: 0.5,
-			minimum_share_difficulty: 1,
-			worker_stats: vec![WorkerInfo {
-				id: "w0".into(),
-				last_seen: 100,
-				pow_difficulty: 1,
-				num_accepted: 3,
-				num_rejected: 0,
-				num_stale: 0,
-				num_blocks_found: 0,
+		let expected = json!({
+			"is_enabled": true,
+			"is_running": true,
+			"num_workers": 1,
+			"block_height": 50,
+			"network_difficulty": 10,
+			"edge_bits": 29,
+			"blocks_found": 1,
+			"network_hashrate": 0.5,
+			"minimum_share_difficulty": 1,
+			"worker_stats": [{
+				"id": "w0",
+				"last_seen": 100,
+				"pow_difficulty": 1,
+				"num_accepted": 3,
+				"num_rejected": 0,
+				"num_stale": 0,
+				"num_blocks_found": 0,
 			}],
-		};
-		let expected_clone = expected.clone();
-		let provider: MiningStatsProvider = Arc::new(move || expected_clone.clone());
+		});
+		let status: MiningStatus = serde_json::from_value(expected.clone()).unwrap();
+		let provider: MiningStatsProvider = Arc::new(move || status.clone());
 		let owner = Owner::with_mining_stats(Weak::new(), Weak::new(), Weak::new(), Some(provider));
 
 		let owner_api = &owner as &dyn OwnerRpc;
@@ -308,24 +299,9 @@ mod test {
 			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
 		};
 
-		assert_eq!(reply["id"], 1);
-		assert_eq!(reply["jsonrpc"], "2.0");
-		let ok = &reply["result"]["Ok"];
-		assert_eq!(ok["is_enabled"], true);
-		assert_eq!(ok["is_running"], true);
-		assert_eq!(ok["num_workers"], 1);
-		assert_eq!(ok["block_height"], 50);
-		assert_eq!(ok["network_difficulty"], 10);
-		assert_eq!(ok["edge_bits"], 29);
-		assert_eq!(ok["blocks_found"], 1);
-		assert_eq!(ok["network_hashrate"], 0.5);
-		assert_eq!(ok["minimum_share_difficulty"], 1);
-		assert_eq!(ok["worker_stats"][0]["id"], "w0");
-		assert_eq!(ok["worker_stats"][0]["last_seen"], 100);
-		assert_eq!(ok["worker_stats"][0]["num_accepted"], 3);
-		assert!(ok["worker_stats"][0].get("is_connected").is_none());
-
-		let status: MiningStatus = serde_json::from_value(ok.clone()).unwrap();
-		assert_eq!(status, expected);
+		assert_eq!(
+			reply,
+			json!({"jsonrpc": "2.0", "id": 1, "result": {"Ok": expected}})
+		);
 	}
 }
