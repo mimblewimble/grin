@@ -33,7 +33,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
-use crate::common::types::StratumServerConfig;
+use crate::common::types::{Error, StratumServerConfig};
 use crate::core::consensus::graph_weight;
 use crate::core::core::hash::Hashed;
 use crate::core::core::Block;
@@ -798,25 +798,6 @@ async fn accept_connections_loop(
 	connections.shutdown().await;
 }
 
-fn accept_connections(
-	listen_addr: SocketAddr,
-	handler: Arc<Handler>,
-	max_workers: usize,
-	idle_timeout: Duration,
-	stop_state: Arc<StopState>,
-) {
-	info!("Start tokio stratum server");
-	let task = async move {
-		let listener = TcpListener::bind(&listen_addr).await.unwrap_or_else(|_| {
-			panic!("Stratum: Failed to bind to listen address {}", listen_addr)
-		});
-		accept_connections_loop(listener, handler, max_workers, idle_timeout, stop_state).await;
-	};
-
-	let rt = Runtime::new().unwrap();
-	rt.block_on(task);
-}
-
 // ----------------------------------------
 // Worker Object - a connected stratum client - a miner, pool, proxy, etc...
 
@@ -1000,6 +981,39 @@ impl WorkersList {
 	}
 }
 
+pub(crate) fn validate_stratum_config(config: &StratumServerConfig) -> Result<SocketAddr, Error> {
+	if config.max_workers == 0 {
+		return Err(Error::Configuration(
+			"stratum max_workers must be greater than zero".to_string(),
+		));
+	}
+	if config.max_workers > Semaphore::MAX_PERMITS {
+		return Err(Error::Configuration(format!(
+			"stratum max_workers must not exceed {}",
+			Semaphore::MAX_PERMITS
+		)));
+	}
+	if config.worker_idle_timeout_secs == 0 {
+		return Err(Error::Configuration(
+			"stratum worker_idle_timeout_secs must be greater than zero".to_string(),
+		));
+	}
+	if std::time::Instant::now()
+		.checked_add(Duration::from_secs(config.worker_idle_timeout_secs))
+		.is_none()
+	{
+		return Err(Error::Configuration(
+			"stratum worker_idle_timeout_secs is too large".to_string(),
+		));
+	}
+	let address = config.stratum_server_addr.as_deref().ok_or_else(|| {
+		Error::Configuration("stratum_server_addr must be configured".to_string())
+	})?;
+	address.parse::<SocketAddr>().map_err(|e| {
+		Error::Configuration(format!("invalid stratum_server_addr '{}': {}", address, e))
+	})
+}
+
 /// Grin Stratum Server
 pub struct StratumServer {
 	id: String,
@@ -1039,21 +1053,21 @@ impl StratumServer {
 		proof_size: usize,
 		sync_state: Arc<SyncState>,
 		stop_state: Arc<StopState>,
-	) {
+	) -> Result<(), Error> {
+		let listen_addr = validate_stratum_config(&self.config)?;
+		let listener = std::net::TcpListener::bind(listen_addr)?;
+		listener.set_nonblocking(true)?;
+		let runtime = Runtime::new()?;
+		let listener = {
+			let _guard = runtime.enter();
+			TcpListener::from_std(listener)?
+		};
 		info!(
 			"(Server ID: {}) Starting stratum server with proof_size = {}",
 			self.id, proof_size
 		);
 
 		self.sync_state = sync_state;
-
-		let listen_addr = self
-			.config
-			.stratum_server_addr
-			.clone()
-			.unwrap()
-			.parse()
-			.expect("Stratum: Incorrect address ");
 
 		let handler = Arc::new(Handler::from_stratum(self));
 		let h = handler.clone();
@@ -1062,13 +1076,14 @@ impl StratumServer {
 
 		let listener_stop_state = stop_state.clone();
 		let listener_th = thread::spawn(move || {
-			accept_connections(
-				listen_addr,
+			info!("Start tokio stratum server");
+			runtime.block_on(accept_connections_loop(
+				listener,
 				h,
 				max_workers,
 				idle_timeout,
 				listener_stop_state,
-			);
+			));
 		});
 
 		// We have started
@@ -1097,6 +1112,7 @@ impl StratumServer {
 			error!("failed to join stratum listener thread: {:?}", e);
 		}
 		self.stratum_stats.write().is_running = false;
+		Ok(())
 	} // fn run_loop()
 } // StratumServer
 
@@ -1464,6 +1480,32 @@ mod tests {
 		drop(lines);
 		task.await.unwrap();
 		assert_eq!(handler.workers.count(), 0);
+	}
+
+	#[test]
+	fn test_stratum_port_in_use() {
+		use crate::common::adapters::{PoolToChainAdapter, PoolToNetAdapter};
+		use std::io::ErrorKind;
+
+		global::set_local_chain_type(ChainTypes::AutomatedTesting);
+		let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+		let config = StratumServerConfig {
+			stratum_server_addr: Some(listener.local_addr().unwrap().to_string()),
+			..Default::default()
+		};
+		let tx_pool = Arc::new(RwLock::new(crate::pool::TransactionPool::new(
+			crate::pool::PoolConfig::default(),
+			Arc::new(PoolToChainAdapter::new()),
+			Arc::new(PoolToNetAdapter::new(Default::default())),
+		)));
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let mut server = StratumServer::new(config, shared_test_chain(), tx_pool, stats.clone());
+		let stop_state = Arc::new(StopState::new());
+		// Keep the test bounded even if startup incorrectly proceeds after a bind error.
+		stop_state.stop();
+		let result = server.run_loop(42, Arc::new(SyncState::new()), stop_state);
+		assert!(matches!(result, Err(Error::IOError(e)) if e.kind() == ErrorKind::AddrInUse));
+		assert!(!stats.read().is_running);
 	}
 
 	#[test]

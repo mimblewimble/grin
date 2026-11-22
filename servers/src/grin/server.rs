@@ -43,7 +43,7 @@ use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
-use crate::mining::stratumserver;
+use crate::mining::stratumserver::{self, validate_stratum_config};
 use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::{Capabilities, PeerAddr};
@@ -380,6 +380,17 @@ impl Server {
 			error!("Invalid stratum server configuration: {:?}", e);
 			return;
 		}
+		let mut stratum_thread = self.stratum_thread.write();
+		if let Some(handle) = stratum_thread.take() {
+			if !handle.is_finished() {
+				*stratum_thread = Some(handle);
+				warn!("Stratum server is already running");
+				return;
+			}
+			if let Err(e) = handle.join() {
+				error!("failed to join stratum server thread: {:?}", e);
+			}
+		}
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 		let stop_state = self.stop_state.clone();
@@ -390,10 +401,12 @@ impl Server {
 			self.tx_pool.clone(),
 			self.state_info.stratum_stats.clone(),
 		);
-		*self.stratum_thread.write() = thread::Builder::new()
+		*stratum_thread = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(proof_size, sync_state, stop_state);
+				if let Err(e) = stratum_server.run_loop(proof_size, sync_state, stop_state) {
+					error!("Stratum server failed: {:?}", e);
+				}
 			})
 			.map_err(|e| error!("Failed to start stratum server thread: {}", e))
 			.ok();
@@ -624,40 +637,6 @@ impl Server {
 		stop.stop();
 		info!("stop_test_miner - stop",);
 	}
-}
-
-fn validate_stratum_config(config: &StratumServerConfig) -> Result<(), Error> {
-	if config.max_workers == 0 {
-		return Err(Error::Configuration(
-			"stratum max_workers must be greater than zero".to_string(),
-		));
-	}
-	if config.max_workers > tokio::sync::Semaphore::MAX_PERMITS {
-		return Err(Error::Configuration(format!(
-			"stratum max_workers must not exceed {}",
-			tokio::sync::Semaphore::MAX_PERMITS
-		)));
-	}
-	if config.worker_idle_timeout_secs == 0 {
-		return Err(Error::Configuration(
-			"stratum worker_idle_timeout_secs must be greater than zero".to_string(),
-		));
-	}
-	if time::Instant::now()
-		.checked_add(Duration::from_secs(config.worker_idle_timeout_secs))
-		.is_none()
-	{
-		return Err(Error::Configuration(
-			"stratum worker_idle_timeout_secs is too large".to_string(),
-		));
-	}
-	let address = config.stratum_server_addr.as_deref().ok_or_else(|| {
-		Error::Configuration("stratum_server_addr must be configured".to_string())
-	})?;
-	address.parse::<std::net::SocketAddr>().map_err(|e| {
-		Error::Configuration(format!("invalid stratum_server_addr '{}': {}", address, e))
-	})?;
-	Ok(())
 }
 
 #[cfg(test)]

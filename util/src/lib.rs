@@ -189,11 +189,24 @@ impl StopState {
 		self.paused.store(false, Ordering::Relaxed)
 	}
 
-	/// Reset state.
+	/// Reset state after all previous tasks and threads have exited.
 	pub fn reset(&self) {
 		self.stopped.store(false, Ordering::Relaxed);
 		self.paused.store(false, Ordering::Relaxed);
 	}
+}
+
+#[test]
+fn stop_state_reset() {
+	let state = StopState::new();
+	state.stop();
+	state.pause();
+	assert!(state.is_stopped());
+	assert!(state.is_paused());
+
+	state.reset();
+	assert!(!state.is_stopped());
+	assert!(!state.is_paused());
 }
 
 #[test]
