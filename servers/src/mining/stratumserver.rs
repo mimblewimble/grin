@@ -664,7 +664,7 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 
 	let framed = Framed::new(socket, LinesCodec::new_with_max_length(MAX_RPC_LINE_BYTES));
 	let (mut writer, mut reader) = framed.split();
-	let (activity, mut activity_rx) = mpsc::channel::<()>(1);
+	let (activity, mut activity_rx) = watch::channel(false);
 	let read_activity = activity.clone();
 
 	let reader_handler = handler.clone();
@@ -673,10 +673,10 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 		while let Some(request_line) =
 			line.map_err(|e| error!("Worker {} read error: {}", worker_id, e))?
 		{
-			let _ = read_activity.try_send(());
 			let request: RpcRequest = serde_json::from_str(&request_line).map_err(|e| {
 				error!("Worker {} invalid JSON: {}", worker_id, e);
 			})?;
+			read_activity.send_replace(true);
 			let mut next_line = None;
 			if request.method == "getjobtemplate" && !reader_handler.sync_state.is_syncing() {
 				let mut job_ready = reader_handler.job_ready.subscribe();
@@ -709,7 +709,8 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 		while let Some(line) = rx.recv().await {
 			match timeout(WORKER_WRITE_TIMEOUT, writer.send(line)).await {
 				Ok(Ok(())) => {
-					let _ = activity.try_send(());
+					// Count outbound traffic after the first request
+					activity.send_if_modified(|received| *received);
 				}
 				Ok(Err(e)) => {
 					error!("Worker {} write error: {}", worker_id, e);
@@ -734,15 +735,15 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 			_ = &mut read => break,
 			_ = &mut write => break,
 			_ = &mut idle_sleep => {
-				if handler.sync_state.is_syncing() {
+				if *activity_rx.borrow() && handler.sync_state.is_syncing() {
 					idle_sleep.as_mut().reset(Instant::now() + idle_timeout);
 					continue;
 				}
 				warn!("Worker {} idle for {:?}; disconnecting", worker_id, idle_timeout);
 				break;
 			}
-			activity = activity_rx.recv() => {
-				if activity.is_some() {
+			activity = activity_rx.changed() => {
+				if activity.is_ok() {
 					idle_sleep.as_mut().reset(Instant::now() + idle_timeout);
 				} else {
 					break;
@@ -1403,6 +1404,9 @@ mod tests {
 			Duration::from_millis(50),
 		));
 		wait_for_worker_count(&handler, 1).await;
+		let mut client = Framed::new(client, LinesCodec::new());
+		let request = serde_json::to_string(&rpc_request("keepalive", None)).unwrap();
+		client.send(request).await.unwrap();
 		tokio::time::sleep(Duration::from_millis(120)).await;
 		assert_eq!(handler.workers.count(), 1);
 
@@ -1427,6 +1431,9 @@ mod tests {
 			Duration::from_millis(50),
 		));
 		wait_for_worker_count(&handler, 1).await;
+		let mut client = Framed::new(client, LinesCodec::new());
+		let request = serde_json::to_string(&rpc_request("keepalive", None)).unwrap();
+		client.send(request).await.unwrap();
 
 		let broadcast_handler = handler.clone();
 		let broadcaster = tokio::spawn(async move {
@@ -1445,6 +1452,26 @@ mod tests {
 			.unwrap();
 		assert_eq!(handler.workers.count(), 0);
 		drop(client);
+	}
+
+	#[tokio::test]
+	async fn test_first_request_timeout() {
+		let handler = shared_handler();
+		handler.sync_state.update(SyncStatus::Initial);
+		let (_client, socket) = tcp_pair().await;
+		let task = tokio::spawn(handle_connection(
+			socket,
+			handler.clone(),
+			Duration::from_millis(50),
+		));
+		wait_for_worker_count(&handler, 1).await;
+		for _ in 0..20 {
+			handler.workers.broadcast("job".into());
+			tokio::time::sleep(Duration::from_millis(10)).await;
+		}
+		assert!(task.is_finished());
+		task.await.unwrap();
+		assert_eq!(handler.workers.count(), 0);
 	}
 
 	#[tokio::test]
