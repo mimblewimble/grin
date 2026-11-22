@@ -409,8 +409,9 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"worker_idle_timeout_secs".to_string(),
 		"
-#disconnect workers after this many seconds without traffic
-#must be greater than zero and should exceed attempt_time_per_block
+#idle timeout in seconds, must be greater than zero
+#after the first request, outbound jobs reset it and sync suspends it
+#should exceed attempt_time_per_block
 "
 		.to_string(),
 	);

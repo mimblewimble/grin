@@ -245,8 +245,8 @@ pub struct StratumServerConfig {
 	#[serde(default = "default_stratum_max_workers")]
 	pub max_workers: usize,
 
-	/// Disconnect workers after this many seconds without traffic. Must be
-	/// greater than zero.
+	/// Idle timeout in seconds, must be greater than zero
+	/// After the first request, outbound jobs reset it and sync suspends it
 	#[serde(default = "default_stratum_worker_idle_timeout_secs")]
 	pub worker_idle_timeout_secs: u64,
 
@@ -266,7 +266,7 @@ pub struct StratumServerConfig {
 }
 
 fn default_stratum_max_workers() -> usize {
-	256
+	512
 }
 
 fn default_stratum_worker_idle_timeout_secs() -> u64 {
@@ -457,7 +457,7 @@ mod tests {
 		config.remove("worker_idle_timeout_secs");
 
 		let config: StratumServerConfig = serde_json::from_value(value).unwrap();
-		assert_eq!(config.max_workers, 256);
+		assert_eq!(config.max_workers, 512);
 		assert_eq!(config.worker_idle_timeout_secs, 5 * 60);
 	}
 }
