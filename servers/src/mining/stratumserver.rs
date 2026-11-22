@@ -329,12 +329,14 @@ impl Handler {
 	// Handle GETJOBTEMPLATE message
 	fn handle_getjobtemplate(&self) -> Result<Value, RpcError> {
 		// Build a JobTemplate from a BlockHeader and return JSON
-		let job_template = self.build_block_template();
+		let job_template = self
+			.build_block_template()
+			.ok_or_else(RpcError::node_is_syncing)?;
 		// Height zero is the startup placeholder
 		if job_template.height == 0 {
 			return Err(RpcError::node_is_syncing());
 		}
-		let response = serde_json::to_value(&job_template).unwrap();
+		let response = serde_json::to_value(&job_template)?;
 		debug!(
 			"(Server ID: {}) sending block {} with id {} to single worker",
 			self.id, job_template.height, job_template.job_id,
@@ -343,15 +345,9 @@ impl Handler {
 	}
 
 	// Build and return a JobTemplate for mining the current block
-	fn build_block_template(&self) -> JobTemplate {
-		let bh = self
-			.current_state
-			.read()
-			.current_block_versions
-			.last()
-			.unwrap()
-			.header
-			.clone();
+	fn build_block_template(&self) -> Option<JobTemplate> {
+		let state = self.current_state.read();
+		let bh = &state.current_block_versions.last()?.header;
 		// Serialize the block header into pre and post nonce strings
 		let mut header_buf = vec![];
 		{
@@ -360,13 +356,12 @@ impl Handler {
 			bh.pow.write_pre_pow(&mut writer).unwrap();
 		}
 		let pre_pow = header_buf.to_hex();
-		let current_state = self.current_state.read();
-		JobTemplate {
+		Some(JobTemplate {
 			height: bh.height,
-			job_id: (current_state.current_block_versions.len() - 1) as u64,
-			difficulty: current_state.minimum_share_difficulty,
+			job_id: (state.current_block_versions.len() - 1) as u64,
+			difficulty: state.minimum_share_difficulty,
 			pre_pow,
-		}
+		})
 	}
 	// Handle SUBMIT message
 	// params contains a solved block header
@@ -521,7 +516,9 @@ impl Handler {
 	fn broadcast_job(&self) {
 		debug!("broadcast job");
 		// Package new block into RpcRequest
-		let job_template = self.build_block_template();
+		let Some(job_template) = self.build_block_template() else {
+			return;
+		};
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
 		// Issue #1159 - use a serde_json Value type to avoid extra quoting
 		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
@@ -547,17 +544,23 @@ impl Handler {
 	) {
 		debug!("Run main loop");
 		let mut deadline: i64 = 0;
-		let mut head = self.chain.head().unwrap();
-		let mut current_hash = head.prev_block_h;
+		let mut current_hash = None;
 		while !stop_state.is_stopped() {
 			// get the latest chain state
-			head = self.chain.head().unwrap();
+			let head = match self.chain.head() {
+				Ok(head) => head,
+				Err(e) => {
+					error!("Failed to read Stratum chain head: {}", e);
+					thread::sleep(SHUTDOWN_POLL_INTERVAL);
+					continue;
+				}
+			};
 			let latest_hash = head.last_block_h;
 
 			// Build a new block if there is at least one worker and
 			// There is a new block on the chain or its time to rebuild
 			// the current one to include new transactions
-			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
+			if (current_hash != Some(latest_hash) || Utc::now().timestamp() >= deadline)
 				&& self.workers.count() > 0
 			{
 				{
@@ -581,9 +584,17 @@ impl Handler {
 						return;
 					};
 					let mut state = self.current_state.write();
-					head = self.chain.head().unwrap();
-					let latest_hash = head.last_block_h;
 					state.update_coinbase_key(requested_key_id, block_fees.key_id);
+					let head = match self.chain.head() {
+						Ok(head) => head,
+						Err(e) => {
+							error!("Failed to read Stratum chain head: {}", e);
+							drop(state);
+							thread::sleep(SHUTDOWN_POLL_INTERVAL);
+							continue;
+						}
+					};
+					let latest_hash = head.last_block_h;
 					if new_block.header.prev_hash != latest_hash {
 						drop(state);
 						thread::sleep(Duration::from_millis(5));
@@ -591,13 +602,13 @@ impl Handler {
 					}
 
 					// If this is a new block we will clear the current_block version history
-					let clear_blocks = current_hash != latest_hash;
+					let clear_blocks = current_hash != Some(latest_hash);
 
 					// scaled difficulty
 					state.current_difficulty =
 						(new_block.header.total_difficulty() - head.total_difficulty).to_num();
 
-					current_hash = latest_hash;
+					current_hash = Some(latest_hash);
 					// set the minimum acceptable share unscaled difficulty for this block
 					state.minimum_share_difficulty = config.minimum_share_difficulty;
 
@@ -1092,7 +1103,7 @@ impl StratumServer {
 		let idle_timeout = Duration::from_secs(self.config.worker_idle_timeout_secs);
 
 		let listener_stop_state = stop_state.clone();
-		let listener_th = thread::spawn(move || {
+		let listener_th = thread::Builder::new().spawn(move || {
 			info!("Start tokio stratum server");
 			runtime.block_on(accept_connections_loop(
 				listener,
@@ -1101,7 +1112,7 @@ impl StratumServer {
 				idle_timeout,
 				listener_stop_state,
 			));
-		});
+		})?;
 
 		// We have started
 		{

@@ -280,8 +280,7 @@ fn burn_reward(block_fees: BlockFees) -> Result<(Output, TxKernel, BlockFees), E
 		&key_id,
 		block_fees.fees,
 		false,
-	)
-	.unwrap();
+	)?;
 	Ok((out, kernel, block_fees))
 }
 
