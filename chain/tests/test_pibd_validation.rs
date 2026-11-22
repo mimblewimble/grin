@@ -26,15 +26,20 @@ use crate::core::{genesis, global, pow};
 
 use croaring::Bitmap;
 
-mod chain_test_helper;
+mod pibd;
 
-fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
-	global::set_local_chain_type(global::ChainTypes::Mainnet);
-	let mut genesis = genesis::genesis_main();
+fn bitmap_pmmr_size(output_mmr_size: u64) -> u64 {
+	pmmr::insertion_to_pmmr_index(pmmr::n_leaves(output_mmr_size).div_ceil(1024))
+}
+
+fn test_pibd_chain_validation_impl(is_fixture: bool, src_root_dir: &str) {
+	global::set_local_chain_type(global::ChainTypes::Testnet);
+	global::set_local_nrd_enabled(true);
+	let mut genesis = genesis::genesis_test();
 	// Height at which to read kernel segments (lower than thresholds defined in spec - for testing)
 	let mut target_segment_height = 11;
 
-	if is_test_chain {
+	if is_fixture {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		genesis = pow::mine_genesis_block().unwrap();
 		target_segment_height = 3;
@@ -82,15 +87,7 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 		let segmenter = src_chain.segmenter().unwrap();
 
 		// BITMAP - Read + Validate, Also recreate bitmap accumulator for target tx hash set
-		// Predict number of leaves (chunks) in the bitmap MMR from the number of outputs
-		let bitmap_mmr_num_leaves =
-			(pmmr::n_leaves(horizon_header.output_mmr_size) as f64 / 1024f64).ceil() as u64;
-		println!("BITMAP PMMR NUM_LEAVES: {}", bitmap_mmr_num_leaves);
-
-		// And total size of the bitmap PMMR
-		let bitmap_pmmr_size = *pmmr::peaks(bitmap_mmr_num_leaves)
-			.last()
-			.unwrap_or(&pmmr::insertion_to_pmmr_index(bitmap_mmr_num_leaves));
+		let bitmap_pmmr_size = bitmap_pmmr_size(horizon_header.output_mmr_size);
 		println!("BITMAP PMMR SIZE: {}", bitmap_pmmr_size);
 		println!(
 			"Bitmap Segments required: {}",
@@ -211,15 +208,17 @@ fn test_pibd_chain_validation_impl(is_test_chain: bool, src_root_dir: &str) {
 }
 
 #[test]
-// TODO: Fix before merge into master
-#[ignore]
+fn bitmap_size() {
+	assert_eq!(bitmap_pmmr_size(1), 1);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(1024)), 1);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(1025)), 3);
+	assert_eq!(bitmap_pmmr_size(pmmr::insertion_to_pmmr_index(2049)), 4);
+}
+
+#[test]
 fn test_pibd_chain_validation_sample() {
 	util::init_test_logger();
-	// Note there is now a 'test' in grin_wallet_controller/build_chain
-	// that can be manually tweaked to create a
-	// small test chain with actual transaction data
-
-	// Test on uncompacted and non-compacted chains
+	// Generate and validate PIBD segments from both fixtures
 	let src_root_dir = "./tests/test_data/chain_raw".to_string();
 	test_pibd_chain_validation_impl(true, &src_root_dir);
 	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
@@ -228,10 +227,9 @@ fn test_pibd_chain_validation_sample() {
 
 #[test]
 #[ignore]
-// As above, but run on a real instance of a chain pointed where you like
+// Run with --ignored and set GRIN_CHAIN_DATA to a synced, offline Testnet chain
 fn test_pibd_chain_validation_real() {
 	util::init_test_logger();
-	// if testing against a real chain, insert location here
-	let src_root_dir = "/Users/yeastplume/Projects/grin_project/server/chain_data".to_string();
-	test_pibd_chain_validation_impl(false, &src_root_dir);
+	let source = pibd::copy_testnet_chain();
+	test_pibd_chain_validation_impl(false, source.path().to_str().unwrap());
 }

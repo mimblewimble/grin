@@ -29,4 +29,6 @@ grin_util = { path = "../util", version = "5.5.2" }
 
 [dev-dependencies]
 env_logger = "0.7"
+fs2 = "0.4"
 rand = "0.6"
+tempfile = "3.1"
