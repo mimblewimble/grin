@@ -204,6 +204,17 @@ impl State {
 			minimum_share_difficulty,
 		}
 	}
+
+	fn update_coinbase_key(
+		&mut self,
+		requested: Option<keychain::Identifier>,
+		returned: Option<keychain::Identifier>,
+	) {
+		// Keep the wallet's key unless a winning submit reset it during the build.
+		if self.current_key_id == requested {
+			self.current_key_id = returned;
+		}
+	}
 }
 
 struct Handler {
@@ -247,10 +258,7 @@ impl Handler {
 		// Call the handler function for requested method
 		let response = match request.method.as_str() {
 			"login" => self.handle_login(request.params, worker_id),
-			"submit" => {
-				let res = self.handle_submit(request.params, worker_id);
-				res.map(|(v, _)| v)
-			}
+			"submit" => self.handle_submit(request.params, worker_id),
 			"keepalive" => self.handle_keepalive(),
 			"getjobtemplate" => {
 				if self.sync_state.is_syncing() {
@@ -364,11 +372,7 @@ impl Handler {
 	// We accept and log valid shares of all difficulty above configured minimum
 	// Accepted shares that are full solutions will also be submitted to the
 	// network
-	fn handle_submit(
-		&self,
-		params: Option<Value>,
-		worker_id: usize,
-	) -> Result<(Value, bool), RpcError> {
+	fn handle_submit(&self, params: Option<Value>, worker_id: usize) -> Result<Value, RpcError> {
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
 
@@ -510,7 +514,7 @@ impl Handler {
 		} else {
 			"ok".to_string()
 		};
-		Ok((serde_json::to_value(submit_response)?, share_is_block))
+		Ok(serde_json::to_value(submit_response)?)
 	} // handle submit a solution
 
 	fn broadcast_job(&self) {
@@ -562,8 +566,7 @@ impl Handler {
 					} else {
 						None
 					};
-					let state = self.current_state.read();
-					let key_id = state.current_key_id.clone();
+					let key_id = self.current_state.read().current_key_id.clone();
 					let requested_key_id = key_id.clone();
 
 					// Build the new block (version)
@@ -576,16 +579,10 @@ impl Handler {
 					) else {
 						return;
 					};
-					drop(state);
-
 					let mut state = self.current_state.write();
 					head = self.chain.head().unwrap();
 					let latest_hash = head.last_block_h;
-					// Preserve the wallet-provided key for a stale build unless a winning
-					// submission reset the key while the block was being built.
-					if state.current_key_id == requested_key_id {
-						state.current_key_id = block_fees.key_id();
-					}
+					state.update_coinbase_key(requested_key_id, block_fees.key_id);
 					if new_block.header.prev_hash != latest_hash {
 						drop(state);
 						thread::sleep(Duration::from_millis(5));
@@ -1519,6 +1516,21 @@ mod tests {
 		let result = server.run_loop(42, Arc::new(SyncState::new()), stop_state);
 		assert!(matches!(result, Err(Error::IOError(e)) if e.kind() == ErrorKind::AddrInUse));
 		assert!(!stats.read().is_running);
+	}
+
+	#[test]
+	fn test_coinbase_key_reset() {
+		global::set_local_chain_type(ChainTypes::AutomatedTesting);
+		let mut state = State::new(1);
+		let requested = Some(keychain::Identifier::zero());
+		let returned = Some(keychain::Identifier::from_bytes(&[1]));
+		state.current_key_id = requested.clone();
+		state.update_coinbase_key(requested.clone(), returned.clone());
+		assert_eq!(state.current_key_id, returned);
+
+		state.current_key_id = None;
+		state.update_coinbase_key(requested, returned);
+		assert!(state.current_key_id.is_none());
 	}
 
 	#[test]
