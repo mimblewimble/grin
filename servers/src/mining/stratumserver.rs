@@ -672,25 +672,38 @@ async fn handle_connection(socket: TcpStream, handler: Arc<Handler>, idle_timeou
 
 	let reader_handler = handler.clone();
 	let read = async move {
-		while let Some(line) = reader
-			.try_next()
-			.await
-			.map_err(|e| error!("Worker {} read error: {}", worker_id, e))?
+		let mut line = reader.try_next().await;
+		while let Some(request_line) =
+			line.map_err(|e| error!("Worker {} read error: {}", worker_id, e))?
 		{
 			let _ = read_activity.try_send(());
-			let request: RpcRequest = serde_json::from_str(&line).map_err(|e| {
+			let request: RpcRequest = serde_json::from_str(&request_line).map_err(|e| {
 				error!("Worker {} invalid JSON: {}", worker_id, e);
 			})?;
+			let mut next_line = None;
 			if request.method == "getjobtemplate" && !reader_handler.sync_state.is_syncing() {
 				let mut job_ready = reader_handler.job_ready.subscribe();
-				// The worker idle timeout still applies
-				let _ = job_ready.wait_for(|ready| *ready).await;
+				tokio::select! {
+					biased;
+					_ = job_ready.wait_for(|ready| *ready) => {}
+					line = reader.try_next() => {
+						let Some(line) = line.map_err(|e| error!("Worker {} read error: {}", worker_id, e))? else {
+							break;
+						};
+						// Reply to the pending request before handling the next one.
+						next_line = Some(line);
+					}
+				}
 			}
 			let resp = reader_handler.handle_rpc_requests(request, worker_id);
 			if !reader_handler.workers.send_to(worker_id, resp).await {
 				warn!("Worker {} outbound queue closed", worker_id);
 				return Err(());
 			}
+			line = match next_line {
+				Some(line) => Ok(Some(line)),
+				None => reader.try_next().await,
+			};
 		}
 		Result::<_, ()>::Ok(())
 	};
@@ -765,7 +778,7 @@ async fn accept_connections_loop(
 						let permit = match worker_limit.clone().try_acquire_owned() {
 							Ok(permit) => permit,
 							Err(_) => {
-								debug!(
+								warn!(
 									"Stratum: rejecting connection from {} (max workers: {})",
 									peer_addr, max_workers
 								);
@@ -1988,6 +2001,27 @@ mod tests {
 		let err = resp.error.unwrap();
 		assert_eq!(err["code"], -32000);
 		assert_eq!(err["message"], "Node is syncing - Please wait");
+	}
+
+	#[tokio::test]
+	async fn test_disconnect_before_job() {
+		let handler = shared_handler();
+		let (client, socket) = tcp_pair().await;
+		let task = tokio::spawn(handle_connection(
+			socket,
+			handler.clone(),
+			Duration::from_secs(5),
+		));
+		let mut client = Framed::new(client, LinesCodec::new());
+		let request = serde_json::to_string(&rpc_request("getjobtemplate", None)).unwrap();
+		client.send(request).await.unwrap();
+		drop(client);
+
+		timeout(Duration::from_secs(1), task)
+			.await
+			.unwrap()
+			.unwrap();
+		assert_eq!(handler.workers.count(), 0);
 	}
 
 	#[tokio::test]
