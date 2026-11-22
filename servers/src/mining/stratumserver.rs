@@ -48,6 +48,7 @@ type Tx = mpsc::Sender<String>;
 
 const WORKER_QUEUE_SIZE: usize = 64;
 const WORKER_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+const WORKER_LIMIT_WARN_INTERVAL: Duration = Duration::from_secs(60);
 const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(100);
 const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_RPC_LINE_BYTES: usize = 64 * 1024;
@@ -762,6 +763,7 @@ async fn accept_connections_loop(
 ) {
 	let mut connections = JoinSet::new();
 	let worker_limit = Arc::new(Semaphore::new(max_workers));
+	let mut next_limit_warning = Instant::now();
 	let mut shutdown_poll = tokio::time::interval(SHUTDOWN_POLL_INTERVAL);
 	loop {
 		tokio::select! {
@@ -776,10 +778,14 @@ async fn accept_connections_loop(
 						let permit = match worker_limit.clone().try_acquire_owned() {
 							Ok(permit) => permit,
 							Err(_) => {
-								warn!(
-									"Stratum: rejecting connection from {} (max workers: {})",
-									peer_addr, max_workers
-								);
+								let now = Instant::now();
+								if now >= next_limit_warning {
+									warn!(
+										"Stratum: rejecting connection from {} (max workers: {})",
+										peer_addr, max_workers
+									);
+									next_limit_warning = now + WORKER_LIMIT_WARN_INTERVAL;
+								}
 								drop(socket);
 								continue;
 							}
