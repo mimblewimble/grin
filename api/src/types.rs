@@ -111,9 +111,7 @@ pub struct WorkerInfo {
 	pub id: String,
 	/// Unix timestamp (seconds) of most recent communication with this worker
 	pub last_seen: u64,
-	/// Block height the worker started mining at
-	pub initial_block_height: u64,
-	/// PoW difficulty this worker is using
+	/// Share difficulty assigned to the worker
 	pub pow_difficulty: u64,
 	/// Number of valid shares submitted
 	pub num_accepted: u64,
@@ -828,36 +826,5 @@ mod test {
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
-	}
-
-	#[test]
-	fn serialize_mining_status_roundtrip() {
-		let status = MiningStatus {
-			is_enabled: true,
-			is_running: true,
-			num_workers: 1,
-			block_height: 1000,
-			network_difficulty: 42,
-			edge_bits: 29,
-			blocks_found: 3,
-			network_hashrate: 1.5,
-			minimum_share_difficulty: 1,
-			worker_stats: vec![WorkerInfo {
-				id: "0".into(),
-				last_seen: 1609459200,
-				initial_block_height: 990,
-				pow_difficulty: 1,
-				num_accepted: 10,
-				num_rejected: 0,
-				num_stale: 0,
-				num_blocks_found: 1,
-			}],
-		};
-		let json = serde_json::to_string(&status).unwrap();
-		let back: MiningStatus = serde_json::from_str(&json).unwrap();
-		assert_eq!(back, status);
-		assert!(json.contains("\"is_enabled\":true"));
-		assert!(json.contains("\"num_workers\":1"));
-		assert!(json.contains("\"num_accepted\":10"));
 	}
 }

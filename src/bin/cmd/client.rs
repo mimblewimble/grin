@@ -139,67 +139,43 @@ impl HTTPNodeClient {
 		e.reset().unwrap();
 	}
 
-	pub fn show_mining_status(&self) {
-		println!();
-		let title = "Grin Mining Status".to_string();
-		if term::stdout().is_none() {
-			println!("Could not open terminal");
-			return;
+	fn show_mining_status(&self) -> Result<(), Error> {
+		let status =
+			self.send_json_request::<MiningStatus>("get_mining_status", &serde_json::Value::Null)?;
+
+		println!("Grin Mining Status");
+		println!("--------------------------");
+		println!("Mining server enabled: {}", status.is_enabled);
+		println!("Mining server running: {}", status.is_running);
+		println!("Active workers:        {}", status.num_workers);
+		println!("Blocks found:          {}", status.blocks_found);
+		if status.num_workers > 0 {
+			println!("Solving block height:  {}", status.block_height);
+			println!("Network difficulty:    {}", status.network_difficulty);
+			println!(
+				"Network hashrate (C{}): {:.2}",
+				status.edge_bits, status.network_hashrate
+			);
 		}
-		let mut t = term::stdout().unwrap();
-		let mut e = term::stdout().unwrap();
-		t.fg(term::color::MAGENTA).unwrap();
-		writeln!(t, "{}", title).unwrap();
-		writeln!(t, "--------------------------").unwrap();
-		t.reset().unwrap();
-		match self.send_json_request::<MiningStatus>("get_mining_status", &serde_json::Value::Null)
-		{
-			Ok(status) => {
-				writeln!(e, "Mining server enabled: {}", status.is_enabled).unwrap();
-				writeln!(e, "Mining server running: {}", status.is_running).unwrap();
-				writeln!(e, "Active workers:        {}", status.num_workers).unwrap();
-				writeln!(e, "Blocks found:          {}", status.blocks_found).unwrap();
-				if status.num_workers > 0 {
-					writeln!(e, "Solving block height:  {}", status.block_height).unwrap();
-					writeln!(e, "Network difficulty:    {}", status.network_difficulty).unwrap();
-					writeln!(
-						e,
-						"Network hashrate (C{}): {:.2}",
-						status.edge_bits, status.network_hashrate
-					)
-					.unwrap();
-				}
-				writeln!(
-					e,
-					"Minimum share difficulty: {}",
-					status.minimum_share_difficulty
-				)
-				.unwrap();
-				if !status.worker_stats.is_empty() {
-					writeln!(e, "Workers:").unwrap();
-					for worker in status.worker_stats {
-						writeln!(
-							e,
-							"  id={} accepted={} rejected={} stale={} blocks={} difficulty={}",
-							worker.id,
-							worker.num_accepted,
-							worker.num_rejected,
-							worker.num_stale,
-							worker.num_blocks_found,
-							worker.pow_difficulty
-						)
-						.unwrap();
-					}
-				}
+		println!(
+			"Minimum share difficulty: {}",
+			status.minimum_share_difficulty
+		);
+		if !status.worker_stats.is_empty() {
+			println!("Workers:");
+			for worker in status.worker_stats {
+				println!(
+					"  id={} accepted={} rejected={} stale={} blocks={} difficulty={}",
+					worker.id,
+					worker.num_accepted,
+					worker.num_rejected,
+					worker.num_stale,
+					worker.num_blocks_found,
+					worker.pow_difficulty
+				);
 			}
-			Err(_) => writeln!(
-				e,
-				"WARNING: Client failed to get mining data. Is your `grin server` offline or broken?"
-			)
-			.unwrap(),
-		};
-		e.reset().unwrap();
-		println!()
+		}
+		Ok(())
 	}
 
 	pub fn reset_chain_head(&self, hash: String) {
@@ -275,7 +251,10 @@ pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig)
 			node_client.show_status();
 		}
 		("miningstatus", Some(_)) => {
-			node_client.show_mining_status();
+			if node_client.show_mining_status().is_err() {
+				eprintln!("Failed to get mining status");
+				return 1;
+			}
 		}
 		("listconnectedpeers", Some(_)) => {
 			node_client.list_connected_peers();

@@ -84,6 +84,7 @@ where
 
 /// Same as [`node_apis`] but additionally wires a provider of live stratum
 /// mining stats into the Owner API `get_mining_status` method.
+#[allow(clippy::too_many_arguments)]
 pub fn node_apis_with_mining_stats<B, P>(
 	addr: &str,
 	chain: Arc<Chain>,

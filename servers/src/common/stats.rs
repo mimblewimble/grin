@@ -304,7 +304,6 @@ impl From<&WorkerStats> for WorkerInfo {
 		WorkerInfo {
 			id: stats.id.clone(),
 			last_seen,
-			initial_block_height: stats.initial_block_height,
 			pow_difficulty: stats.pow_difficulty,
 			num_accepted: stats.num_accepted,
 			num_rejected: stats.num_rejected,
@@ -344,21 +343,22 @@ mod test {
 	use std::time::Duration;
 
 	#[test]
-	fn stratum_stats_to_mining_status() {
-		let mut worker = WorkerStats::default();
-		worker.id = "42".into();
-		worker.is_connected = true;
-		worker.last_seen = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
-		worker.initial_block_height = 100;
-		worker.pow_difficulty = 7;
-		worker.num_accepted = 5;
-		worker.num_rejected = 1;
-		worker.num_stale = 2;
-		worker.num_blocks_found = 1;
-
-		let mut disconnected = WorkerStats::default();
-		disconnected.id = "gone".into();
-		disconnected.is_connected = false;
+	fn connected_workers() {
+		let worker = WorkerStats {
+			id: "42".into(),
+			is_connected: true,
+			last_seen: UNIX_EPOCH + Duration::from_secs(1_600_000_000),
+			pow_difficulty: 7,
+			num_accepted: 5,
+			num_rejected: 1,
+			num_stale: 2,
+			num_blocks_found: 1,
+			..Default::default()
+		};
+		let disconnected = WorkerStats {
+			id: "gone".into(),
+			..Default::default()
+		};
 
 		let stats = StratumStats {
 			is_enabled: true,

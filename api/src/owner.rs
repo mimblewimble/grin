@@ -26,7 +26,7 @@ use crate::types::{MiningStatus, Status};
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 
-/// Callback that returns a snapshot of stratum mining stats for the Owner API.
+/// Provides a snapshot of Stratum statistics
 pub type MiningStatsProvider = Arc<dyn Fn() -> MiningStatus + Send + Sync>;
 
 /// Main interface into all node API functions.
@@ -40,7 +40,9 @@ pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
-	/// Optional provider of live stratum mining stats (set by the server process).
+	/// Live Stratum stats provider
+	///
+	/// Use [`Owner::new`] to construct an owner without a provider
 	pub mining_stats: Option<MiningStatsProvider>,
 }
 
@@ -105,8 +107,6 @@ impl Owner {
 	/// * Result Containing:
 	/// * A [`MiningStatus`](types/struct.MiningStatus.html)
 	/// * or [`Error`](struct.Error.html) if no mining stats provider is configured.
-	///
-
 	pub fn get_mining_status(&self) -> Result<MiningStatus, Error> {
 		match &self.mining_stats {
 			Some(provider) => Ok(provider()),
@@ -259,11 +259,9 @@ mod test {
 	}
 
 	#[test]
-	fn get_mining_status_without_provider_returns_error() {
+	fn missing_provider() {
 		let owner = Owner::new(Weak::new(), Weak::new(), Weak::new());
-		assert!(owner.get_mining_status().is_err());
 
-		// Also cover the generated JSON-RPC wire path for the error case.
 		let owner_api = &owner as &dyn OwnerRpc;
 		let reply = match owner_api.handle_request(mining_status_request()) {
 			MaybeReply::Reply(r) => r,
@@ -279,11 +277,11 @@ mod test {
 	}
 
 	#[test]
-	fn get_mining_status_jsonrpc_wire_response() {
+	fn mining_status() {
 		let expected = MiningStatus {
 			is_enabled: true,
 			is_running: true,
-			num_workers: 2,
+			num_workers: 1,
 			block_height: 50,
 			network_difficulty: 10,
 			edge_bits: 29,
@@ -293,7 +291,6 @@ mod test {
 			worker_stats: vec![WorkerInfo {
 				id: "w0".into(),
 				last_seen: 100,
-				initial_block_height: 40,
 				pow_difficulty: 1,
 				num_accepted: 3,
 				num_rejected: 0,
@@ -316,7 +313,7 @@ mod test {
 		let ok = &reply["result"]["Ok"];
 		assert_eq!(ok["is_enabled"], true);
 		assert_eq!(ok["is_running"], true);
-		assert_eq!(ok["num_workers"], 2);
+		assert_eq!(ok["num_workers"], 1);
 		assert_eq!(ok["block_height"], 50);
 		assert_eq!(ok["network_difficulty"], 10);
 		assert_eq!(ok["edge_bits"], 29);
@@ -326,10 +323,8 @@ mod test {
 		assert_eq!(ok["worker_stats"][0]["id"], "w0");
 		assert_eq!(ok["worker_stats"][0]["last_seen"], 100);
 		assert_eq!(ok["worker_stats"][0]["num_accepted"], 3);
-		// Field dropped from the public WorkerInfo shape.
 		assert!(ok["worker_stats"][0].get("is_connected").is_none());
 
-		// Round-trip the Ok payload into MiningStatus to lock the wire schema.
 		let status: MiningStatus = serde_json::from_value(ok.clone()).unwrap();
 		assert_eq!(status, expected);
 	}

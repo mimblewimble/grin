@@ -111,7 +111,6 @@ pub trait OwnerRpc: Sync + Send {
 					{
 						"id": "0",
 						"last_seen": 1609459200,
-						"initial_block_height": 990,
 						"pow_difficulty": 1,
 						"num_accepted": 10,
 						"num_rejected": 0,
@@ -126,7 +125,11 @@ pub trait OwnerRpc: Sync + Send {
 	# );
 	```
 	 */
-	fn get_mining_status(&self) -> Result<MiningStatus, Error>;
+	fn get_mining_status(&self) -> Result<MiningStatus, Error> {
+		Err(Error::Internal(
+			"no mining stats provider configured".into(),
+		))
+	}
 
 	/**
 	Networked version of [Owner::validate_chain](struct.Owner.html#method.validate_chain).

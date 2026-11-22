@@ -13,24 +13,13 @@ Basic auth passwords can be found in `.api_secret`/`.foreign_api_secret` files r
 
 ### Mining status (Owner API)
 
-Headless operators can query stratum mining statistics (the same data shown on the TUI mining tab) via:
+Send `get_mining_status` to `POST /v2/owner`:
 
 ```json
-{
-  "jsonrpc": "2.0",
-  "method": "get_mining_status",
-  "params": [],
-  "id": 1
-}
+{"jsonrpc":"2.0","method":"get_mining_status","params":[],"id":1}
 ```
 
-Or from the CLI:
-
-```
-grin client miningstatus
-```
-
-The response includes whether stratum is enabled/running, connected worker count, current block height and network difficulty, blocks found, network hashrate estimate, and per-worker share stats for currently connected workers.
+The same status is available with `grin client miningstatus`.
 
 ## Node API v1
 
