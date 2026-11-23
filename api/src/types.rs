@@ -137,7 +137,7 @@ pub struct MiningStatus {
 	pub block_height: u64,
 	/// Current network difficulty
 	pub network_difficulty: u64,
-	/// Edge bits (cuckoo size) for the current network target
+	/// Initial edge bits or the edge bits of the last accepted share
 	pub edge_bits: u16,
 	/// Total blocks found by all workers
 	pub blocks_found: u16,
