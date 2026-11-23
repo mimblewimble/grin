@@ -50,7 +50,7 @@ use crate::util::secp::pedersen::RangeProof;
 use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
-use grin_chain::types::{PIBDSegment, QueuedPIBDSegment};
+use grin_chain::types::{PIBDSegment, PIHDHeaderSegmentContainer, QueuedPIBDSegment};
 use rand::prelude::*;
 use std::ops::Range;
 
@@ -67,6 +67,7 @@ const MAX_HEADER_SEGMENT_REQUESTS_PER_WINDOW: usize = 500;
 #[derive(Clone)]
 struct PihdHeaderSegmentCacheEntry {
 	id: SegmentIdentifier,
+	request: PIHDHeaderSegmentContainer,
 	headers: Vec<BlockHeader>,
 	peer_info: PeerInfo,
 }
@@ -338,12 +339,14 @@ where
 			return Ok(false);
 		}
 
-		// Read our sync_head if we are in header_sync.
-		// If not then we can ignore this batch of headers.
 		let sync_head = match self.sync_state.status() {
-			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
+			SyncStatus::HeaderSync {
+				sync_head,
+				sync_mode: HeaderSyncMode::Legacy,
+				..
+			} => sync_head,
 			_ => {
-				debug!("headers_received: ignoring as not in header_sync");
+				debug!("headers_received: ignoring as not in legacy header_sync");
 				return Ok(true);
 			}
 		};
@@ -667,11 +670,11 @@ where
 		if id.height != p2p::PIHD_HEADER_SEGMENT_HEIGHT {
 			return Ok(self.reject_bad_header_segment(peer_info, "invalid PIHD segment height"));
 		}
-		let target_height = match self
+		let request = match self
 			.sync_state
-			.pihd_header_segment_target_height(id, peer_info.addr.0)
+			.pihd_header_segment_request(id, peer_info.addr.0)
 		{
-			Some(height) => height,
+			Some(request) => request,
 			None => {
 				debug!(
 					"ignoring unsolicited PIHD header segment {:?} from {}",
@@ -681,6 +684,10 @@ where
 				return Ok(HeaderSegmentAcceptance::Accepted);
 			}
 		};
+		if request.responded {
+			return Ok(HeaderSegmentAcceptance::Accepted);
+		}
+		let target_height = request.target_height;
 		let expected_first_height = match p2p::pihd_header_segment_start_height(id) {
 			Some(height) => height,
 			None => {
@@ -692,8 +699,7 @@ where
 				"rejecting empty PIHD header segment {:?} from {}",
 				id, peer_info.addr
 			);
-			self.sync_state
-				.reject_pihd_header_segment_from(id, peer_info.addr.0);
+			self.sync_state.reject_pihd_header_segment_from(&request);
 			return Ok(HeaderSegmentAcceptance::Accepted);
 		}
 		if headers[0].height != expected_first_height {
@@ -727,16 +733,10 @@ where
 				headers.last().map(|header| header.height).unwrap_or(0),
 				expected_last_height
 			);
-			self.sync_state
-				.reject_pihd_header_segment_from(id, peer_info.addr.0);
+			self.sync_state.reject_pihd_header_segment_from(&request);
 			return Ok(HeaderSegmentAcceptance::Accepted);
 		}
-		let sync_head = match self.sync_state.status() {
-			SyncStatus::HeaderSync { sync_head, .. } => sync_head,
-			_ => return Ok(HeaderSegmentAcceptance::Accepted),
-		};
-
-		self.cache_pihd_header_segment(id, headers, peer_info, sync_head);
+		self.cache_pihd_header_segment(request, headers, peer_info);
 
 		match self.process_ready_pihd_header_segments()? {
 			Some(bad_peer) if bad_peer.addr == peer_info.addr => {
@@ -956,9 +956,9 @@ where
 			.chain()
 			.sync_block_headers(headers, sync_head, chain::Options::SYNC)
 		{
-			Ok(sync_head) => {
-				if let Some(sync_head) = sync_head {
-					self.sync_state.update_header_sync(sync_head);
+			Ok(new_head) => {
+				if let Some(new_head) = new_head {
+					self.sync_state.update_header_sync(sync_head, new_head);
 				}
 				Ok(true)
 			}
@@ -975,17 +975,36 @@ where
 
 	fn cache_pihd_header_segment(
 		&self,
-		id: SegmentIdentifier,
+		mut request: PIHDHeaderSegmentContainer,
 		headers: &[BlockHeader],
 		peer_info: &PeerInfo,
-		sync_head: chain::Tip,
 	) {
-		self.prune_pihd_header_cache(sync_head);
+		let received = Utc::now();
+		let response_ms = (received - request.request_time).num_milliseconds();
+		let mut cache = self.pihd_header_cache.write();
+		let sync_head = match self.sync_state.status() {
+			SyncStatus::HeaderSync {
+				sync_head,
+				sync_mode: HeaderSyncMode::Pihd,
+				..
+			} => sync_head,
+			_ => return,
+		};
+		// Check request ownership under the cache lock
+		if !self.sync_state.mark_pihd_header_segment_responded(&request) {
+			return;
+		}
+		// Ignore negative times after clock adjustments
+		if response_ms >= 0 {
+			peer_info.live_info.write().pihd_response = Some((response_ms, received));
+		}
+		request.responded = true;
+		let id = request.identifier;
+		self.prune_pihd_header_cache(sync_head, &mut cache);
 
 		let next_idx = p2p::types::next_pihd_header_segment_idx(sync_head.height);
 		if id.idx < next_idx {
-			self.sync_state
-				.remove_pihd_header_segment(id, peer_info.addr.0);
+			self.sync_state.remove_pihd_header_segment(&request);
 			return;
 		}
 		if id.idx > next_idx.saturating_add(PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS) {
@@ -993,44 +1012,40 @@ where
 				"dropping requested PIHD header segment {:?} from {} beyond current lookahead window",
 				id, peer_info.addr
 			);
-			self.sync_state
-				.remove_pihd_header_segment(id, peer_info.addr.0);
+			self.sync_state.remove_pihd_header_segment(&request);
 			return;
 		}
 
-		let mut cache = self.pihd_header_cache.write();
-		if cache.iter().any(|entry| entry.id == id) {
+		if let Some(pos) = cache.iter().position(|entry| entry.id == id) {
+			let replaced = cache.remove(pos);
 			self.sync_state
-				.mark_pihd_header_segment_responded(id, peer_info.addr.0);
-			return;
+				.remove_pihd_header_segment(&replaced.request);
 		}
 		if cache.len() >= MAX_CACHED_PIHD_HEADER_SEGMENTS {
 			cache.sort_by_key(|entry| entry.id.idx);
 			if let Some(pos) = cache.iter().rposition(|entry| entry.id.idx != next_idx) {
 				let evicted = cache.remove(pos);
-				self.sync_state
-					.remove_pihd_header_segment(evicted.id, evicted.peer_info.addr.0);
+				self.sync_state.remove_pihd_header_segment(&evicted.request);
 			} else {
 				debug!(
 					"dropping requested PIHD header segment {:?} from {} under cache pressure",
 					id, peer_info.addr
 				);
-				self.sync_state
-					.remove_pihd_header_segment(id, peer_info.addr.0);
+				self.sync_state.remove_pihd_header_segment(&request);
 				return;
 			}
 		}
 		cache.push(PihdHeaderSegmentCacheEntry {
 			id,
+			request,
 			headers: headers.to_vec(),
 			peer_info: peer_info.clone(),
 		});
-		self.sync_state
-			.mark_pihd_header_segment_responded(id, peer_info.addr.0);
 	}
 
 	fn process_ready_pihd_header_segments(&self) -> Result<Option<PeerInfo>, chain::Error> {
 		loop {
+			let mut cache = self.pihd_header_cache.write();
 			let sync_head = match self.sync_state.status() {
 				SyncStatus::HeaderSync {
 					sync_head,
@@ -1038,51 +1053,72 @@ where
 					..
 				} => sync_head,
 				_ => {
-					self.clear_pihd_header_cache();
+					self.clear_pihd_header_cache(&mut cache);
 					return Ok(None);
 				}
 			};
-			self.prune_pihd_header_cache(sync_head);
+			self.prune_pihd_header_cache(sync_head, &mut cache);
 
 			let next_id = SegmentIdentifier {
 				height: p2p::PIHD_HEADER_SEGMENT_HEIGHT,
 				idx: p2p::types::next_pihd_header_segment_idx(sync_head.height),
 			};
 			let entry = {
-				let mut cache = self.pihd_header_cache.write();
 				match cache.iter().position(|entry| entry.id == next_id) {
 					Some(pos) => cache.remove(pos),
 					None => return Ok(None),
 				}
 			};
 
-			let accepted = match self.process_header_batch(&entry.headers, sync_head) {
-				Ok(accepted) => accepted,
+			drop(cache);
+
+			if !self
+				.sync_state
+				.pihd_header_segment_request(entry.id, entry.peer_info.addr.0)
+				.map(|r| r.request_id == entry.request.request_id)
+				.unwrap_or(false)
+			{
+				continue;
+			}
+			let result =
+				self.chain()
+					.sync_block_headers(&entry.headers, sync_head, chain::Options::SYNC);
+			match result {
+				Ok(head) => {
+					self.sync_state
+						.complete_pihd_header_segment(&entry.request, head);
+				}
 				Err(e) => {
 					debug!(
 						"PIHD header segment {:?} from {} did not connect cleanly: {:?}",
 						entry.id, entry.peer_info.addr, e
 					);
-					self.sync_state
-						.reject_pihd_header_segment_from(entry.id, entry.peer_info.addr.0);
+					if !self
+						.sync_state
+						.reject_pihd_header_segment_from(&entry.request)
+					{
+						if !e.is_bad_data() {
+							return Err(e);
+						}
+						continue;
+					}
+					if e.is_bad_data() {
+						return Ok(Some(entry.peer_info));
+					}
 					return Err(e);
 				}
-			};
-			if !accepted {
-				self.sync_state
-					.reject_pihd_header_segment_from(entry.id, entry.peer_info.addr.0);
-				return Ok(Some(entry.peer_info));
 			}
-			self.sync_state
-				.remove_pihd_header_segment(entry.id, entry.peer_info.addr.0);
 		}
 	}
 
-	fn prune_pihd_header_cache(&self, sync_head: chain::Tip) {
+	fn prune_pihd_header_cache(
+		&self,
+		sync_head: chain::Tip,
+		cache: &mut Vec<PihdHeaderSegmentCacheEntry>,
+	) {
 		let next_idx = p2p::types::next_pihd_header_segment_idx(sync_head.height);
 		let max_idx = next_idx.saturating_add(PIHD_HEADER_CACHE_LOOKAHEAD_SEGMENTS);
 		let generation = self.sync_state.pihd_header_cache_generation();
-		let mut cache = self.pihd_header_cache.write();
 		let clear_cache = {
 			let mut anchor = self.pihd_header_cache_anchor.write();
 			let clear_cache = match anchor.as_ref() {
@@ -1102,36 +1138,37 @@ where
 		};
 		if clear_cache {
 			for entry in cache.drain(..) {
-				self.sync_state
-					.remove_pihd_header_segment(entry.id, entry.peer_info.addr.0);
+				self.sync_state.remove_pihd_header_segment(&entry.request);
 			}
 		} else {
 			cache.retain(|entry| {
 				let keep = entry.id.idx >= next_idx && entry.id.idx <= max_idx;
 				if !keep {
-					self.sync_state
-						.remove_pihd_header_segment(entry.id, entry.peer_info.addr.0);
+					self.sync_state.remove_pihd_header_segment(&entry.request);
 				}
 				keep
 			});
 		}
 	}
 
-	fn clear_pihd_header_cache(&self) {
-		self.pihd_header_cache.write().clear();
+	fn clear_pihd_header_cache(&self, cache: &mut Vec<PihdHeaderSegmentCacheEntry>) {
+		for entry in cache.drain(..) {
+			self.sync_state.remove_pihd_header_segment(&entry.request);
+		}
 		*self.pihd_header_cache_anchor.write() = None;
 	}
 
 	fn clear_stale_pihd_header_cache(&self) {
+		let mut cache = self.pihd_header_cache.write();
+		let mut anchor = self.pihd_header_cache_anchor.write();
 		let generation = self.sync_state.pihd_header_cache_generation();
-		let reset = self
-			.pihd_header_cache_anchor
-			.read()
+		let reset = anchor
 			.as_ref()
 			.map(|prev| prev.generation != generation)
 			.unwrap_or(false);
 		if reset {
-			self.clear_pihd_header_cache();
+			cache.clear();
+			*anchor = None;
 		}
 	}
 

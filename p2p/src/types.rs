@@ -596,6 +596,8 @@ enum_from_primitive! {
 
 #[derive(Clone, Debug)]
 pub struct PeerLiveInfo {
+	/// Last PIHD response time in milliseconds and when it was received
+	pub pihd_response: Option<(i64, DateTime<Utc>)>,
 	pub total_difficulty: Difficulty,
 	pub height: u64,
 	pub last_seen: DateTime<Utc>,
@@ -617,6 +619,7 @@ pub struct PeerInfo {
 impl PeerLiveInfo {
 	pub fn new(difficulty: Difficulty) -> PeerLiveInfo {
 		PeerLiveInfo {
+			pihd_response: None,
 			total_difficulty: difficulty,
 			height: 0,
 			first_seen: Utc::now(),
