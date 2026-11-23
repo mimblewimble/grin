@@ -102,17 +102,8 @@ impl Server {
 		}
 		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
-		if let Some(c) = mining_config {
-			let enable_stratum_server = c.enable_stratum_server;
-			if let Some(s) = enable_stratum_server {
-				if s {
-					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write();
-						stratum_stats.is_enabled = true;
-					}
-					serv.start_stratum_server(c);
-				}
-			}
+		if let Some(c) = mining_config.filter(|c| c.enable_stratum_server == Some(true)) {
+			serv.start_stratum_server(c);
 		}
 
 		if let Some(s) = enable_test_miner {
@@ -310,6 +301,10 @@ impl Server {
 
 		// Shared with stratum (started later) and Owner API `get_mining_status`.
 		let state_info = ServerStateInfo::default();
+		state_info.stratum_stats.write().is_enabled = config
+			.stratum_mining_config
+			.as_ref()
+			.is_some_and(|c| c.enable_stratum_server == Some(true));
 		let stratum_stats = state_info.stratum_stats.clone();
 		let mining_stats: api::MiningStatsProvider = Arc::new(move || {
 			let stats = stratum_stats.read();
