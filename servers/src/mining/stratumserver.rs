@@ -216,6 +216,10 @@ impl State {
 			self.current_key_id = returned;
 		}
 	}
+
+	fn last_block(&self) -> Option<&Block> {
+		self.current_block_versions.last()
+	}
 }
 
 struct Handler {
@@ -313,9 +317,8 @@ impl Handler {
 			height: self
 				.current_state
 				.read()
-				.current_block_versions
-				.last()
-				.unwrap()
+				.last_block()
+				.ok_or(RpcError::internal_error())?
 				.header
 				.height,
 			difficulty: stats.pow_difficulty,
@@ -347,13 +350,13 @@ impl Handler {
 	// Build and return a JobTemplate for mining the current block
 	fn build_block_template(&self) -> Option<JobTemplate> {
 		let state = self.current_state.read();
-		let bh = &state.current_block_versions.last()?.header;
-		// Serialize the block header into pre and post nonce strings
+		let bh = &state.last_block()?.header;
+		// Serialize the block header into pre- and post-nonce strings
 		let mut header_buf = vec![];
 		{
 			let mut writer = ser::BinWriter::default(&mut header_buf);
-			bh.write_pre_pow(&mut writer).unwrap();
-			bh.pow.write_pre_pow(&mut writer).unwrap();
+			bh.write_pre_pow(&mut writer).ok()?;
+			bh.pow.write_pre_pow(&mut writer).ok()?;
 		}
 		let pre_pow = header_buf.to_hex();
 		Some(JobTemplate {
@@ -375,7 +378,12 @@ impl Handler {
 		let state = self.current_state.read();
 		// Find the correct version of the block to match this header
 		let b: Option<&Block> = state.current_block_versions.get(params.job_id as usize);
-		if params.height != state.current_block_versions.last().unwrap().header.height
+		if params.height
+			!= state
+				.last_block()
+				.ok_or(RpcError::internal_error())?
+				.header
+				.height
 			|| b.is_none()
 		{
 			// Return error status
@@ -1124,7 +1132,12 @@ impl StratumServer {
 
 		warn!(
 			"Stratum server started on {}",
-			self.config.stratum_server_addr.clone().unwrap()
+			self.config
+				.stratum_server_addr
+				.clone()
+				.ok_or(Error::Configuration(
+					"Server address must be configured".to_string()
+				))?
 		);
 
 		// Initial Loop. Waiting node complete syncing
