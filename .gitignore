@@ -5,6 +5,7 @@
 !node_clients.rs
 target
 */Cargo.lock
+!tor/Cargo.lock
 *.iml
 grin.log
 wallet.seed
