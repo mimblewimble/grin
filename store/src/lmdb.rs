@@ -19,6 +19,7 @@ use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::ops::Bound;
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -793,6 +794,20 @@ impl<'a> Batch<'a> {
 		res
 	}
 
+	/// Visit borrowed entries in the current write transaction
+	pub fn for_each<F>(&self, db_key: Option<u8>, mut visit: F) -> Result<(), Error>
+	where
+		F: FnMut(&[u8], &[u8]) -> Result<(), Error>,
+	{
+		let read = self.write.nested_read_txn()?;
+		let db = self.store.get_db(db_key)?;
+		for entry in db.iter(&read)? {
+			let (key, value) = entry?;
+			visit(key, value)?;
+		}
+		Ok(())
+	}
+
 	/// Gets a `Readable` value from the database by provided key and deserialization strategy.
 	pub fn get_ser<T: ser::Readable>(
 		&self,
@@ -849,7 +864,6 @@ where
 	read: Arc<RoTxn<'a, WithoutTls>>,
 	keys: Vec<Vec<u8>>,
 	skip_cur: usize,
-	skip_total: usize,
 	done: bool,
 	deserialize: F,
 	#[allow(dead_code)]
@@ -867,7 +881,6 @@ where
 			if self.done {
 				return None;
 			} else if let Some(k) = self.keys.get(self.skip_cur) {
-				self.skip_total += 1;
 				self.skip_cur += 1;
 				match self.db.get(&self.read, k) {
 					Ok(v) => {
@@ -911,14 +924,13 @@ where
 		deserialize: F,
 	) -> Result<DatabaseIterator<'a, F, T>, Error> {
 		// load keys before constructing tx_counter to avoid double-decrementing open_txs_count on error
-		let keys = Self::read_key_page(&db, &read, 0)?;
+		let keys = Self::read_key_page(&db, &read, None)?;
 		let done = keys.is_empty();
 		Ok(DatabaseIterator {
 			db,
 			read: Arc::new(read),
 			keys,
 			skip_cur: 0,
-			skip_total: 0,
 			done,
 			deserialize,
 			tx_counter,
@@ -926,7 +938,7 @@ where
 	}
 
 	fn load_next_keys(&mut self) -> Result<(), Error> {
-		self.keys = Self::read_key_page(&self.db, &self.read, self.skip_total)?;
+		self.keys = Self::read_key_page(&self.db, &self.read, self.keys.last().map(Vec::as_slice))?;
 		self.skip_cur = 0;
 		self.done = self.keys.is_empty();
 		Ok(())
@@ -935,11 +947,14 @@ where
 	fn read_key_page(
 		db: &Database<Bytes, Bytes>,
 		read: &RoTxn<'a, WithoutTls>,
-		skip: usize,
+		after: Option<&[u8]>,
 	) -> Result<Vec<Vec<u8>>, Error> {
-		let iter = db.iter(read)?;
+		let range = (
+			after.map_or(Bound::Unbounded, Bound::Excluded),
+			Bound::Unbounded,
+		);
+		let iter = db.range(read, &range)?;
 		iter.move_between_keys()
-			.skip(skip)
 			.take(10000)
 			.map(|kv| kv.map(|(k, _)| k.to_vec()).map_err(Error::from))
 			.collect::<Result<Vec<Vec<u8>>, Error>>()

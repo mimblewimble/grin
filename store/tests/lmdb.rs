@@ -170,6 +170,67 @@ fn test_iter_pages() -> Result<(), store::Error> {
 }
 
 #[test]
+fn test_batch_cursor() -> Result<(), store::Error> {
+	let test_dir = "target/test_batch_for_each";
+	setup(test_dir);
+	let prefix = b'P';
+	let other = b'Q';
+	let store = store::Store::new(
+		test_dir,
+		Some("test1"),
+		None,
+		vec![prefix, other],
+		None,
+		None,
+	)?;
+	let mut batch = store.batch()?;
+	batch.for_each(Some(prefix), |_, _| panic!("empty database"))?;
+	for i in 0..10_001u32 {
+		batch.put(Some(prefix), &i.to_be_bytes(), &i.to_le_bytes())?;
+	}
+	batch.put(Some(other), b"unrelated", b"value")?;
+	batch.commit()?;
+
+	let mut batch = store.batch()?;
+	batch.delete(Some(prefix), &17u32.to_be_bytes())?;
+	batch.put(
+		Some(prefix),
+		&10_001u32.to_be_bytes(),
+		&10_001u32.to_le_bytes(),
+	)?;
+	let mut expected = (0..=10_001u32).filter(|i| *i != 17);
+	batch.for_each(Some(prefix), |key, value| {
+		let i = expected.next().unwrap();
+		assert_eq!(key, &i.to_be_bytes());
+		assert_eq!(value, &i.to_le_bytes());
+		Ok(())
+	})?;
+	assert!(expected.next().is_none());
+
+	let mut visited = 0;
+	let err = batch.for_each(Some(prefix), |_, _| {
+		visited += 1;
+		Err(store::Error::NotFoundErr("callback error".into()))
+	});
+	assert!(matches!(err, Err(store::Error::NotFoundErr(ref msg)) if msg == "callback error"));
+	assert_eq!(visited, 1);
+	// Allow writes after a failed visit
+	batch.put(Some(prefix), &17u32.to_be_bytes(), &17u32.to_le_bytes())?;
+	batch.commit()?;
+	let batch = store.batch()?;
+	let mut count = 0;
+	batch.for_each(Some(prefix), |_, _| {
+		count += 1;
+		Ok(())
+	})?;
+	assert_eq!(count, 10_002);
+	drop(batch);
+	drop(store);
+	clean_output_dir(test_dir);
+	Ok(())
+}
+
+#[test]
 fn lmdb_allocate() -> Result<(), store::Error> {
 	let test_dir = "target/lmdb_allocate";
 	setup(test_dir);

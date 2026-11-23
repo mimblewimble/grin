@@ -39,7 +39,7 @@ use crate::util::RwLock;
 use crate::util::StopState;
 use crate::web::*;
 use crate::{p2p, ApiBody};
-use easy_jsonrpc_mw::{Handler, MaybeReply};
+use easy_jsonrpc_mw::{Handler, MaybeReply, Params};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{Request, Response, StatusCode};
@@ -47,7 +47,10 @@ use serde::Serialize;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Semaphore};
+
+// Limit concurrent blocking RPC requests across owner and foreign APIs
+static RPC_REQUESTS: Semaphore = Semaphore::const_new(256);
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
@@ -165,26 +168,9 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 			self.sync_state.clone(),
 		);
 
-		Box::pin(async move {
-			match parse_body(req).await {
-				Ok(val) => {
-					let owner_api = &api as &dyn OwnerRpc;
-					let res = match owner_api.handle_request(val) {
-						MaybeReply::Reply(r) => r,
-						MaybeReply::DontReply => {
-							// Since it's http, we need to return something. We return [] because jsonrpc
-							// clients will parse it as an empty batch response.
-							serde_json::json!([])
-						}
-					};
-					Ok(json_response_pretty(&res))
-				}
-				Err(e) => {
-					error!("Request Error: {:?}", e);
-					Ok(create_error_response(e))
-				}
-			}
-		})
+		Box::pin(rpc_response(req, move |val| {
+			(&api as &dyn OwnerRpc).handle_request(val)
+		}))
 	}
 
 	fn options(&self, _req: Request<Incoming>) -> ResponseFuture {
@@ -234,30 +220,56 @@ where
 			self.sync_state.clone(),
 		);
 
-		Box::pin(async move {
-			match parse_body(req).await {
-				Ok(val) => {
-					let foreign_api = &api as &dyn ForeignRpc;
-					let res = match foreign_api.handle_request(val) {
-						MaybeReply::Reply(r) => r,
-						MaybeReply::DontReply => {
-							// Since it's http, we need to return something. We return [] because jsonrpc
-							// clients will parse it as an empty batch response.
-							serde_json::json!([])
-						}
-					};
-					Ok(json_response_pretty(&res))
-				}
-				Err(e) => {
-					error!("Request Error: {:?}", e);
-					Ok(create_error_response(e))
-				}
-			}
-		})
+		Box::pin(rpc_response(req, move |val| {
+			(&api as &dyn ForeignRpc).handle_request(val)
+		}))
 	}
 
 	fn options(&self, _req: Request<Incoming>) -> ResponseFuture {
 		Box::pin(async { Ok(create_ok_response("{}")) })
+	}
+}
+
+async fn rpc_response(
+	req: Request<Incoming>,
+	handle: impl FnOnce(serde_json::Value) -> MaybeReply + Send + 'static,
+) -> Result<Response<ApiBody>, hyper::Error> {
+	let val = match parse_body::<serde_json::Value>(req).await {
+		Ok(val) => val,
+		Err(e) => {
+			error!("Request Error: {:?}", e);
+			return Ok(create_error_response(e));
+		}
+	};
+	let reply = match RPC_REQUESTS.try_acquire() {
+		Ok(permit) => match tokio::task::spawn_blocking(move || {
+			// Keep the permit until work ends, even after disconnect
+			let _permit = permit;
+			handle(val)
+		})
+		.await
+		{
+			Ok(reply) => reply,
+			Err(e) => return Ok(create_error_response(Error::Internal(e.to_string()))),
+		},
+		Err(_) => BusyHandler.handle_request(val),
+	};
+	// Since it's http, we need to return something. We return [] because jsonrpc
+	// clients will parse it as an empty batch response
+	Ok(json_response_pretty(
+		&reply.as_option().unwrap_or_else(|| serde_json::json!([])),
+	))
+}
+
+struct BusyHandler;
+
+impl Handler for BusyHandler {
+	fn handle(&self, _: &str, _: Params) -> Result<serde_json::Value, easy_jsonrpc_mw::Error> {
+		Err(easy_jsonrpc_mw::Error {
+			code: easy_jsonrpc_mw::ErrorCode::ServerError(-32001),
+			message: "Node is busy, try again later".into(),
+			data: None,
+		})
 	}
 }
 
@@ -317,4 +329,26 @@ fn response<T: Into<ApiBody>>(status: StatusCode, text: T) -> Response<ApiBody> 
 	}
 
 	builder.body(text.into()).unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use serde_json::json;
+
+	#[test]
+	fn busy_batch() {
+		let reply = BusyHandler.handle_request(json!([
+			{"jsonrpc":"2.0", "id":1, "method":"get_tip"},
+			{"jsonrpc":"2.0", "id":"status", "method":"get_status"},
+			{"jsonrpc":"2.0", "method":"get_block"}
+		]));
+		assert_eq!(
+			reply.as_option().unwrap(),
+			json!([
+				{"jsonrpc":"2.0", "id":1, "error":{"code":-32001, "message":"Node is busy, try again later"}},
+				{"jsonrpc":"2.0", "id":"status", "error":{"code":-32001, "message":"Node is busy, try again later"}}
+			])
+		);
+	}
 }

@@ -35,6 +35,7 @@ const BLOCK_HEADER_PREFIX: u8 = b'h';
 const BLOCK_PREFIX: u8 = b'b';
 const HEAD_PREFIX: u8 = b'H';
 const TAIL_PREFIX: u8 = b'T';
+const COMPACTION_HEAD_PREFIX: u8 = b'C';
 const PIBD_HEAD_PREFIX: u8 = b'I';
 const HEADER_HEAD_PREFIX: u8 = b'G';
 /// Prefix for output pos index.
@@ -100,6 +101,11 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(None, &[TAIL_PREFIX], None), || {
 			"TAIL".to_owned()
 		})
+	}
+
+	/// Last successful compaction head
+	pub fn compaction_head(&self) -> Result<Option<Tip>, Error> {
+		self.db.get_ser(None, &[COMPACTION_HEAD_PREFIX], None)
 	}
 
 	/// The current PIBD head (will differ from the other heads. Return genesis block if PIBD head doesn't exist).
@@ -221,6 +227,11 @@ impl<'a> Batch<'a> {
 		})
 	}
 
+	/// Last successful compaction head
+	pub fn compaction_head(&self) -> Result<Option<Tip>, Error> {
+		self.db.get_ser(None, &[COMPACTION_HEAD_PREFIX], None)
+	}
+
 	/// The current header head (may differ from chain head).
 	pub fn header_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(None, &[HEADER_HEAD_PREFIX], None), || {
@@ -241,6 +252,11 @@ impl<'a> Batch<'a> {
 	/// Save body "tail" to db.
 	pub fn save_body_tail(&mut self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(None, &[TAIL_PREFIX], t)
+	}
+
+	/// Save the compaction head
+	pub fn save_compaction_head(&mut self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(None, &[COMPACTION_HEAD_PREFIX], t)
 	}
 
 	/// Save header head to db.
@@ -350,6 +366,19 @@ impl<'a> Batch<'a> {
 			ser::deserialize(&mut v, protocol_version, DeserializationMode::default())
 				.map(|pos| (k.to_vec(), pos))
 				.map_err(From::from)
+		})
+	}
+
+	/// Visit output positions directly from the database cursor
+	pub fn for_each_output_pos<F>(&self, mut visit: F) -> Result<(), Error>
+	where
+		F: FnMut(&[u8], CommitPos) -> Result<(), Error>,
+	{
+		let protocol_version = self.db.protocol_version();
+		self.db.for_each(Some(OUTPUT_POS_PREFIX), |key, mut value| {
+			let pos =
+				ser::deserialize(&mut value, protocol_version, DeserializationMode::default())?;
+			visit(key, pos)
 		})
 	}
 

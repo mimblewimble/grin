@@ -46,6 +46,18 @@ pub struct SyncRunner {
 	stop_state: Arc<StopState>,
 }
 
+fn complete_sync(
+	sync_state: &SyncState,
+	stop_state: &StopState,
+	compact: impl FnOnce() -> Result<(), chain::Error>,
+) -> Result<(), chain::Error> {
+	compact()?;
+	if !stop_state.is_stopped() {
+		sync_state.update_if(SyncStatus::NoSync, |status| status != SyncStatus::Shutdown);
+	}
+	Ok(())
+}
+
 impl SyncRunner {
 	fn new(
 		sync_state: Arc<SyncState>,
@@ -167,13 +179,15 @@ impl SyncRunner {
 			// quick short-circuit (and a decent sleep) if no syncing is needed
 			if !needs_syncing {
 				if currently_syncing {
-					self.sync_state.update(SyncStatus::NoSync);
-
 					// Initial transition out of a "syncing" state and into NoSync.
 					// This triggers a chain compaction to keep out local node tidy.
 					// Note: Chain compaction runs with an internal threshold
 					// so can be safely run even if the node is restarted frequently.
-					unwrap_or_restart_loop!(self.chain.compact());
+					unwrap_or_restart_loop!(complete_sync(
+						&self.sync_state,
+						&self.stop_state,
+						|| self.chain.compact()
+					));
 				}
 
 				// sleep for 10 secs but check stop signal every second
@@ -313,5 +327,75 @@ impl SyncRunner {
 			}
 		}
 		Ok((is_syncing, peer_info.height()))
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::sync::mpsc;
+
+	#[test]
+	fn sync_after_compact() {
+		let state = Arc::new(SyncState::new());
+		state.update(SyncStatus::BodySync {
+			current_height: 10,
+			highest_height: 10,
+		});
+		let worker_state = state.clone();
+		let (entered_tx, entered_rx) = mpsc::sync_channel(0);
+		let (resume_tx, resume_rx) = mpsc::sync_channel(0);
+		let worker = thread::spawn(move || {
+			complete_sync(&worker_state, &StopState::new(), || {
+				entered_tx.send(()).unwrap();
+				resume_rx.recv().unwrap();
+				Ok(())
+			})
+			.unwrap();
+		});
+		entered_rx
+			.recv_timeout(time::Duration::from_secs(5))
+			.unwrap();
+		let during = state.status();
+		resume_tx.send(()).unwrap();
+		worker.join().unwrap();
+		assert!(matches!(during, SyncStatus::BodySync { .. }));
+		assert_eq!(state.status(), SyncStatus::NoSync);
+	}
+
+	#[test]
+	fn sync_compact_error() {
+		let state = SyncState::new();
+		let stop = StopState::new();
+		assert!(complete_sync(&state, &stop, || {
+			Err(chain::Error::Other("compaction failed".into()))
+		})
+		.is_err());
+		assert!(state.is_syncing());
+	}
+
+	#[test]
+	fn sync_compact_stop() {
+		let state = SyncState::new();
+		let stop = StopState::new();
+		complete_sync(&state, &stop, || {
+			stop.stop();
+			Ok(())
+		})
+		.unwrap();
+		assert_eq!(state.status(), SyncStatus::Initial);
+	}
+
+	#[test]
+	fn sync_compact_shutdown() {
+		let state = SyncState::new();
+		let stop = StopState::new();
+		complete_sync(&state, &stop, || {
+			// Server::stop sets Shutdown before the stop flag
+			state.update(SyncStatus::Shutdown);
+			Ok(())
+		})
+		.unwrap();
+		assert_eq!(state.status(), SyncStatus::Shutdown);
 	}
 }

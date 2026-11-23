@@ -14,8 +14,11 @@
 
 use grin_core as core;
 use grin_store as store;
+use store::types::{AppendOnlyFile, DataFile, SizeEntry, SizeInfo};
 
+use std::fmt::Debug;
 use std::fs;
+use std::path::Path;
 
 use chrono::prelude::Utc;
 use croaring::Bitmap;
@@ -977,4 +980,95 @@ impl Readable for TestElem {
 	fn read<R: Reader>(reader: &mut R) -> Result<TestElem, Error> {
 		Ok(TestElem(reader.read_u32()?))
 	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct VariableRecord(Vec<u8>);
+
+impl Writeable for VariableRecord {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_bytes(&self.0)
+	}
+}
+
+impl Readable for VariableRecord {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let len = reader.read_u64()?;
+		Ok(Self(reader.read_fixed_bytes(len as usize)?))
+	}
+}
+
+fn check_pruning<T>(values: Vec<T>, size_info: impl Fn(&Path) -> SizeInfo)
+where
+	T: Readable + Writeable + Clone + Debug + PartialEq,
+{
+	let len = values.len() as u64;
+	let mut cases = vec![
+		vec![],
+		vec![1],
+		vec![len],
+		vec![1, len],
+		(1..=len).collect(),
+		(1..=len).step_by(2).collect(),
+		(len / 3..=2 * len / 3).collect(),
+		vec![len + 1],
+		vec![1, 1],
+		vec![len, len],
+		vec![1, 1, len, len],
+		(1..=len).flat_map(|pos| [pos, pos]).collect(),
+	];
+	for seed in 0..24 {
+		cases.push(
+			(1..=len)
+				.filter(|pos| ((pos * 1103515245 + seed * 12345) >> 8) % 7 < seed % 7)
+				.collect(),
+		);
+	}
+	for removed in cases {
+		let dir = tempfile::tempdir().unwrap();
+		let path = dir.path().join("data.bin");
+		let mut file = DataFile::open(&path, size_info(dir.path()), ProtocolVersion(1)).unwrap();
+		file.extend_from_slice(&values).unwrap();
+		file.flush().unwrap();
+		file.write_tmp_pruned(&removed).unwrap();
+		file.replace_with_tmp().unwrap();
+		let expected: Vec<_> = values
+			.iter()
+			.enumerate()
+			.filter(|(i, _)| !removed.contains(&(*i as u64 + 1)))
+			.map(|(_, value)| value.clone())
+			.collect();
+		assert_eq!(file.size(), expected.len() as u64, "removed: {removed:?}");
+		for (i, value) in expected.iter().enumerate() {
+			assert_eq!(file.read(i as u64 + 1).as_ref(), Some(value));
+		}
+		drop(file);
+		let file = DataFile::<T>::open(&path, size_info(dir.path()), ProtocolVersion(1)).unwrap();
+		assert_eq!(file.size(), expected.len() as u64);
+		for (i, value) in expected.iter().enumerate() {
+			assert_eq!(file.read(i as u64 + 1).as_ref(), Some(value));
+		}
+	}
+}
+
+#[test]
+fn file_prune_fixed() {
+	check_pruning((0u64..257).collect(), |_| SizeInfo::FixedSize(8));
+}
+
+#[test]
+fn file_prune_variable() {
+	let records = (0..257)
+		.map(|n| VariableRecord(vec![(n % 256) as u8; n % 61]))
+		.collect();
+	check_pruning(records, |dir| {
+		SizeInfo::VariableSize(Box::new(
+			AppendOnlyFile::<SizeEntry>::open(
+				dir.join("sizes.bin"),
+				SizeInfo::FixedSize(SizeEntry::LEN),
+				ProtocolVersion(1),
+			)
+			.unwrap(),
+		))
+	});
 }

@@ -418,10 +418,25 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
+		let backend = self
+			.data_dir
+			.file_name()
+			.unwrap_or(self.data_dir.as_os_str())
+			.to_string_lossy();
+		debug!("compact [{backend}]: calculating prune positions...");
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
+		if leaves_removed.is_empty() {
+			// Save metadata and clean up snapshots without rewriting unchanged files
+			debug!("compact [{backend}]: no records to prune; saving metadata...");
+			self.prune_list.flush()?;
+			self.leaf_set.flush()?;
+			self.clean_rewind_files()?;
+			return Ok(false);
+		}
 
 		// Save compact copy of the hash file, skipping removed data.
 		{
+			debug!("compact [{backend}]: rewriting hash file...");
 			let pos_to_rm = map_vec!(pos_to_rm, |pos1| {
 				let shift = self.prune_list.get_shift(pos1 as u64 - 1);
 				pos1 as u64 - shift
@@ -432,6 +447,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// Save compact copy of the data file, skipping removed leaves.
 		{
+			debug!("compact [{backend}]: rewriting data file...");
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
 				.map(|x| x as u64)
@@ -457,6 +473,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		// Update the prune list and write to disk.
+		debug!("compact [{backend}]: rebuilding prune metadata...");
 		{
 			let mut bitmap = self.prune_list.bitmap();
 			bitmap.or_inplace(&leaves_removed);
