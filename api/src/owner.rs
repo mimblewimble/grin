@@ -35,6 +35,7 @@ pub type MiningStatsProvider = Arc<dyn Fn() -> MiningStatus + Send + Sync>;
 ///
 /// Methods in this API are intended to be 'single use'.
 ///
+/// Use [`Owner::new`] in place of a struct literal.
 pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
