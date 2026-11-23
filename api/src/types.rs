@@ -107,7 +107,7 @@ impl Status {
 /// Stratum worker statistics exposed via the Owner mining API.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct WorkerInfo {
-	/// Unique ID for this worker
+	/// Worker slot ID, which can be reused after disconnect
 	pub id: String,
 	/// Unix timestamp (seconds) of most recent communication with this worker
 	pub last_seen: u64,
@@ -129,8 +129,7 @@ pub struct WorkerInfo {
 pub struct MiningStatus {
 	/// Whether the stratum server is enabled in config
 	pub is_enabled: bool,
-	/// Whether the stratum server has been started. Set once at startup and
-	/// not cleared on listener failure or shutdown.
+	/// Whether the stratum server is running
 	pub is_running: bool,
 	/// Number of currently connected workers
 	pub num_workers: usize,

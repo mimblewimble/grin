@@ -325,8 +325,6 @@ impl From<&StratumStats> for MiningStatus {
 			blocks_found: stats.blocks_found,
 			network_hashrate: stats.network_hashrate,
 			minimum_share_difficulty: stats.minimum_share_difficulty,
-			// worker_stats retains every worker that ever connected; only expose
-			// currently connected ones so the response does not grow unbounded.
 			worker_stats: stats
 				.worker_stats
 				.iter()
