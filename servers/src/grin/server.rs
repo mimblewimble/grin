@@ -102,17 +102,8 @@ impl Server {
 		}
 		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
-		if let Some(c) = mining_config {
-			let enable_stratum_server = c.enable_stratum_server;
-			if let Some(s) = enable_stratum_server {
-				if s {
-					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write();
-						stratum_stats.is_enabled = true;
-					}
-					serv.start_stratum_server(c);
-				}
-			}
+		if let Some(c) = mining_config.filter(|c| c.enable_stratum_server == Some(true)) {
+			serv.start_stratum_server(c);
 		}
 
 		if let Some(s) = enable_test_miner {
@@ -308,7 +299,19 @@ impl Server {
 			}
 		};
 
-		api::node_apis(
+		// Shared with stratum (started later) and Owner API `get_mining_status`.
+		let state_info = ServerStateInfo::default();
+		state_info.stratum_stats.write().is_enabled = config
+			.stratum_mining_config
+			.as_ref()
+			.is_some_and(|c| c.enable_stratum_server == Some(true));
+		let stratum_stats = state_info.stratum_stats.clone();
+		let mining_stats: api::MiningStatsProvider = Arc::new(move || {
+			let stats = stratum_stats.read();
+			api::types::MiningStatus::from(&*stats)
+		});
+
+		api::node_apis_with_mining_stats(
 			&config.api_http_addr,
 			shared_chain.clone(),
 			tx_pool.clone(),
@@ -319,6 +322,7 @@ impl Server {
 			tls_conf,
 			api_chan,
 			stop_state.clone(),
+			Some(mining_stats),
 		)?;
 
 		info!("Starting dandelion monitor: {}", config.api_http_addr);
@@ -336,9 +340,7 @@ impl Server {
 			chain: shared_chain,
 			tx_pool,
 			sync_state,
-			state_info: ServerStateInfo {
-				..Default::default()
-			},
+			state_info,
 			stop_state,
 			lock_file,
 			start_time,

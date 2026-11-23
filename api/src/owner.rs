@@ -22,9 +22,12 @@ use crate::handlers::server_api::StatusHandler;
 use crate::p2p::types::PeerInfoDisplay;
 use crate::p2p::{self, PeerData};
 use crate::rest::*;
-use crate::types::Status;
+use crate::types::{MiningStatus, Status};
 use std::net::SocketAddr;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
+
+/// Provides a snapshot of Stratum statistics
+pub type MiningStatsProvider = Arc<dyn Fn() -> MiningStatus + Send + Sync>;
 
 /// Main interface into all node API functions.
 /// Node APIs are split into two separate blocks of functionality
@@ -32,10 +35,13 @@ use std::sync::Weak;
 ///
 /// Methods in this API are intended to be 'single use'.
 ///
+/// Use [`Owner::new`] in place of a struct literal.
 pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
 	pub sync_state: Weak<SyncState>,
+	/// Optional Stratum stats provider
+	pub mining_stats: Option<MiningStatsProvider>,
 }
 
 impl Owner {
@@ -52,10 +58,21 @@ impl Owner {
 	/// * An instance of the Node holding references to the current chain, transaction pool, peers and sync_state.
 	///
 	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
+		Self::with_mining_stats(chain, peers, sync_state, None)
+	}
+
+	/// Create a new Owner API instance with a mining stats provider.
+	pub fn with_mining_stats(
+		chain: Weak<Chain>,
+		peers: Weak<p2p::Peers>,
+		sync_state: Weak<SyncState>,
+		mining_stats: Option<MiningStatsProvider>,
+	) -> Self {
 		Owner {
 			chain,
 			peers,
 			sync_state,
+			mining_stats,
 		}
 	}
 
@@ -73,6 +90,21 @@ impl Owner {
 			sync_state: self.sync_state.clone(),
 		};
 		status_handler.get_status()
+	}
+
+	/// Returns current stratum mining statistics, mirroring the TUI mining tab.
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`MiningStatus`](types/struct.MiningStatus.html)
+	/// * or [`Error`](struct.Error.html) if no mining stats provider is configured.
+	pub fn get_mining_status(&self) -> Result<MiningStatus, Error> {
+		match &self.mining_stats {
+			Some(provider) => Ok(provider()),
+			None => Err(Error::Internal(
+				"no mining stats provider configured".to_string(),
+			)),
+		}
 	}
 
 	/// Trigger a validation of the chain state.
@@ -190,5 +222,78 @@ impl Owner {
 			peers: self.peers.clone(),
 		};
 		peer_handler.unban_peer(addr)
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use crate::owner_rpc::OwnerRpc;
+	use easy_jsonrpc_mw::{Handler, MaybeReply};
+	use serde_json::json;
+
+	fn mining_status_request() -> serde_json::Value {
+		json!({
+			"jsonrpc": "2.0",
+			"method": "get_mining_status",
+			"params": [],
+			"id": 1
+		})
+	}
+
+	#[test]
+	fn missing_provider() {
+		let owner = Owner::new(Weak::new(), Weak::new(), Weak::new());
+
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+		assert_eq!(reply["id"], 1);
+		assert_eq!(reply["jsonrpc"], "2.0");
+		assert!(
+			reply["result"]["Err"].is_object(),
+			"expected Err result, got {}",
+			reply
+		);
+	}
+
+	#[test]
+	fn mining_status() {
+		let expected = json!({
+			"is_enabled": true,
+			"is_running": true,
+			"num_workers": 1,
+			"block_height": 50,
+			"network_difficulty": 10,
+			"edge_bits": 29,
+			"blocks_found": 1,
+			"network_hashrate": 0.5,
+			"minimum_share_difficulty": 1,
+			"worker_stats": [{
+				"id": "w0",
+				"last_seen": 100,
+				"pow_difficulty": 1,
+				"num_accepted": 3,
+				"num_rejected": 0,
+				"num_stale": 0,
+				"num_blocks_found": 0,
+			}],
+		});
+		let status: MiningStatus = serde_json::from_value(expected.clone()).unwrap();
+		let provider: MiningStatsProvider = Arc::new(move || status.clone());
+		let owner = Owner::with_mining_stats(Weak::new(), Weak::new(), Weak::new(), Some(provider));
+
+		let owner_api = &owner as &dyn OwnerRpc;
+		let reply = match owner_api.handle_request(mining_status_request()) {
+			MaybeReply::Reply(r) => r,
+			MaybeReply::DontReply => panic!("expected JSON-RPC reply"),
+		};
+
+		assert_eq!(
+			reply,
+			json!({"jsonrpc": "2.0", "id": 1, "result": {"Ok": expected}})
+		);
 	}
 }

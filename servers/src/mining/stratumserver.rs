@@ -34,7 +34,7 @@ use std::time::{Duration, SystemTime};
 use crate::chain::{self, SyncState};
 use crate::common::stats::{StratumStats, WorkerStats};
 use crate::common::types::{Error, StratumServerConfig};
-use crate::core::consensus::graph_weight;
+use crate::core::consensus::{graph_weight, BLOCK_TIME_SEC, PROOFSIZE};
 use crate::core::core::hash::Hashed;
 use crate::core::core::Block;
 use crate::core::global;
@@ -383,8 +383,7 @@ impl Handler {
 				.last_block()
 				.ok_or(RpcError::internal_error())?
 				.header
-				.height
-			|| b.is_none()
+				.height || b.is_none()
 		{
 			// Return error status
 			error!(
@@ -1010,10 +1009,13 @@ impl WorkersList {
 
 	pub fn update_network_hashrate(&self) {
 		let mut stratum_stats = self.stratum_stats.write();
-		stratum_stats.network_hashrate = 42.0
-			* (stratum_stats.network_difficulty as f64
-				/ graph_weight(stratum_stats.block_height, stratum_stats.edge_bits as u8) as f64)
-			/ 60.0;
+		let weight = graph_weight(stratum_stats.block_height, stratum_stats.edge_bits as u8);
+		stratum_stats.network_hashrate = if weight == 0 {
+			0.0
+		} else {
+			PROOFSIZE as f64 * (stratum_stats.network_difficulty as f64 / weight as f64)
+				/ BLOCK_TIME_SEC as f64
+		};
 	}
 }
 
@@ -1985,6 +1987,24 @@ mod tests {
 		assert_eq!(s.edge_bits, 29);
 		// hashrate is recomputed from difficulty / graph_weight
 		assert!(s.network_hashrate > 0.0);
+	}
+
+	#[test]
+	fn test_zero_graph_weight() {
+		use crate::core::consensus::{WEEK_HEIGHT, YEAR_HEIGHT};
+		use grin_api::types::MiningStatus;
+
+		global::set_local_chain_type(ChainTypes::Mainnet);
+		let stats = Arc::new(RwLock::new(StratumStats::default()));
+		let workers = WorkersList::new(stats.clone());
+		workers.update_block_height(YEAR_HEIGHT + 30 * WEEK_HEIGHT);
+		workers.update_network_difficulty(1000);
+		workers.update_edge_bits(31);
+
+		let status = MiningStatus::from(&*stats.read());
+		let json = serde_json::to_value(status).unwrap();
+		let status: MiningStatus = serde_json::from_value(json).unwrap();
+		assert_eq!(status.network_hashrate, 0.0);
 	}
 
 	// ----------------------------------------

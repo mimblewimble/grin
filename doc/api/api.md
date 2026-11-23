@@ -11,6 +11,16 @@ This API version uses jsonrpc for its requests. It is split up in a foreign API 
 
 Basic auth passwords can be found in `.api_secret`/`.foreign_api_secret` files respectively.
 
+### Mining status (Owner API)
+
+Send `get_mining_status` to `POST /v2/owner`:
+
+```json
+{"jsonrpc":"2.0","method":"get_mining_status","params":[],"id":1}
+```
+
+The same status is available with `grin client miningstatus`.
+
 ## Node API v1
 
 **Note:** version 1 of the API will be deprecated in v4.0.0 and subsequently removed in v5.0.0. Users of this API are encouraged to upgrade to API v2.

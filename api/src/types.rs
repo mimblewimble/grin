@@ -104,6 +104,51 @@ impl Status {
 	}
 }
 
+/// Stratum worker statistics exposed via the Owner mining API.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct WorkerInfo {
+	/// Worker slot ID, which can be reused after disconnect
+	pub id: String,
+	/// Unix timestamp (seconds) of most recent communication with this worker
+	pub last_seen: u64,
+	/// Share difficulty assigned to the worker
+	pub pow_difficulty: u64,
+	/// Number of valid shares submitted
+	pub num_accepted: u64,
+	/// Number of invalid shares submitted
+	pub num_rejected: u64,
+	/// Number of shares submitted too late
+	pub num_stale: u64,
+	/// Number of valid blocks found by this worker
+	pub num_blocks_found: u64,
+}
+
+/// Mining / stratum status available via the Owner API (and `grin client miningstatus`).
+/// Mirrors the stats shown on the TUI mining tab so headless operators can query them.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct MiningStatus {
+	/// Whether the stratum server is enabled in config
+	pub is_enabled: bool,
+	/// Whether the stratum server is running
+	pub is_running: bool,
+	/// Number of currently connected workers
+	pub num_workers: usize,
+	/// Block height currently being mined
+	pub block_height: u64,
+	/// Current network difficulty
+	pub network_difficulty: u64,
+	/// Initial edge bits or the edge bits of the last accepted share
+	pub edge_bits: u16,
+	/// Total blocks found by all workers
+	pub blocks_found: u16,
+	/// Estimated network hashrate for the current edge_bits
+	pub network_hashrate: f64,
+	/// Minimum share difficulty requested from miners
+	pub minimum_share_difficulty: u64,
+	/// Per-worker status for currently connected workers
+	pub worker_stats: Vec<WorkerInfo>,
+}
+
 /// TxHashSet
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxHashSet {
