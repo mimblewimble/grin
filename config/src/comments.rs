@@ -399,6 +399,24 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"max_workers".to_string(),
+		"
+#maximum number of concurrent stratum workers
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"worker_idle_timeout_secs".to_string(),
+		"
+#idle timeout in seconds, must be greater than zero
+#after the first request, outbound jobs reset it and sync suspends it
+#should exceed attempt_time_per_block
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"attempt_time_per_block".to_string(),
 		"
 #the amount of time, in seconds, to attempt to mine on a particular
