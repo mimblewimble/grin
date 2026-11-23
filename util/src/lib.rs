@@ -51,6 +51,7 @@ pub mod macros;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
 mod hex;
 pub use crate::hex::*;
 
@@ -72,6 +73,15 @@ pub struct OneTime<T> {
 	inner: Arc<RwLock<Option<T>>>,
 }
 
+impl<T> Default for OneTime<T>
+where
+	T: Clone,
+{
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<T> OneTime<T>
 where
 	T: Clone,
@@ -81,6 +91,17 @@ where
 		OneTime {
 			inner: Arc::new(RwLock::new(None)),
 		}
+	}
+
+	/// Initializes the OneTime, should only be called once after construction.
+	/// Returns `false` if already was initialized.
+	pub fn init_if_unset(&self, value: T) -> bool {
+		let mut inner = self.inner.write();
+		if inner.is_none() {
+			*inner = Some(value);
+			return true;
+		}
+		false
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.
@@ -128,6 +149,12 @@ pub struct StopState {
 	paused: AtomicBool,
 }
 
+impl Default for StopState {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl StopState {
 	/// Create a new stop_state in default "running" state.
 	pub fn new() -> StopState {
@@ -161,4 +188,50 @@ impl StopState {
 	pub fn resume(&self) {
 		self.paused.store(false, Ordering::Relaxed)
 	}
+
+	/// Reset state after all previous tasks and threads have exited.
+	pub fn reset(&self) {
+		self.stopped.store(false, Ordering::Relaxed);
+		self.paused.store(false, Ordering::Relaxed);
+	}
+}
+
+#[test]
+fn stop_state_reset() {
+	let state = StopState::new();
+	state.stop();
+	state.pause();
+	assert!(state.is_stopped());
+	assert!(state.is_paused());
+
+	state.reset();
+	assert!(!state.is_stopped());
+	assert!(!state.is_paused());
+}
+
+#[test]
+fn one_time() {
+	use std::thread;
+
+	let one_time: OneTime<u8> = OneTime::new();
+	one_time.init(1);
+	assert!(!one_time.init_if_unset(2));
+
+	let one_time_parallel: OneTime<u8> = OneTime::new();
+	let one_time_parallel_clone1 = one_time_parallel.clone();
+	let mut handles = vec![];
+	handles.push(thread::spawn(move || {
+		(1, one_time_parallel_clone1.init_if_unset(1))
+	}));
+	let one_time_parallel_clone2 = one_time_parallel.clone();
+	handles.push(thread::spawn(move || {
+		(2, one_time_parallel_clone2.init_if_unset(2))
+	}));
+	let results: Vec<_> = handles
+		.into_iter()
+		.map(|handle| handle.join().unwrap())
+		.collect();
+	assert_ne!(results[0].1, results[1].1);
+	let winner = results.iter().find(|result| result.1).unwrap().0;
+	assert_eq!(one_time_parallel.borrow(), winner);
 }

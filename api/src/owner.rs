@@ -35,7 +35,6 @@ pub type MiningStatsProvider = Arc<dyn Fn() -> MiningStatus + Send + Sync>;
 ///
 /// Methods in this API are intended to be 'single use'.
 ///
-
 pub struct Owner {
 	pub chain: Weak<Chain>,
 	pub peers: Weak<p2p::Peers>,
@@ -57,7 +56,6 @@ impl Owner {
 	/// # Returns
 	/// * An instance of the Node holding references to the current chain, transaction pool, peers and sync_state.
 	///
-
 	pub fn new(chain: Weak<Chain>, peers: Weak<p2p::Peers>, sync_state: Weak<SyncState>) -> Self {
 		Self::with_mining_stats(chain, peers, sync_state, None)
 	}
@@ -84,7 +82,6 @@ impl Owner {
 	/// * A [`Status`](types/struct.Status.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn get_status(&self) -> Result<Status, Error> {
 		let status_handler = StatusHandler {
 			chain: self.chain.clone(),
@@ -119,7 +116,6 @@ impl Owner {
 	/// * `Ok(())` if the validation was done successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn validate_chain(&self, assume_valid_rangeproofs_kernels: bool) -> Result<(), Error> {
 		let chain_validation_handler = ChainValidationHandler {
 			chain: self.chain.clone(),
@@ -134,7 +130,6 @@ impl Owner {
 	/// * `Ok(())` if the compaction was done successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn compact_chain(&self) -> Result<(), Error> {
 		let chain_compact_handler = ChainCompactHandler {
 			chain: self.chain.clone(),
@@ -173,7 +168,6 @@ impl Owner {
 	/// * A vector of [`PeerData`](types/struct.PeerData.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn get_peers(&self, addr: Option<SocketAddr>) -> Result<Vec<PeerData>, Error> {
 		let peer_handler = PeerHandler {
 			peers: self.peers.clone(),
@@ -188,7 +182,6 @@ impl Owner {
 	/// * A vector of [`PeerInfoDisplay`](types/struct.PeerInfoDisplay.html)
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn get_connected_peers(&self) -> Result<Vec<PeerInfoDisplay>, Error> {
 		let peers_connected_handler = PeersConnectedHandler {
 			peers: self.peers.clone(),
@@ -206,7 +199,6 @@ impl Owner {
 	/// * `Ok(())` if the path was correctly set
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn ban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		let peer_handler = PeerHandler {
 			peers: self.peers.clone(),
@@ -224,7 +216,6 @@ impl Owner {
 	/// * `Ok(())` if the unban was done successfully
 	/// * or [`Error`](struct.Error.html) if an error is encountered.
 	///
-
 	pub fn unban_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		let peer_handler = PeerHandler {
 			peers: self.peers.clone(),

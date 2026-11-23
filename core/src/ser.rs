@@ -142,10 +142,7 @@ pub enum SerializationMode {
 impl SerializationMode {
 	/// Hash mode?
 	pub fn is_hash_mode(&self) -> bool {
-		match self {
-			SerializationMode::Hash => true,
-			_ => false,
-		}
+		matches!(self, SerializationMode::Hash)
 	}
 }
 
@@ -160,42 +157,42 @@ pub trait Writer {
 
 	/// Writes a u8 as bytes
 	fn write_u8(&mut self, n: u8) -> Result<(), Error> {
-		self.write_fixed_bytes(&[n])
+		self.write_fixed_bytes([n])
 	}
 
 	/// Writes a u16 as bytes
 	fn write_u16(&mut self, n: u16) -> Result<(), Error> {
 		let mut bytes = [0; 2];
 		BigEndian::write_u16(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_u32(&mut self, n: u32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_u32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u32 as bytes
 	fn write_i32(&mut self, n: i32) -> Result<(), Error> {
 		let mut bytes = [0; 4];
 		BigEndian::write_i32(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a u64 as bytes
 	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_u64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a i64 as bytes
 	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
 		BigEndian::write_i64(&mut bytes, n);
-		self.write_fixed_bytes(&bytes)
+		self.write_fixed_bytes(bytes)
 	}
 
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
@@ -214,25 +211,25 @@ pub trait Writer {
 	}
 }
 
+const MAX_READ_SIZE: usize = 100_000;
+
 /// Signal to a deserializable object how much of its data should be deserialized
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Default, PartialEq, Eq)]
 pub enum DeserializationMode {
 	/// Deserialize everything sufficiently to fully reconstruct the object
+	#[default]
 	Full,
 	/// For Block Headers, skip reading proof
 	SkipPow,
 }
 
-impl DeserializationMode {
-	/// Default deserialization mode
-	pub fn default() -> Self {
-		DeserializationMode::Full
-	}
-}
-
 /// Implementations defined how different numbers and binary structures are
 /// read from an underlying stream or container (depending on implementation).
 pub trait Reader {
+	/// Max size of data in single read.
+	fn read_limit(&self) -> Option<usize> {
+		Some(MAX_READ_SIZE)
+	}
 	/// The mode this reader is reading from
 	fn deserialization_mode(&self) -> DeserializationMode;
 	/// Read a u8 from the underlying Read
@@ -346,7 +343,7 @@ pub struct ProtocolVersion(pub u32);
 
 impl ProtocolVersion {
 	/// The max protocol version supported.
-	pub const MAX: u32 = std::u32::MAX;
+	pub const MAX: u32 = u32::MAX;
 
 	/// Protocol version as u32 to allow for convenient exhaustive matching on values.
 	pub fn value(self) -> u32 {
@@ -501,9 +498,11 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
-			return Err(Error::TooLargeReadErr);
+		// not reading more than limit in a single read
+		if let Some(limit) = self.read_limit() {
+			if len > limit {
+				return Err(Error::TooLargeReadErr);
+			}
 		}
 		let mut buf = vec![0; len];
 		self.source
@@ -616,6 +615,10 @@ impl<'a> Reader for StreamingReader<'a> {
 	fn protocol_version(&self) -> ProtocolVersion {
 		self.version
 	}
+
+	fn read_limit(&self) -> Option<usize> {
+		None
+	}
 }
 
 /// Protocol version-aware wrapper around a `Buf` impl
@@ -699,9 +702,11 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 	}
 
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
-			return Err(Error::TooLargeReadErr);
+		// not reading more than limit in a single read
+		if let Some(limit) = self.read_limit() {
+			if len > limit {
+				return Err(Error::TooLargeReadErr);
+			}
 		}
 		self.has_remaining(len)?;
 
@@ -943,7 +948,7 @@ where
 	}
 }
 
-impl<'a, A: Writeable> Writeable for &'a A {
+impl<A: Writeable> Writeable for &A {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(*self, writer)
 	}

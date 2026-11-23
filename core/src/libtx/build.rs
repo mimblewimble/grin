@@ -176,6 +176,8 @@ where
 /// Example:
 /// let (tx, sum) = build::transaction(tx, vec![input_rand(4), output_rand(1))], keychain)?;
 ///
+// Keep calling Append callbacks after errors
+#[allow(clippy::manual_try_fold)]
 pub fn partial_transaction<K, B>(
 	tx: Transaction,
 	elems: &[Box<Append<K, B>>],
@@ -213,11 +215,11 @@ where
 	let msg = kernel.msg_to_sign()?;
 
 	// Generate kernel public excess and associated signature.
-	let excess = BlindingFactor::rand(&keychain.secp());
-	let skey = excess.secret_key(&keychain.secp())?;
+	let excess = BlindingFactor::rand(keychain.secp());
+	let skey = excess.secret_key(keychain.secp())?;
 	kernel.excess = keychain.secp().commit(0, skey)?;
-	let pubkey = &kernel.excess.to_pubkey(&keychain.secp())?;
-	kernel.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey))?;
+	let pubkey = &kernel.excess.to_pubkey(keychain.secp())?;
+	kernel.excess_sig = aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey))?;
 	kernel.verify()?;
 	transaction_with_kernel(elems, kernel, excess, keychain, builder)
 }
@@ -225,6 +227,8 @@ where
 /// Build a complete transaction with the provided kernel and corresponding private excess.
 /// NOTE: Only used in tests (for convenience).
 /// Cannot recommend passing private excess around like this in the real world.
+// Keep calling Append callbacks after errors
+#[allow(clippy::manual_try_fold)]
 pub fn transaction_with_kernel<K, B>(
 	elems: &[Box<Append<K, B>>],
 	kernel: TxKernel,
@@ -246,7 +250,7 @@ where
 
 	// Update tx with new kernel and offset.
 	let mut tx = tx.replace_kernel(kernel);
-	tx.offset = blind_sum.split(&excess, &keychain.secp())?;
+	tx.offset = blind_sum.split(&excess, keychain.secp())?;
 	Ok(tx)
 }
 

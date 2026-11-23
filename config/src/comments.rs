@@ -399,6 +399,24 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"max_workers".to_string(),
+		"
+#maximum number of concurrent stratum workers
+"
+		.to_string(),
+	);
+
+	retval.insert(
+		"worker_idle_timeout_secs".to_string(),
+		"
+#idle timeout in seconds, must be greater than zero
+#after the first request, outbound jobs reset it and sync suspends it
+#should exceed attempt_time_per_block
+"
+		.to_string(),
+	);
+
+	retval.insert(
 		"attempt_time_per_block".to_string(),
 		"
 #the amount of time, in seconds, to attempt to mine on a particular
@@ -511,11 +529,11 @@ fn comments() -> HashMap<String, String> {
 
 fn get_key(line: &str) -> String {
 	if line.contains('[') && line.contains(']') {
-		return line.to_owned();
+		line.to_owned()
 	} else if line.contains('=') {
-		return line.split('=').collect::<Vec<&str>>()[0].trim().to_owned();
+		line.split('=').collect::<Vec<&str>>()[0].trim().to_owned()
 	} else {
-		return "NOT_FOUND".to_owned();
+		"NOT_FOUND".to_owned()
 	}
 }
 

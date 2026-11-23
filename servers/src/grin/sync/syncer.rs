@@ -92,15 +92,14 @@ impl SyncRunner {
 			// * we have more than MIN_PEERS more_or_same_work peers
 			// * we are synced already, e.g. grin was quickly restarted
 			// * timeout
-			if wp > MIN_PEERS
+			if (wp > MIN_PEERS
 				|| (wp == 0
 					&& self.peers.enough_outbound_peers()
 					&& head.total_difficulty > Difficulty::zero())
-				|| n > wait_secs
+				|| n > wait_secs)
+				&& (wp > 0 || !global::is_production_mode())
 			{
-				if wp > 0 || !global::is_production_mode() {
-					break;
-				}
+				break;
 			}
 			thread::sleep(time::Duration::from_secs(1));
 			n += 1;

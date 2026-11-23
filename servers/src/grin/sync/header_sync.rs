@@ -79,15 +79,15 @@ impl HeaderSync {
 
 	pub fn check_run(&mut self, sync_head: chain::Tip) -> Result<bool, chain::Error> {
 		// We only want to run header_sync for some sync states.
-		let do_run = match self.sync_state.status() {
+		let do_run = matches!(
+			self.sync_state.status(),
 			SyncStatus::BodySync { .. }
-			| SyncStatus::HeaderSync { .. }
-			| SyncStatus::TxHashsetDone
-			| SyncStatus::NoSync
-			| SyncStatus::Initial
-			| SyncStatus::AwaitingPeers(_) => true,
-			_ => false,
-		};
+				| SyncStatus::HeaderSync { .. }
+				| SyncStatus::TxHashsetDone
+				| SyncStatus::NoSync
+				| SyncStatus::Initial
+				| SyncStatus::AwaitingPeers(_)
+		);
 
 		if !do_run {
 			return Ok(false);
@@ -346,10 +346,10 @@ impl HeaderSync {
 		let stalling = header_head.height <= latest_height && now > timeout;
 
 		// always enable header sync on initial state transition from NoSync / Initial
-		let force_sync = match self.sync_state.status() {
-			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
-			_ => false,
-		};
+		let force_sync = matches!(
+			self.sync_state.status(),
+			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_)
+		);
 
 		if force_sync || all_headers_received || stalling {
 			self.prev_header_sync = (
@@ -373,24 +373,23 @@ impl HeaderSync {
 			} else if let Some(ref stalling_ts) = self.stalling_ts {
 				if let Some(ref peer) = self.syncing_peer {
 					match self.sync_state.status() {
-						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. } => {
-							// Ban this fraud peer which claims a higher work but can't send us the real headers
+						// Ban this fraud peer which claims a higher work but can't send us the real headers
+						SyncStatus::HeaderSync { .. } | SyncStatus::BodySync { .. }
 							if now > *stalling_ts + Duration::seconds(120)
-								&& header_head.total_difficulty < peer.info.total_difficulty()
+								&& header_head.total_difficulty < peer.info.total_difficulty() =>
+						{
+							if let Err(e) = self
+								.peers
+								.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
 							{
-								if let Err(e) = self
-									.peers
-									.ban_peer(peer.info.addr, ReasonForBan::FraudHeight)
-								{
-									error!("failed to ban peer {}: {:?}", peer.info.addr, e);
-								}
-								info!(
-										"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
-										peer.info.addr,
-										peer.info.height(),
-										peer.info.total_difficulty(),
-									);
+								error!("failed to ban peer {}: {:?}", peer.info.addr, e);
 							}
+							info!(
+								"sync: ban a fraud peer: {}, claimed height: {}, total difficulty: {}",
+								peer.info.addr,
+								peer.info.height(),
+								peer.info.total_difficulty(),
+							);
 						}
 						_ => (),
 					}
@@ -655,7 +654,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 			break;
 		}
 		let next = 2u64.pow(heights.len() as u32);
-		current = if current > next { current - next } else { 0 }
+		current = current.saturating_sub(next)
 	}
 	heights.push(0);
 	heights

@@ -107,6 +107,24 @@ fn test_start_api() {
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
+#[test]
+fn test_start_api_address_in_use() {
+	let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+	let addr = listener.local_addr().unwrap();
+	let mut server = ApiServer::new();
+
+	assert!(server
+		.start(addr, build_router(), None, mpsc::channel::<()>(1))
+		.is_err());
+
+	drop(listener);
+	let handle = server
+		.start(addr, build_router(), None, mpsc::channel::<()>(1))
+		.unwrap();
+	assert!(server.stop());
+	handle.join().unwrap();
+}
+
 // To enable this test you need a trusted PKCS12 (p12) certificate bundle
 // Hyper-tls client doesn't accept self-signed certificates. The easiest way is to use mkcert
 // https://github.com/FiloSottile/mkcert to install CA and generate a certificate on your local machine.
