@@ -17,7 +17,7 @@
 use self::chain::types::{NoopAdapter, Options};
 use self::chain::Chain;
 use self::core::consensus;
-use self::core::core::hash::Hash;
+use self::core::core::hash::{Hash, Hashed};
 use self::core::core::{
 	Block, BlockHeader, BlockSums, Inputs, KernelFeatures, OutputIdentifier, Transaction, TxKernel,
 };
@@ -167,6 +167,57 @@ where
 		},
 		chain.clone(),
 		Arc::new(NoopPoolAdapter {}),
+	)
+}
+
+/// Pool adapter that records `tx_accepted` calls (used to assert rebroadcasts).
+pub struct RecordingPoolAdapter {
+	pub accepted: Arc<std::sync::Mutex<Vec<Hash>>>,
+}
+
+impl RecordingPoolAdapter {
+	pub fn new() -> Self {
+		RecordingPoolAdapter {
+			accepted: Arc::new(std::sync::Mutex::new(Vec::new())),
+		}
+	}
+
+	pub fn accepted_count(&self) -> usize {
+		self.accepted.lock().unwrap().len()
+	}
+
+	pub fn clear(&self) {
+		self.accepted.lock().unwrap().clear();
+	}
+}
+
+impl PoolAdapter for RecordingPoolAdapter {
+	fn tx_accepted(&self, entry: &PoolEntry) {
+		self.accepted.lock().unwrap().push(entry.tx.hash());
+	}
+	fn stem_tx_accepted(&self, _entry: &PoolEntry) -> Result<(), PoolError> {
+		Ok(())
+	}
+}
+
+pub fn init_transaction_pool_with_adapter<B, P>(
+	chain: Arc<B>,
+	adapter: Arc<P>,
+) -> TransactionPool<B, P>
+where
+	B: BlockChain,
+	P: PoolAdapter,
+{
+	TransactionPool::new(
+		PoolConfig {
+			accept_fee_base: default_accept_fee_base(),
+			reorg_cache_period: 30,
+			max_pool_size: 50,
+			max_stempool_size: 50,
+			mineable_max_weight: 10_000,
+		},
+		chain,
+		adapter,
 	)
 }
 
