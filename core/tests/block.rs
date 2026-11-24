@@ -26,7 +26,7 @@ use crate::core::core::{Committed, CompactBlock};
 use crate::core::libtx::build::{self, input, output};
 use crate::core::libtx::ProofBuilder;
 use crate::core::{global, pow, ser};
-use chrono::Duration;
+use chrono::{Duration, Utc};
 use grin_core as core;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::{secp, ToHex};
@@ -464,6 +464,30 @@ fn deserialize_untrusted_header_weight() {
 	ser::serialize_default(&mut vec, &b.header).expect("serialization failed");
 	let res: Result<UntrustedBlockHeader, _> = ser::deserialize_default(&mut &vec[..]);
 	assert!(res.is_ok());
+}
+
+/// Future timestamps must not be reported as CorruptedData (#3360).
+#[test]
+fn deserialize_untrusted_header_future_time() {
+	test_setup();
+	let keychain = ExtKeychain::from_random_seed(false).unwrap();
+	let builder = ProofBuilder::new(&keychain);
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let mut b = new_block(&[], &keychain, &builder, &prev, &key_id);
+
+	// Far beyond future_time_limit (default 300s for AutomatedTesting? check global)
+	b.header.timestamp = Utc::now() + Duration::seconds(3600);
+	set_pow(&mut b.header);
+
+	let mut vec = Vec::new();
+	ser::serialize_default(&mut vec, &b.header).expect("serialization failed");
+	let res: Result<UntrustedBlockHeader, _> = ser::deserialize_default(&mut &vec[..]);
+	assert_eq!(
+		res.err(),
+		Some(ser::Error::FutureTimeLimit),
+		"future time must use FutureTimeLimit, not CorruptedData"
+	);
 }
 
 #[test]
