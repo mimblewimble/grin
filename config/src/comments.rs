@@ -324,6 +324,24 @@ fn comments() -> HashMap<String, String> {
 # A preferred dandelion_peer, mainly used for testing dandelion
 # dandelion_peer = \"10.0.0.1:13144\"
 
+# Encrypt P2P connections with TLS (privacy against passive observers).
+# Both peers must enable TLS to connect. Certificates are self-signed by default
+# (authentication is not the goal — encryption for privacy is). Default: false.
+# When enabled, this node advertises the TLS capability so others can discover it.
+#tls_enabled = false
+
+# Only connect outbound to peers known to advertise the TLS capability
+# (and request TLS-capable peers in peer-list queries). Requires tls_enabled.
+# Seeds, preferred, and allow-listed addresses are still tried for bootstrap.
+# Default: false.
+#tls_required = false
+
+# Optional PEM certificate / private key for P2P TLS.
+# If omitted while tls_enabled = true, a self-signed cert is auto-generated
+# under the node data directory (p2p_tls/).
+#tls_certificate_file = \"/path/to/p2p.crt\"
+#tls_certificate_key = \"/path/to/p2p.key\"
+
 #########################################
 ### MEMPOOL CONFIGURATION             ###
 #########################################
