@@ -32,6 +32,9 @@ pub mod pmmr;
 pub mod prune_list;
 pub mod types;
 
+pub use heed::Comparator;
+pub use heed::DefaultComparator;
+
 const SEP: u8 = b':';
 
 use byteorder::{BigEndian, WriteBytesExt};
