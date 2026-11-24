@@ -165,7 +165,9 @@ where
 		peer_info: &PeerInfo,
 		opts: Options,
 	) -> Result<bool, chain::Error> {
+		// Peer is advertising this work even if we already know the block.
 		if self.chain().is_known(&b.header).is_err() {
+			Self::update_peer_from_header(peer_info, &b.header);
 			return Ok(true);
 		}
 
@@ -187,7 +189,9 @@ where
 		peer_info: &PeerInfo,
 	) -> Result<bool, chain::Error> {
 		// No need to process this compact block if we have previously accepted the _full block_.
+		// Still refresh peer difficulty/height from the header they sent.
 		if self.chain().is_known(&cb.header).is_err() {
+			Self::update_peer_from_header(peer_info, &cb.header);
 			return Ok(true);
 		}
 
@@ -229,8 +233,13 @@ where
 			// check at least the header is valid before hydrating
 			if let Err(e) = self.chain().process_block_header(&cb.header, Options::NONE) {
 				debug!("Invalid compact block header {}: {:?}", cb_hash, e);
+				// Already-known / non-ban errors: still refresh peer work if we have the header.
+				if !e.is_bad_data() && self.chain().get_block_header(&cb.header.hash()).is_ok() {
+					Self::update_peer_from_header(peer_info, &cb.header);
+				}
 				return Ok(!e.is_bad_data());
 			}
+			Self::update_peer_from_header(peer_info, &cb.header);
 
 			let (txs, missing_short_ids) = {
 				self.tx_pool
@@ -291,7 +300,9 @@ where
 
 	fn header_received(&self, bh: BlockHeader, peer_info: &PeerInfo) -> Result<bool, chain::Error> {
 		// No need to process this header if we have previously accepted the _full block_.
+		// Still update peer live info — sending the header advertises that work.
 		if self.chain().block_exists(bh.hash())? {
+			Self::update_peer_from_header(peer_info, &bh);
 			return Ok(true);
 		}
 		if !self.sync_state.is_syncing() {
@@ -309,6 +320,11 @@ where
 			if e.is_bad_data() {
 				return Ok(false);
 			} else {
+				// Header may still be known on the header chain (e.g. already seen during sync).
+				// Refresh peer work when the header is not bad data.
+				if self.chain().get_block_header(&bh.hash()).is_ok() {
+					Self::update_peer_from_header(peer_info, &bh);
+				}
 				// we got an error when trying to process the block header
 				// but nothing serious enough to need to ban the peer upstream
 				return Err(e);
@@ -316,6 +332,7 @@ where
 		}
 
 		// we have successfully processed a block header
+		Self::update_peer_from_header(peer_info, &bh);
 		// so we can go request the block itself
 		self.request_compact_block(&bh, peer_info);
 
@@ -348,7 +365,13 @@ where
 			}
 		};
 
-		self.process_header_batch(bhs, sync_head)
+		let accepted = self.process_header_batch(bhs, sync_head)?;
+		if accepted {
+			if let Some(best) = bhs.iter().max_by_key(|h| h.total_difficulty()) {
+				Self::update_peer_from_header(peer_info, best);
+			}
+		}
+		Ok(accepted)
 	}
 
 	fn locate_headers(&self, locator: &[Hash]) -> Result<Vec<BlockHeader>, chain::Error> {
@@ -1073,6 +1096,13 @@ where
 					.reject_pihd_header_segment_from(entry.id, entry.peer_info.addr.0);
 				return Ok(Some(entry.peer_info));
 			}
+			if let Some(best) = entry
+				.headers
+				.iter()
+				.max_by_key(|h| h.total_difficulty())
+			{
+				Self::update_peer_from_header(&entry.peer_info, best);
+			}
 			self.sync_state
 				.remove_pihd_header_segment(entry.id, entry.peer_info.addr.0);
 		}
@@ -1154,6 +1184,12 @@ where
 		None
 	}
 
+	/// Refresh peer height/difficulty from a header they sent us (header-first
+	/// gossip, compact block, or full block). Only increases advertised work.
+	fn update_peer_from_header(peer_info: &PeerInfo, header: &BlockHeader) {
+		peer_info.update_if_better(header.height, header.total_difficulty());
+	}
+
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
 	fn process_block(
@@ -1174,10 +1210,12 @@ where
 		}
 
 		let bhash = b.hash();
+		let header = b.header.clone();
 		let previous = self.chain().get_previous_header(&b.header);
 
 		match self.chain().process_block(b, opts) {
 			Ok(_) => {
+				Self::update_peer_from_header(peer_info, &header);
 				self.validate_chain(bhash);
 				self.check_compact();
 				Ok(true)
@@ -1189,6 +1227,8 @@ where
 			Err(e) => {
 				match e {
 					chain::Error::Orphan => {
+						// Peer has this block (orphan to us); still advertise their work.
+						Self::update_peer_from_header(peer_info, &header);
 						if let Ok(previous) = previous {
 							// make sure we did not miss the parent block
 							if !self.chain().is_orphan(&previous.hash())
@@ -1202,6 +1242,10 @@ where
 					}
 					_ => {
 						debug!("process_block: block {} refused by chain: {}", bhash, e);
+						// Already known / unfit: refresh peer only if we have this header.
+						if self.chain().get_block_header(&header.hash()).is_ok() {
+							Self::update_peer_from_header(peer_info, &header);
+						}
 						Ok(true)
 					}
 				}
