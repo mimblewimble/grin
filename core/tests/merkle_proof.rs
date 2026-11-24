@@ -14,17 +14,52 @@
 
 mod common;
 
-use self::core::core::merkle_proof::MerkleProof;
+use self::core::core::merkle_proof::{MerkleProof, MAX_MERKLE_PROOF_PATH};
 use self::core::core::pmmr::{ReadablePMMR, VecBackend, PMMR};
-use self::core::ser::{self, PMMRIndexHashable};
+use self::core::ser::{self, DeserializationMode, PMMRIndexHashable, ProtocolVersion};
 use crate::common::TestElem;
 use grin_core as core;
+
+fn push_u64(buf: &mut Vec<u8>, v: u64) {
+	buf.extend_from_slice(&v.to_be_bytes());
+}
 
 #[test]
 fn empty_merkle_proof() {
 	let proof = MerkleProof::empty();
 	assert_eq!(proof.path, vec![]);
 	assert_eq!(proof.mmr_size, 0);
+}
+
+#[test]
+fn merkle_proof_read_rejects_huge_path_len() {
+	// mmr_size=0, path_len just over the allowed maximum → TooLargeReadErr
+	// before any allocation of path entries.
+	let mut bytes = vec![];
+	push_u64(&mut bytes, 0);
+	push_u64(&mut bytes, MAX_MERKLE_PROOF_PATH + 1);
+
+	let res: Result<MerkleProof, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
+	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
+}
+
+#[test]
+fn merkle_proof_read_rejects_capacity_overflow_path_len() {
+	// Historical bug: path_len near u64::MAX caused Vec::with_capacity to panic.
+	let mut bytes = vec![];
+	push_u64(&mut bytes, 1);
+	push_u64(&mut bytes, u64::MAX);
+
+	let res: Result<MerkleProof, _> = ser::deserialize(
+		&mut &bytes[..],
+		ProtocolVersion(1),
+		DeserializationMode::default(),
+	);
+	assert_eq!(res.err(), Some(ser::Error::TooLargeReadErr));
 }
 
 #[test]
