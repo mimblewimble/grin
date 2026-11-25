@@ -206,10 +206,10 @@ impl PMMRHandle<BlockHeader> {
 		from_height: u64,
 		store: Arc<store::ChainStore>,
 	) -> Option<BlockHeader> {
-		let mut cur_height = pmmr::round_up_to_leaf_pos(from_height);
+		let mut pos = pmmr::insertion_to_pmmr_index(from_height);
 		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
 		let mut candidate: Option<BlockHeader> = None;
-		while let Some(header_entry) = header_pmmr.get_data(cur_height) {
+		while let Some(header_entry) = header_pmmr.get_data(pos) {
 			if let Ok(bh) = store.get_block_header(&header_entry.hash()) {
 				if bh.output_mmr_size <= output_pos && bh.kernel_mmr_size <= kernel_pos {
 					candidate = Some(bh)
@@ -217,7 +217,7 @@ impl PMMRHandle<BlockHeader> {
 					return candidate;
 				}
 			}
-			cur_height = pmmr::round_up_to_leaf_pos(cur_height + 1);
+			pos = pmmr::round_up_to_leaf_pos(pos + 1);
 		}
 		None
 	}
