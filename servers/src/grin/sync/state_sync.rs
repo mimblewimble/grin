@@ -433,6 +433,14 @@ impl StateSync {
 				trace!("Request list contains, continuing: {:?}", seg_id);
 				continue;
 			}
+			if let Some(d) = desegmenter.try_read() {
+				if let Some(d) = d.as_ref() {
+					if d.has_cached_segment(seg_id) {
+						debug!("Segment already received, continuing: {:?}", seg_id);
+						continue;
+					}
+				}
+			}
 
 			// First, get max difficulty or greater peers
 			let peers_iter = || peers.iter().connected();

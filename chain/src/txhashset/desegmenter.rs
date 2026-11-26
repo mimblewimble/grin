@@ -1109,6 +1109,16 @@ impl Desegmenter {
 		);
 		Ok(())
 	}
+
+	/// Check if segment was cached.
+	pub fn has_cached_segment(&self, segment: &SegmentTypeIdentifier) -> bool {
+		match segment.segment_type {
+			SegmentType::Bitmap => self.has_bitmap_segment_with_id(segment.identifier),
+			SegmentType::Output => self.has_output_segment_with_id(segment.identifier),
+			SegmentType::RangeProof => self.has_rangeproof_segment_with_id(segment.identifier),
+			SegmentType::Kernel => self.has_kernel_segment_with_id(segment.identifier),
+		}
+	}
 }
 
 #[cfg(test)]
