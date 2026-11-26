@@ -198,7 +198,7 @@ impl PMMRHandle<BlockHeader> {
 		}
 	}
 
-	/// Get the first header with all output and kernel mmrs > provided
+	/// Find the last header covered by the output and kernel PMMRs.
 	pub fn get_first_header_with(
 		&self,
 		output_pos: u64,
@@ -206,20 +206,25 @@ impl PMMRHandle<BlockHeader> {
 		from_height: u64,
 		store: Arc<store::ChainStore>,
 	) -> Option<BlockHeader> {
-		let mut pos = pmmr::insertion_to_pmmr_index(from_height);
-		let header_pmmr = ReadonlyPMMR::at(&self.backend, self.size);
-		let mut candidate: Option<BlockHeader> = None;
-		while let Some(header_entry) = header_pmmr.get_data(pos) {
-			if let Ok(bh) = store.get_block_header(&header_entry.hash()) {
-				if bh.output_mmr_size <= output_pos && bh.kernel_mmr_size <= kernel_pos {
-					candidate = Some(bh)
-				} else {
-					return candidate;
-				}
-			}
-			pos = pmmr::round_up_to_leaf_pos(pos + 1);
+		let last_height = pmmr::n_leaves(self.size).checked_sub(1)?;
+		if from_height > last_height {
+			return None;
 		}
-		None
+		let mut low = from_height;
+		let mut high = last_height + 1;
+		let mut candidate: Option<BlockHeader> = None;
+		while low < high {
+			let mid = low + (high - low) / 2;
+			let hash = self.get_header_hash_by_height(mid).ok()?;
+			let bh = store.get_block_header(&hash).ok()?;
+			if bh.output_mmr_size <= output_pos && bh.kernel_mmr_size <= kernel_pos {
+				candidate = Some(bh);
+				low = mid + 1;
+			} else {
+				high = mid;
+			}
+		}
+		candidate
 	}
 }
 
