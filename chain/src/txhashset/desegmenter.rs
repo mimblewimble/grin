@@ -244,6 +244,8 @@ impl Desegmenter {
 		status: Arc<SyncState>,
 		stop_state: Arc<StopState>,
 	) -> Result<(), Error> {
+		status.on_complete_state_validation();
+
 		// Quick root check first:
 		{
 			let txhashset = self.txhashset.read();

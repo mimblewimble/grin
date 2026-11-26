@@ -103,6 +103,9 @@ impl TUIStatusView {
 					))
 				}
 			}
+			SyncStatus::TxHashsetCompleteStateValidation => {
+				Cow::Owned("Validating Tx state after download".to_string())
+			}
 			SyncStatus::TxHashsetSetup {
 				headers,
 				headers_total,

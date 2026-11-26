@@ -105,6 +105,9 @@ fn sync_status_to_api(sync_status: SyncStatus) -> (String, Option<serde_json::Va
 				json!({ "downloaded_size": stats.downloaded_size, "total_size": stats.total_size }),
 			),
 		),
+		SyncStatus::TxHashsetCompleteStateValidation => {
+			("txhashset_complete_state_validation".to_string(), None)
+		}
 		SyncStatus::TxHashsetSetup {
 			headers,
 			headers_total,
