@@ -15,7 +15,7 @@
 //! Storage of core types using LMDB.
 
 use heed::types::Bytes;
-use heed::{Database, Env, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
+use heed::{Database, Env, EnvFlags, EnvOpenOptions, RoTxn, RwTxn, WithoutTls};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -196,7 +196,8 @@ impl Store {
 		if !has_env {
 			let env = unsafe {
 				let mut options = EnvOpenOptions::new().read_txn_without_tls();
-				let mut env_options = options.max_dbs(24);
+				// Avoid readahead for random header lookups
+				let mut env_options = options.max_dbs(24).flags(EnvFlags::NO_READ_AHEAD);
 				if let Some(max_readers) = max_readers {
 					env_options = env_options.max_readers(max_readers);
 				}

@@ -97,6 +97,8 @@ pub enum SyncStatus {
 	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload(TxHashsetDownloadStats),
+	/// Validating state after download
+	TxHashsetCompleteStateValidation,
 	/// Setting up before validation
 	TxHashsetSetup {
 		/// number of 'headers' for which kernels have been checked
@@ -833,6 +835,10 @@ impl SyncState {
 }
 
 impl TxHashsetWriteStatus for SyncState {
+	fn on_complete_state_validation(&self) {
+		self.update(SyncStatus::TxHashsetCompleteStateValidation);
+	}
+
 	fn on_setup(
 		&self,
 		headers: Option<u64>,
@@ -1071,6 +1077,8 @@ pub trait ChainAdapter {
 /// caller. Functions taking arguments can be called repeatedly to update
 /// those values as the processing progresses.
 pub trait TxHashsetWriteStatus {
+	/// Starting validation of the txhashset after download.
+	fn on_complete_state_validation(&self);
 	/// First setup of the txhashset
 	fn on_setup(
 		&self,
@@ -1093,6 +1101,7 @@ pub trait TxHashsetWriteStatus {
 pub struct NoStatus;
 
 impl TxHashsetWriteStatus for NoStatus {
+	fn on_complete_state_validation(&self) {}
 	fn on_setup(&self, _hs: Option<u64>, _ht: Option<u64>, _kp: Option<u64>, _kpt: Option<u64>) {}
 	fn on_validation_kernels(&self, _ks: u64, _kts: u64) {}
 	fn on_validation_rproofs(&self, _rs: u64, _rt: u64) {}
