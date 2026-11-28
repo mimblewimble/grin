@@ -70,6 +70,7 @@ jobs:
     runs-on: ${{ github.repository == 'wiesche89/grin' && github.event_name == 'push' && 'windows-x64' || 'windows-2022' }}
     needs: clippy
     env:
+      CC_x86_64_pc_windows_msvc: clang-cl
       ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout

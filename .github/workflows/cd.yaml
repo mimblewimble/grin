@@ -182,6 +182,7 @@ jobs:
           architecture: x86-64
           version: ${{ matrix.version }}
           cpu_count: 4
+          environment_variables: BUILD_LABEL
 
       - name: Install dependencies
         if: github.repository != 'wiesche89/grin'
@@ -336,6 +337,7 @@ jobs:
     name: Windows Release
     runs-on: ${{ github.repository == 'wiesche89/grin' && 'windows-x64' || 'windows-2022' }}
     env:
+      CC_x86_64_pc_windows_msvc: clang-cl
       ROARING_ARCH: x86-64-v2
     steps:
       - name: Checkout
