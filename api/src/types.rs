@@ -748,6 +748,110 @@ pub struct PoolInfo {
 	pub pool_size: usize,
 }
 
+/// Historical header MMR inclusion proofs, as served by `get_header_proofs`.
+///
+/// Headers are hex of their binary serialization (the bytes used on the wire
+/// and for hashing and PoW), not a printable form: a client needs the exact
+/// bytes to check the proof of work.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeaderProofsPrintable {
+	/// Hash of the anchor header.
+	pub anchor: String,
+	/// Height of the anchor header.
+	pub anchor_height: u64,
+	/// Size of the header MMR the anchor commits to in `prev_root`.
+	pub mmr_size: u64,
+	/// One item per requested height, by increasing height.
+	pub items: Vec<HeaderProofItemPrintable>,
+}
+
+/// One sampled header with its Merkle path and context headers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeaderProofItemPrintable {
+	/// Height of the sampled header.
+	pub height: u64,
+	/// The sampled header, binary serialization in hex.
+	pub header: String,
+	/// Merkle path from the header's leaf to the anchor's `prev_root`.
+	pub path: Vec<String>,
+	/// Headers directly below the sampled one, nearest first, without paths.
+	pub context: Vec<String>,
+}
+
+impl HeaderProofsPrintable {
+	/// Printable form of `proofs`.
+	pub fn from_proofs(proofs: &core::header_proof::HeaderProofs) -> Result<Self, ser::Error> {
+		let hex = |h: &core::BlockHeader| -> Result<String, ser::Error> {
+			Ok(ser::ser_vec(h, ser::ProtocolVersion::local())?.to_hex())
+		};
+		let items = proofs
+			.items
+			.iter()
+			.map(|item| {
+				Ok(HeaderProofItemPrintable {
+					height: item.header.height,
+					header: hex(&item.header)?,
+					path: item.path.iter().map(|p| p.to_hex()).collect(),
+					context: item.context.iter().map(&hex).collect::<Result<_, _>>()?,
+				})
+			})
+			.collect::<Result<_, ser::Error>>()?;
+		Ok(HeaderProofsPrintable {
+			anchor: proofs.anchor.to_hex(),
+			anchor_height: proofs.anchor_height,
+			mmr_size: proofs.mmr_size,
+			items,
+		})
+	}
+
+	/// Parses the printable form back, for clients written in Rust.
+	pub fn to_proofs(&self) -> Result<core::header_proof::HeaderProofs, String> {
+		let header = |hex: &str| -> Result<core::BlockHeader, String> {
+			let bytes = util::from_hex(hex).map_err(|_| "header is not hex".to_owned())?;
+			ser::deserialize(
+				&mut &bytes[..],
+				ser::ProtocolVersion::local(),
+				ser::DeserializationMode::default(),
+			)
+			.map_err(|e| format!("cannot read header: {}", e))
+		};
+		let hash =
+			|hex: &str| core::hash::Hash::from_hex(hex).map_err(|_| format!("not a hash: {}", hex));
+		let items = self
+			.items
+			.iter()
+			.map(|item| {
+				let parsed = core::header_proof::HeaderProofItem {
+					header: header(&item.header)?,
+					path: item
+						.path
+						.iter()
+						.map(|p| hash(p))
+						.collect::<Result<_, _>>()?,
+					context: item
+						.context
+						.iter()
+						.map(|c| header(c))
+						.collect::<Result<_, _>>()?,
+				};
+				if parsed.header.height != item.height {
+					return Err(format!(
+						"item height {} does not match its header",
+						item.height
+					));
+				}
+				Ok(parsed)
+			})
+			.collect::<Result<_, String>>()?;
+		Ok(core::header_proof::HeaderProofs {
+			anchor: hash(&self.anchor)?,
+			anchor_height: self.anchor_height,
+			mmr_size: self.mmr_size,
+			items,
+		})
+	}
+}
+
 #[cfg(test)]
 mod test {
 	use super::*;
@@ -768,6 +872,38 @@ mod test {
 		let deserialized: OutputPrintable = serde_json::from_str(hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_output);
+	}
+
+	#[test]
+	fn header_proofs_printable_round_trip() {
+		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
+		let header = core::BlockHeader {
+			height: 3,
+			version: core::HeaderVersion(2),
+			..Default::default()
+		};
+		let below = core::BlockHeader {
+			height: 2,
+			..Default::default()
+		};
+		let proofs = core::header_proof::HeaderProofs {
+			anchor: header.hash(),
+			anchor_height: 9,
+			mmr_size: core::header_proof::header_mmr_size(9),
+			items: vec![core::header_proof::HeaderProofItem {
+				header: header.clone(),
+				path: vec![below.hash(), header.hash()],
+				context: vec![below],
+			}],
+		};
+		let printable = HeaderProofsPrintable::from_proofs(&proofs).unwrap();
+		let json = serde_json::to_string(&printable).unwrap();
+		let back: HeaderProofsPrintable = serde_json::from_str(&json).unwrap();
+		assert_eq!(back.to_proofs().unwrap(), proofs);
+
+		let mut wrong_height = printable.clone();
+		wrong_height.items[0].height = 4;
+		assert!(wrong_height.to_proofs().is_err());
 	}
 
 	#[test]

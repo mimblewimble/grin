@@ -19,13 +19,14 @@ use crate::core::core::hash::Hash;
 use crate::core::core::transaction::Transaction;
 use crate::handlers::blocks_api::{BlockHandler, HeaderHandler};
 use crate::handlers::chain_api::{ChainHandler, KernelHandler, OutputHandler};
+use crate::handlers::header_proofs_api::{HeaderProofsHandler, HEADER_PROOF_SLOTS};
 use crate::handlers::pool_api::PoolHandler;
 use crate::handlers::transactions_api::TxHashSetHandler;
 use crate::handlers::version_api::VersionHandler;
 use crate::pool::{self, BlockChain, PoolAdapter, PoolEntry};
 use crate::types::{
-	BlockHeaderPrintable, BlockPrintable, LocatedTxKernel, OutputListing, OutputPrintable, Tip,
-	Version,
+	BlockHeaderPrintable, BlockPrintable, HeaderProofsPrintable, LocatedTxKernel, OutputListing,
+	OutputPrintable, Tip, Version,
 };
 use crate::util::RwLock;
 use crate::{rest::*, BlockListing};
@@ -271,6 +272,46 @@ where
 			chain: self.chain.clone(),
 		};
 		output_handler.get_unspent_outputs(start_index, end_index, max, include_proof)
+	}
+
+	/// Returns historical headers with proofs that each is the leaf at its
+	/// height in the header MMR committed to by `anchor`.
+	///
+	/// A wallet that relies on this node can sample heights below a recent
+	/// anchor and check every returned header with
+	/// `grin_core::core::header_proof::verify`: membership under the anchor,
+	/// a valid proof of work, and, with context headers, the claimed
+	/// difficulty. This makes it expensive for the node to report a chain
+	/// without real proof of work behind it. It does not show that the anchor
+	/// is on the most-work chain.
+	///
+	/// Only the header MMR is read, under a read lock and without rewind. At
+	/// most two requests are served at once; others get a `RequestError`.
+	/// A response holds at most 256 headers (about 415 bytes each on mainnet,
+	/// sent as hex) and 64 Merkle paths: a few hundred kilobytes at most.
+	///
+	/// # Arguments
+	/// * `anchor` - hash of a header on this node's main header chain.
+	/// * `heights` - 1 to 64 strictly increasing heights below the anchor.
+	/// * `context` - headers directly below each sampled one to include,
+	///   without Merkle paths (0 to 60, default 2). At most 256 headers in all.
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [`HeaderProofsPrintable`](types/struct.HeaderProofsPrintable.html)
+	/// * or [`Error`](struct.Error.html): `NotFound` for an unknown anchor,
+	///   `Argument` for an anchor off the main chain or a request over the limits.
+	pub fn get_header_proofs(
+		&self,
+		anchor: String,
+		heights: Vec<u64>,
+		context: Option<u64>,
+	) -> Result<HeaderProofsPrintable, Error> {
+		let handler = HeaderProofsHandler {
+			chain: self.chain.clone(),
+			slots: &HEADER_PROOF_SLOTS,
+		};
+		handler.get_header_proofs(&anchor, &heights, context)
 	}
 
 	/// Retrieves the PMMR indices based on the provided block height(s).

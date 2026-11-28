@@ -15,6 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use crate::core::core::header_proof::{self, HeaderProofs};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::{
 	Block, BlockHeader, BlockSums, Committed, Inputs, KernelFeatures, Output, OutputIdentifier,
@@ -32,7 +33,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, CommitPos, NoStatus, Options, Tip, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::util::{RwLock, ToHex};
 use crate::{
 	core::core::hash::{Hash, Hashed},
 	store::Batch,
@@ -1514,6 +1515,56 @@ impl Chain {
 		self.store
 			.get_block_sums(h)
 			.map_err(|e| Error::StoreErr(e, "chain get block_sums".to_owned()))
+	}
+
+	/// Builds historical header MMR inclusion proofs for `heights` against
+	/// `anchor`, a header on the main header chain. Every sampled header comes
+	/// with `context` headers directly below it, without Merkle paths.
+	///
+	/// Takes a read lock on the header MMR only and never rewinds: the header
+	/// MMR is not prunable, so a historical view is a size bound on reads.
+	/// Limits are those of [`header_proof::check_request`].
+	pub fn header_proofs(
+		&self,
+		anchor: Hash,
+		heights: &[u64],
+		context: usize,
+	) -> Result<HeaderProofs, Error> {
+		let anchor_header = match self.store.get_block_header(&anchor) {
+			Ok(header) => header,
+			Err(NotFoundErr(_)) => {
+				return Err(Error::HeaderProof(header_proof::Error::UnknownAnchor(
+					anchor.to_hex(),
+				)))
+			}
+			Err(e) => return Err(Error::StoreErr(e, "header proofs anchor".to_owned())),
+		};
+		header_proof::check_request(anchor_header.height, heights, context)
+			.map_err(Error::HeaderProof)?;
+
+		let header_pmmr = self.header_pmmr.read();
+		match header_pmmr.get_header_hash_by_height(anchor_header.height) {
+			Ok(hash) if hash == anchor => {}
+			_ => {
+				return Err(Error::HeaderProof(
+					header_proof::Error::AnchorNotOnMainChain(anchor.to_hex()),
+				))
+			}
+		}
+		let mut samples = Vec::with_capacity(heights.len());
+		for &height in heights {
+			let hash = header_pmmr.get_header_hash_by_height(height)?;
+			let header = self.get_block_header(&hash)?;
+			let mut below = Vec::with_capacity(context);
+			for _ in 0..context {
+				let child = below.last().unwrap_or(&header);
+				let parent = self.get_previous_header(child)?;
+				below.push(parent);
+			}
+			samples.push((header, below));
+		}
+		header_proof::build(&header_pmmr.backend, &anchor_header, samples)
+			.map_err(Error::HeaderProof)
 	}
 
 	/// Gets the block header at the provided height.

@@ -21,8 +21,8 @@ use crate::pool::PoolEntry;
 use crate::pool::{BlockChain, PoolAdapter};
 use crate::rest::Error;
 use crate::types::{
-	BlockHeaderPrintable, BlockListing, BlockPrintable, LocatedTxKernel, OutputListing,
-	OutputPrintable, Tip, Version,
+	BlockHeaderPrintable, BlockListing, BlockPrintable, HeaderProofsPrintable, LocatedTxKernel,
+	OutputListing, OutputPrintable, Tip, Version,
 };
 use crate::util;
 
@@ -788,6 +788,62 @@ pub trait ForeignRpc: Sync + Send {
 	) -> Result<OutputListing, Error>;
 
 	/**
+	Networked version of [Foreign::get_header_proofs](struct.Foreign.html#method.get_header_proofs).
+
+	# Json rpc example
+
+	Taken from an `AutomatedTesting` chain, which has a short proof of work.
+
+	```
+	# grin_api::doctest_helper_json_rpc_foreign_assert_response!(
+	# r#"
+	{
+		"jsonrpc": "2.0",
+		"method": "get_header_proofs",
+		"params": ["ae6dc70794b5e7e7007f3687114630b541af7a411d813aab29816ede64bf046f", [13], 1],
+		"id": 1
+	}
+	# "#
+	# ,
+	# r#"
+	{
+		"id": 1,
+		"jsonrpc": "2.0",
+		"result": {
+			"Ok": {
+				"anchor": "ae6dc70794b5e7e7007f3687114630b541af7a411d813aab29816ede64bf046f",
+				"anchor_height": 15,
+				"mmr_size": 26,
+				"items": [
+					{
+						"height": 13,
+						"header": "0005000000000000000d0000000033e51e8cb6727b4b89cd3247ec212eff00d382944ab00c27a499fce2b7c3590b892dfd9bc6dcbcd044a0f0bec81d8a108c351392addb8bd38f4e1e50f3bec1def47a33113327cab5160a042b716c1e6fad82afbc845702b4db48e9be77cc847364ed67c5cfe0ea98424f526e1dfe07196356641fced2dfeaaab3758a07073127c923ae083682c6a5463cac056927fa992b6d07bcd4d6c4f2584c8ed45559632203db5a47000000000000000000000000000000000000000000000000000000000000000000000000000000170000000000000017000000000000004c0000000000000000000000080a9004d6e7bb2e77fe3dfe",
+						"path": [
+							"99cec746af617d22b3082387ac5a218e7935c78fd86a2956d5cdbd79504ff15d",
+							"6073d81a746d94eb05af440327f6726b43c9e52b99c9e479f1987329dd15c971",
+							"d784d91c698807a833ac108a1c560e5fc71562e2e467a9d65cb7650f3b74ab1e",
+							"752af7c53a8790c1a4727999038450826d411eb2d74b389b97ed0403db2abeea"
+						],
+						"context": [
+							"0005000000000000000c0000000033e51e50eb075d9a067b359b4925001747ecb1eff85a7eac29a2846e3e373451cefa76206a0e60f3592c967da27e4448d55210a027241faf9fe77e697c50e6896a213884385646aae863494b3c9159db6bf0b1908ea959dc842e1d27301f8e66dff0a0eb856aae62c5c5f255864773928b0303c8f978d563fc31d36d674d67e3ffe91289a369da137d3e593b3bbd4e3e493b9fae5aa8e210320d57821aefb7f45d65670f00000000000000000000000000000000000000000000000000000000000000000000000000000016000000000000001600000000000000380000000000000000000000080a08a0015b80ce06fd79ec"
+						]
+					}
+				]
+			}
+		}
+	}
+	# "#
+	# );
+	```
+	 */
+	fn get_header_proofs(
+		&self,
+		anchor: String,
+		heights: Vec<u64>,
+		context: Option<u64>,
+	) -> Result<HeaderProofsPrintable, Error>;
+
+	/**
 	Networked version of [Foreign::get_pool_size](struct.Foreign.html#method.get_pool_size).
 
 	# Json rpc example
@@ -1082,6 +1138,15 @@ where
 		end_block_height: Option<u64>,
 	) -> Result<OutputListing, Error> {
 		Foreign::get_pmmr_indices(self, start_block_height, end_block_height)
+	}
+
+	fn get_header_proofs(
+		&self,
+		anchor: String,
+		heights: Vec<u64>,
+		context: Option<u64>,
+	) -> Result<HeaderProofsPrintable, Error> {
+		Foreign::get_header_proofs(self, anchor, heights, context)
 	}
 
 	fn get_pool_size(&self) -> Result<usize, Error> {

@@ -14,7 +14,7 @@
 
 //! Error types for chain
 use crate::core::core::pmmr::segment;
-use crate::core::core::{block, committed, transaction};
+use crate::core::core::{block, committed, header_proof, transaction};
 use crate::core::ser;
 use crate::keychain;
 use crate::util::secp;
@@ -190,6 +190,9 @@ pub enum Error {
 	/// Other issue with segment
 	#[error("Invalid segment: {0}")]
 	InvalidSegment(String),
+	/// A header proof request could not be served
+	#[error("Header proofs: {0}")]
+	HeaderProof(header_proof::Error),
 }
 
 impl Error {
@@ -205,6 +208,7 @@ impl Error {
 				| Error::TxHashSetErr(_)
 				| Error::GenesisBlockRequired
 				| Error::Other(_)
+				| Error::HeaderProof(_)
 		)
 	}
 }
