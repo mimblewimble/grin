@@ -62,6 +62,8 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           ACTION_NAME: ${{ github.event.action }}
+          ACTOR: ${{ github.actor }}
+          REF_NAME: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -92,7 +94,9 @@ jobs:
           }
 
           if [ -n "$NOTIFY_TITLE" ]; then
-            commit_message=$(html_escape "$NOTIFY_COMMIT_MESSAGE")
+            actor=$(html_escape "$ACTOR")
+            ref_name=$(html_escape "$REF_NAME")
+            commit_message=$(html_escape "${NOTIFY_COMMIT_MESSAGE:0:3000}")
             text=$(printf "<b>%s</b>\n<b>Build %s</b>" "$NOTIFY_TITLE" "$NOTIFY_STATUS")
 
             if [ -n "$NOTIFY_DETAILS" ]; then
@@ -101,9 +105,9 @@ jobs:
 
             text=$(printf "%s\n\n<b>Actor:</b> %s\n<b>Repository:</b> %s\n<b>Branch:</b> %s" \
               "$text" \
-              "${{ github.actor }}" \
+              "$actor" \
               "$REPOSITORY" \
-              "${{ github.ref_name }}")
+              "$ref_name")
 
             if [ -n "$NOTIFY_IMAGE" ]; then
               text=$(printf "%s\n<b>Image:</b> %s" "$text" "$NOTIFY_IMAGE")
