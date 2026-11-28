@@ -43,7 +43,7 @@ pub fn siphash_block(v: &[u64; 4], nonce: u64, rot_e: u8, xor_all: bool) -> u64 
 	// beginning of the block of hashes
 	let nonce0 = nonce & !SIPHASH_BLOCK_MASK;
 	let nonce_i = nonce & SIPHASH_BLOCK_MASK;
-	let mut nonce_hash = vec![0u64; SIPHASH_BLOCK_SIZE as usize];
+	let mut nonce_hash = [0u64; SIPHASH_BLOCK_SIZE as usize];
 
 	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
