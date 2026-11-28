@@ -27,6 +27,7 @@ use crate::auth::{
 use crate::chain::{Chain, SyncState};
 use crate::foreign::Foreign;
 use crate::foreign_rpc::ForeignRpc;
+use crate::openrpc::{Discoverable, FOREIGN_SPEC, OWNER_SPEC};
 use crate::owner::Owner;
 use crate::owner_rpc::OwnerRpc;
 use crate::pool;
@@ -169,7 +170,7 @@ impl crate::router::Handler for OwnerAPIHandlerV2 {
 			match parse_body(req).await {
 				Ok(val) => {
 					let owner_api = &api as &dyn OwnerRpc;
-					let res = match owner_api.handle_request(val) {
+					let res = match Discoverable::new(owner_api, OWNER_SPEC).handle_request(val) {
 						MaybeReply::Reply(r) => r,
 						MaybeReply::DontReply => {
 							// Since it's http, we need to return something. We return [] because jsonrpc
@@ -238,7 +239,8 @@ where
 			match parse_body(req).await {
 				Ok(val) => {
 					let foreign_api = &api as &dyn ForeignRpc;
-					let res = match foreign_api.handle_request(val) {
+					let res = match Discoverable::new(foreign_api, FOREIGN_SPEC).handle_request(val)
+					{
 						MaybeReply::Reply(r) => r,
 						MaybeReply::DontReply => {
 							// Since it's http, we need to return something. We return [] because jsonrpc

@@ -1,0 +1,474 @@
+{
+	"openrpc": "1.2.6",
+	"info": {
+		"title": "Grin Node Owner API",
+		"version": "5.5.2",
+		"description": "JSON-RPC 2.0 API served at /v2/owner. All params are required by the server; pass null for an absent optional value.",
+		"license": {
+			"name": "Apache-2.0",
+			"url": "https://www.apache.org/licenses/LICENSE-2.0"
+		}
+	},
+	"methods": [
+		{
+			"name": "get_status",
+			"summary": "Node status and chain tip.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "status",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"$ref": "#/components/schemas/Status"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "validate_chain",
+			"summary": "Validate the full chain state.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "assume_valid_rangeproofs_kernels",
+					"required": true,
+					"schema": {
+						"type": "boolean"
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "compact_chain",
+			"summary": "Trigger chain compaction.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "reset_chain_head",
+			"summary": "Reset the chain head to the given header hash.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "hash",
+					"required": true,
+					"schema": {
+						"type": "string",
+						"description": "Hex-encoded hash."
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "invalidate_header",
+			"summary": "Mark a header as invalid.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "hash",
+					"required": true,
+					"schema": {
+						"type": "string",
+						"description": "Hex-encoded hash."
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_peers",
+			"summary": "Stored peer data, for one peer or all.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "peer_addr",
+					"required": true,
+					"schema": {
+						"oneOf": [
+							{
+								"$ref": "#/components/schemas/SocketAddr"
+							},
+							{
+								"type": "null"
+							}
+						]
+					}
+				}
+			],
+			"result": {
+				"name": "peers",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/PeerData"
+									}
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "get_connected_peers",
+			"summary": "Currently connected peers.",
+			"paramStructure": "either",
+			"params": [],
+			"result": {
+				"name": "peers",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "array",
+									"items": {
+										"$ref": "#/components/schemas/PeerInfoDisplay"
+									}
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "ban_peer",
+			"summary": "Ban a peer.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "peer_addr",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/SocketAddr"
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "unban_peer",
+			"summary": "Unban a peer.",
+			"paramStructure": "either",
+			"params": [
+				{
+					"name": "peer_addr",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/SocketAddr"
+					}
+				}
+			],
+			"result": {
+				"name": "unit",
+				"schema": {
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"Ok": {
+									"type": "null"
+								}
+							},
+							"required": [
+								"Ok"
+							]
+						},
+						{
+							"$ref": "#/components/schemas/ErrResult"
+						}
+					]
+				}
+			}
+		}
+	],
+	"components": {
+		"schemas": {
+			"ErrResult": {
+				"type": "object",
+				"properties": {
+					"Err": {
+						"$ref": "#/components/schemas/Error"
+					}
+				},
+				"required": [
+					"Err"
+				]
+			},
+			"Error": {
+				"description": "grin_api::rest::Error, serialized as an externally tagged enum.",
+				"oneOf": [
+					{
+						"type": "string",
+						"enum": [
+							"NotFound"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Internal": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"Internal"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Argument": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"Argument"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"RequestError": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"RequestError"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"ResponseError": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"ResponseError"
+						]
+					},
+					{
+						"type": "object",
+						"properties": {
+							"Router": {
+								"type": "object"
+							}
+						},
+						"required": [
+							"Router"
+						]
+					}
+				]
+			},
+			"Tip": {
+				"type": "object",
+				"properties": {
+					"height": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"last_block_pushed": {
+						"type": "string"
+					},
+					"prev_block_to_last": {
+						"type": "string"
+					},
+					"total_difficulty": {
+						"type": "integer",
+						"minimum": 0
+					}
+				},
+				"required": [
+					"height",
+					"last_block_pushed",
+					"prev_block_to_last",
+					"total_difficulty"
+				]
+			},
+			"SocketAddr": {
+				"type": "string",
+				"description": "IP:port, e.g. 70.50.33.130:3414."
+			},
+			"Status": {
+				"type": "object",
+				"properties": {
+					"chain": {
+						"type": "string"
+					},
+					"protocol_version": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"user_agent": {
+						"type": "string"
+					},
+					"connections": {
+						"type": "integer",
+						"minimum": 0
+					},
+					"tip": {
+						"$ref": "#/components/schemas/Tip"
+					},
+					"sync_status": {
+						"type": "string"
+					},
+					"sync_info": {
+						"type": "object"
+					}
+				},
+				"required": [
+					"chain",
+					"protocol_version",
+					"user_agent",
+					"connections",
+					"tip",
+					"sync_status"
+				]
+			},
+			"PeerData": {
+				"type": "object",
+				"description": "grin_p2p::PeerData."
+			},
+			"PeerInfoDisplay": {
+				"type": "object",
+				"description": "grin_p2p::types::PeerInfoDisplay."
+			}
+		}
+	}
+}

@@ -36,6 +36,7 @@ mod foreign;
 pub mod foreign_rpc;
 mod handlers;
 pub mod json_rpc;
+pub mod openrpc;
 mod owner;
 pub mod owner_rpc;
 mod rest;
