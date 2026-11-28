@@ -18,7 +18,7 @@ use std::io::{self, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use self::zip_rs::write::FileOptions;
+use self::zip_rs::write::SimpleFileOptions;
 use zip as zip_rs;
 
 // Sanitize file path for normal components, excluding '/', '..', and '.'
@@ -44,7 +44,7 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<PathBuf>) -> io::R
 		BufWriter::new(zip)
 	};
 
-	let options = FileOptions::default()
+	let options = SimpleFileOptions::default()
 		.compression_method(zip_rs::CompressionMethod::Stored)
 		.unix_permissions(0o644);
 
@@ -59,7 +59,7 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<PathBuf>) -> io::R
 		}
 	}
 
-	writer.get_mut().finish()?;
+	writer.into_inner().map_err(|e| e.into_error())?.finish()?;
 	dst_file.sync_all()?;
 	Ok(())
 }
@@ -68,11 +68,11 @@ pub fn create_zip(dst_file: &File, src_dir: &Path, files: Vec<PathBuf>) -> io::R
 pub fn extract_files(from_archive: File, dest: &Path, files: Vec<PathBuf>) -> io::Result<()> {
 	let dest: PathBuf = PathBuf::from(dest);
 	let files: Vec<_> = files.to_vec();
-	let res = thread::spawn(move || {
+	let res = thread::spawn(move || -> io::Result<()> {
 		let mut archive = zip_rs::ZipArchive::new(from_archive).expect("archive file exists");
 		for x in files {
 			if let Ok(file) = archive.by_name(x.to_str().expect("valid path")) {
-				let path = dest.join(file.mangled_name());
+				let path = dest.join(file.mangled_name()?);
 				let parent_dir = path.parent().expect("valid parent dir");
 				fs::create_dir_all(parent_dir).expect("create parent dir");
 				let outfile = fs::File::create(&path).expect("file created");
@@ -90,13 +90,13 @@ pub fn extract_files(from_archive: File, dest: &Path, files: Vec<PathBuf>) -> io
 				}
 			}
 		}
+		Ok(())
 	})
 	.join();
 
-	// If join() above is Ok then we successfully extracted the files.
-	// If the result is Err then we failed to extract the files.
+	// Map thread panics to I/O errors
 	res.map_err(|e| {
 		error!("failed to extract files from zip: {:?}", e);
 		io::Error::other("failed to extract files from zip")
-	})
+	})?
 }
