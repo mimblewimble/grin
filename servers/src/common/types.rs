@@ -17,6 +17,7 @@ use std::convert::From;
 use std::sync::Arc;
 
 use chrono::prelude::Utc;
+use grin_chain::types::QueuedPIBDSegment;
 use rand::prelude::*;
 
 use crate::chain;
@@ -120,19 +121,14 @@ impl From<libtx::Error> for Error {
 }
 
 /// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum ChainValidationMode {
 	/// Run full chain validation after processing every block.
 	EveryBlock,
 	/// Do not automatically run chain validation during normal block
 	/// processing.
+	#[default]
 	Disabled,
-}
-
-impl Default for ChainValidationMode {
-	fn default() -> ChainValidationMode {
-		ChainValidationMode::Disabled
-	}
 }
 
 /// Full server configuration, aggregating configurations required for the
@@ -245,6 +241,15 @@ pub struct StratumServerConfig {
 	/// If enabled, the address and port to listen on
 	pub stratum_server_addr: Option<String>,
 
+	/// Maximum number of concurrent stratum workers
+	#[serde(default = "default_stratum_max_workers")]
+	pub max_workers: usize,
+
+	/// Idle timeout in seconds, must be greater than zero
+	/// After the first request, outbound jobs reset it and sync suspends it
+	#[serde(default = "default_stratum_worker_idle_timeout_secs")]
+	pub worker_idle_timeout_secs: u64,
+
 	/// How long to wait before stopping the miner, recollecting transactions
 	/// and starting again
 	pub attempt_time_per_block: u32,
@@ -260,11 +265,21 @@ pub struct StratumServerConfig {
 	pub burn_reward: bool,
 }
 
+fn default_stratum_max_workers() -> usize {
+	512
+}
+
+fn default_stratum_worker_idle_timeout_secs() -> u64 {
+	5 * 60
+}
+
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
 			wallet_listener_url: "http://127.0.0.1:3415".to_string(),
 			burn_reward: false,
+			max_workers: default_stratum_max_workers(),
+			worker_idle_timeout_secs: default_stratum_worker_idle_timeout_secs(),
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
 			enable_stratum_server: Some(false),
@@ -407,6 +422,8 @@ impl DandelionEpoch {
 }
 
 /// Server initialization status.
+// Keep the existing initialization message API
+#[allow(clippy::large_enum_variant)]
 pub enum ServerInitStatus {
 	/// Database loading.
 	LoadDatabase,
@@ -420,4 +437,27 @@ pub enum ServerInitStatus {
 	FinishedLoading(Server),
 	/// Error on initialization.
 	ErrorLoading(Error),
+}
+
+/// Network adapter worker message.
+pub enum NetAdapterWorkerMessage {
+	/// Received PIBD segment.
+	PIBDSegment(QueuedPIBDSegment),
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn stratum_config_defaults() {
+		let mut value = serde_json::to_value(StratumServerConfig::default()).unwrap();
+		let config = value.as_object_mut().unwrap();
+		config.remove("max_workers");
+		config.remove("worker_idle_timeout_secs");
+
+		let config: StratumServerConfig = serde_json::from_value(value).unwrap();
+		assert_eq!(config.max_workers, 512);
+		assert_eq!(config.worker_idle_timeout_secs, 5 * 60);
+	}
 }

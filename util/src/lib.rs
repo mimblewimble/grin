@@ -73,6 +73,15 @@ pub struct OneTime<T> {
 	inner: Arc<RwLock<Option<T>>>,
 }
 
+impl<T> Default for OneTime<T>
+where
+	T: Clone,
+{
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl<T> OneTime<T>
 where
 	T: Clone,
@@ -140,6 +149,12 @@ pub struct StopState {
 	paused: AtomicBool,
 }
 
+impl Default for StopState {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl StopState {
 	/// Create a new stop_state in default "running" state.
 	pub fn new() -> StopState {
@@ -173,6 +188,25 @@ impl StopState {
 	pub fn resume(&self) {
 		self.paused.store(false, Ordering::Relaxed)
 	}
+
+	/// Reset state after all previous tasks and threads have exited.
+	pub fn reset(&self) {
+		self.stopped.store(false, Ordering::Relaxed);
+		self.paused.store(false, Ordering::Relaxed);
+	}
+}
+
+#[test]
+fn stop_state_reset() {
+	let state = StopState::new();
+	state.stop();
+	state.pause();
+	assert!(state.is_stopped());
+	assert!(state.is_paused());
+
+	state.reset();
+	assert!(!state.is_stopped());
+	assert!(!state.is_paused());
 }
 
 #[test]

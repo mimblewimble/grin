@@ -2,7 +2,7 @@
   description = "THE MIMBLEWIMBLE BLOCKCHAIN.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/release-22.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs = { self, nixpkgs, }:

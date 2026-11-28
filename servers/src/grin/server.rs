@@ -43,7 +43,7 @@ use crate::core::core::hash::{Hashed, ZERO_HASH};
 use crate::core::ser::ProtocolVersion;
 use crate::core::{consensus, genesis, global, pow};
 use crate::grin::{dandelion_monitor, seed, sync};
-use crate::mining::stratumserver;
+use crate::mining::stratumserver::{self, validate_stratum_config};
 use crate::mining::test_miner::Miner;
 use crate::p2p;
 use crate::p2p::types::{Capabilities, PeerAddr};
@@ -72,9 +72,11 @@ pub struct Server {
 	pub stop_state: Arc<StopState>,
 	/// Maintain a lock_file so we do not run multiple Grin nodes from same dir.
 	lock_file: Arc<File>,
+	start_time: time::Instant,
 	connect_thread: Option<JoinHandle<()>>,
 	sync_thread: JoinHandle<()>,
 	dandelion_thread: JoinHandle<()>,
+	stratum_thread: RwLock<Option<JoinHandle<()>>>,
 }
 
 impl Server {
@@ -92,6 +94,12 @@ impl Server {
 		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
+		if let Some(c) = mining_config
+			.as_ref()
+			.filter(|c| c.enable_stratum_server == Some(true))
+		{
+			validate_stratum_config(c)?;
+		}
 		let serv = Server::new(config, stop_state, server_tx, api_chan)?;
 
 		if let Some(c) = mining_config {
@@ -121,14 +129,15 @@ impl Server {
 	// This uses fs2 and should be safe cross-platform unless somebody abuses the file itself.
 	fn one_grin_at_a_time(config: &ServerConfig) -> Result<Arc<File>, Error> {
 		let path = Path::new(&config.db_root);
-		fs::create_dir_all(&path)?;
+		fs::create_dir_all(path)?;
 		let path = path.join("grin.lock");
 		let lock_file = fs::OpenOptions::new()
 			.read(true)
 			.write(true)
 			.create(true)
+			.truncate(false)
 			.open(&path)?;
-		lock_file.try_lock_exclusive().map_err(|e| {
+		lock_file.try_lock_exclusive().inspect_err(|_e| {
 			let mut stderr = std::io::stderr();
 			writeln!(
 				&mut stderr,
@@ -136,7 +145,6 @@ impl Server {
 				path
 			)
 			.expect("Could not write to stderr");
-			e
 		})?;
 		Ok(Arc::new(lock_file))
 	}
@@ -153,16 +161,13 @@ impl Server {
 	) -> Result<Server, Error> {
 		// Obtain our lock_file or fail immediately with an error.
 		let lock_file = Server::one_grin_at_a_time(&config)?;
+		let start_time = time::Instant::now();
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
-		let archive_mode = config.archive_mode.unwrap_or_else(|| false);
+		let archive_mode = config.archive_mode.unwrap_or(false);
 
-		let stop_state = if stop_state.is_some() {
-			stop_state.unwrap()
-		} else {
-			Arc::new(StopState::new())
-		};
+		let stop_state = stop_state.unwrap_or_else(|| Arc::new(StopState::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new(config.dandelion_config.clone()));
@@ -195,15 +200,12 @@ impl Server {
 		let (db_migration_prog_tx, db_migration_prog_rx) = std::sync::mpsc::channel::<i8>();
 		if let Some(ref server_tx) = server_tx {
 			let server_tx = server_tx.clone();
-			thread::spawn(move || loop {
-				match db_migration_prog_rx.recv() {
-					Ok(p) => {
-						if p == 100 {
-							break;
-						}
-						let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
+			thread::spawn(move || {
+				while let Ok(p) = db_migration_prog_rx.recv() {
+					if p == 100 {
+						break;
 					}
-					Err(_) => break,
+					let _ = server_tx.send(ServerInitStatus::DBMigrationProgress(p));
 				}
 			});
 		}
@@ -289,7 +291,7 @@ impl Server {
 			let _ = server_tx.send(ServerInitStatus::StartAPI);
 		}
 
-		info!("Starting rest apis at: {}", &config.api_http_addr);
+		info!("Starting rest apis at: {}", config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		let foreign_api_secret = get_first_line(config.foreign_api_secret_path.clone());
 		let tls_conf = match config.tls_certificate_file.clone() {
@@ -319,7 +321,7 @@ impl Server {
 			stop_state.clone(),
 		)?;
 
-		info!("Starting dandelion monitor: {}", &config.api_http_addr);
+		info!("Starting dandelion monitor: {}", config.api_http_addr);
 		let dandelion_thread = dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
@@ -339,9 +341,11 @@ impl Server {
 			},
 			stop_state,
 			lock_file,
+			start_time,
 			connect_thread,
 			sync_thread,
 			dandelion_thread,
+			stratum_thread: RwLock::new(None),
 		})
 	}
 
@@ -372,8 +376,24 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
+		if let Err(e) = validate_stratum_config(&config) {
+			error!("Invalid stratum server configuration: {:?}", e);
+			return;
+		}
+		let mut stratum_thread = self.stratum_thread.write();
+		if let Some(handle) = stratum_thread.take() {
+			if !handle.is_finished() {
+				*stratum_thread = Some(handle);
+				warn!("Stratum server is already running");
+				return;
+			}
+			if let Err(e) = handle.join() {
+				error!("failed to join stratum server thread: {:?}", e);
+			}
+		}
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
+		let stop_state = self.stop_state.clone();
 
 		let mut stratum_server = stratumserver::StratumServer::new(
 			config,
@@ -381,11 +401,15 @@ impl Server {
 			self.tx_pool.clone(),
 			self.state_info.stratum_stats.clone(),
 		);
-		let _ = thread::Builder::new()
+		*stratum_thread = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(proof_size, sync_state);
-			});
+				if let Err(e) = stratum_server.run_loop(proof_size, sync_state, stop_state) {
+					error!("Stratum server failed: {:?}", e);
+				}
+			})
+			.map_err(|e| error!("Failed to start stratum server thread: {}", e))
+			.ok();
 	}
 
 	/// Start mining for blocks internally on a separate thread. Relies on
@@ -409,6 +433,7 @@ impl Server {
 			stratum_server_addr: None,
 			wallet_listener_url: config_wallet_url,
 			minimum_share_difficulty: 1,
+			..StratumServerConfig::default()
 		};
 
 		let mut miner = Miner::new(
@@ -458,7 +483,7 @@ impl Server {
 					.collect();
 
 			let tip_height = self.head()?.height as i64;
-			let mut height = tip_height as i64 - last_blocks.len() as i64 + 1;
+			let mut height = tip_height - last_blocks.len() as i64 + 1;
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
 				.windows(2)
@@ -542,6 +567,7 @@ impl Server {
 		let disk_usage_gb = format!("{:.*}", 3, (disk_usage_bytes as f64 / 1_000_000_000_f64));
 
 		Ok(ServerStats {
+			uptime_seconds: self.start_time.elapsed().as_secs(),
 			peer_count: self.peer_count(),
 			chain_stats: head_stats,
 			header_stats,
@@ -567,6 +593,13 @@ impl Server {
 				}
 			} else {
 				info!("No active connect_and_monitor thread")
+			}
+
+			if let Some(stratum_thread) = self.stratum_thread.into_inner() {
+				match stratum_thread.join() {
+					Err(e) => error!("failed to join stratum server thread: {:?}", e),
+					Ok(_) => info!("stratum server thread stopped"),
+				}
 			}
 
 			match self.sync_thread.join() {
@@ -603,5 +636,38 @@ impl Server {
 	pub fn stop_test_miner(&self, stop: Arc<StopState>) {
 		stop.stop();
 		info!("stop_test_miner - stop",);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_stratum_config_validation() {
+		assert!(validate_stratum_config(&StratumServerConfig::default()).is_ok());
+
+		let mut config = StratumServerConfig {
+			max_workers: 0,
+			..Default::default()
+		};
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.max_workers = tokio::sync::Semaphore::MAX_PERMITS + 1;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.max_workers = 1;
+		config.worker_idle_timeout_secs = 0;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.worker_idle_timeout_secs = u64::MAX;
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.worker_idle_timeout_secs = 1;
+		config.stratum_server_addr = Some("invalid".to_string());
+		assert!(validate_stratum_config(&config).is_err());
+
+		config.stratum_server_addr = None;
+		assert!(validate_stratum_config(&config).is_err());
 	}
 }

@@ -56,10 +56,7 @@ enum State {
 
 impl State {
 	fn is_none(&self) -> bool {
-		match self {
-			State::None => true,
-			_ => false,
-		}
+		matches!(self, State::None)
 	}
 }
 
@@ -273,6 +270,8 @@ fn decode_message(
 		Type::RangeProofSegment => Message::RangeProofSegment(msg.body()?),
 		Type::GetKernelSegment => Message::GetKernelSegment(msg.body()?),
 		Type::KernelSegment => Message::KernelSegment(msg.body()?),
+		Type::GetHeaderSegment => Message::GetHeaderSegment(msg.body()?),
+		Type::HeaderSegment => Message::HeaderSegment(msg.body()?),
 		Type::Error | Type::Hand | Type::Shake | Type::Headers => {
 			return Err(Error::UnexpectedMessage)
 		}

@@ -76,25 +76,25 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 		let msg = kernel.msg_to_sign().unwrap();
 
 		// Generate a kernel with public excess and associated signature.
-		let excess = BlindingFactor::rand(&keychain.secp());
-		let skey = excess.secret_key(&keychain.secp()).unwrap();
+		let excess = BlindingFactor::rand(keychain.secp());
+		let skey = excess.secret_key(keychain.secp()).unwrap();
 		kernel.excess = keychain.secp().commit(0, skey).unwrap();
-		let pubkey = &kernel.excess.to_pubkey(&keychain.secp()).unwrap();
+		let pubkey = &kernel.excess.to_pubkey(keychain.secp()).unwrap();
 		kernel.excess_sig =
-			aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+			aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 		kernel.verify().unwrap();
 
 		// Generate a 2nd NRD kernel sharing the same excess commitment but with different signature.
-		let mut kernel2 = kernel.clone();
+		let mut kernel2 = kernel;
 		kernel2.excess_sig =
-			aggsig::sign_with_blinding(&keychain.secp(), &msg, &excess, Some(&pubkey)).unwrap();
+			aggsig::sign_with_blinding(keychain.secp(), &msg, &excess, Some(pubkey)).unwrap();
 		kernel2.verify().unwrap();
 
 		let tx1 = test_transaction_with_kernel(
 			&keychain,
 			vec![1_000, 2_000],
 			vec![2_400],
-			kernel.clone(),
+			kernel,
 			excess.clone(),
 		);
 
@@ -102,7 +102,7 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 			&keychain,
 			vec![2_400],
 			vec![1_800],
-			kernel2.clone(),
+			kernel2,
 			excess.clone(),
 		);
 
@@ -114,15 +114,14 @@ fn test_nrd_kernel_relative_height() -> Result<(), PoolError> {
 		let msg_short = kernel_short.msg_to_sign().unwrap();
 		kernel_short.excess = kernel.excess;
 		kernel_short.excess_sig =
-			aggsig::sign_with_blinding(&keychain.secp(), &msg_short, &excess, Some(&pubkey))
-				.unwrap();
+			aggsig::sign_with_blinding(keychain.secp(), &msg_short, &excess, Some(pubkey)).unwrap();
 		kernel_short.verify().unwrap();
 
 		let tx3 = test_transaction_with_kernel(
 			&keychain,
 			vec![1_800],
 			vec![1_500],
-			kernel_short.clone(),
+			kernel_short,
 			excess.clone(),
 		);
 

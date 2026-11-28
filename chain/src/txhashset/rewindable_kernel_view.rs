@@ -40,7 +40,7 @@ impl<'a> RewindableKernelView<'a> {
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.pmmr
 			.rewind(header.kernel_mmr_size)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(Error::TxHashSetErr)?;
 
 		// Update our header to reflect the one we rewound to.
 		self.header = header.clone();
@@ -62,14 +62,13 @@ impl<'a> RewindableKernelView<'a> {
 			return Err(Error::InvalidTxHashSet(format!(
 				"Kernel root at {} does not match",
 				self.header.height
-			))
-			.into());
+			)));
 		}
 		Ok(())
 	}
 
 	/// Readonly view of our internal data.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<TxKernel, PMMRBackend<TxKernel>> {
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, TxKernel, PMMRBackend<TxKernel>> {
 		self.pmmr.as_readonly()
 	}
 }

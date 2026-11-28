@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use grin_store as store;
+use std::fs;
 
 use crate::store::prune_list::PruneList;
 
@@ -21,18 +22,18 @@ fn test_is_pruned() {
 	let mut pl = PruneList::empty();
 
 	assert_eq!(pl.len(), 0);
-	assert_eq!(pl.is_pruned(0), false);
-	assert_eq!(pl.is_pruned(1), false);
-	assert_eq!(pl.is_pruned(2), false);
+	assert!(!pl.is_pruned(0));
+	assert!(!pl.is_pruned(1));
+	assert!(!pl.is_pruned(2));
 
 	pl.append(1);
 	pl.flush().unwrap();
 
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
-	assert_eq!(pl.is_pruned(0), false);
-	assert_eq!(pl.is_pruned(1), true);
-	assert_eq!(pl.is_pruned(2), false);
-	assert_eq!(pl.is_pruned(3), false);
+	assert!(!pl.is_pruned(0));
+	assert!(pl.is_pruned(1));
+	assert!(!pl.is_pruned(2));
+	assert!(!pl.is_pruned(3));
 
 	let mut pl = PruneList::empty();
 	pl.append(0);
@@ -41,10 +42,10 @@ fn test_is_pruned() {
 
 	assert_eq!(pl.len(), 1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [3]);
-	assert_eq!(pl.is_pruned(0), true);
-	assert_eq!(pl.is_pruned(1), true);
-	assert_eq!(pl.is_pruned(2), true);
-	assert_eq!(pl.is_pruned(3), false);
+	assert!(pl.is_pruned(0));
+	assert!(pl.is_pruned(1));
+	assert!(pl.is_pruned(2));
+	assert!(!pl.is_pruned(3));
 
 	pl.append(3);
 
@@ -54,11 +55,32 @@ fn test_is_pruned() {
 
 	assert_eq!(pl.len(), 2);
 	assert_eq!(pl.to_vec(), [3, 4]);
-	assert_eq!(pl.is_pruned(0), true);
-	assert_eq!(pl.is_pruned(1), true);
-	assert_eq!(pl.is_pruned(2), true);
-	assert_eq!(pl.is_pruned(3), true);
-	assert_eq!(pl.is_pruned(4), false);
+	assert!(pl.is_pruned(0));
+	assert!(pl.is_pruned(1));
+	assert!(pl.is_pruned(2));
+	assert!(pl.is_pruned(3));
+	assert!(!pl.is_pruned(4));
+}
+
+#[test]
+fn test_discard_restores_flushed_state() {
+	let test_dir = "target/test_prune_list_discard";
+	let _ = fs::remove_dir_all(test_dir);
+	fs::create_dir_all(test_dir).unwrap();
+	let path = format!("{}/pmmr_prun.bin", test_dir);
+
+	let mut pl = PruneList::new(Some(path.clone().into()), Default::default());
+	pl.append(0);
+	pl.flush().unwrap();
+
+	pl.append(2);
+	assert!(pl.is_pruned_root(2));
+
+	pl.discard().unwrap();
+	assert!(pl.is_pruned_root(0));
+	assert!(!pl.is_pruned_root(2));
+
+	let _ = fs::remove_dir_all(test_dir);
 }
 
 #[test]
@@ -284,7 +306,10 @@ pub fn test_unpruned_iter() {
 	let mut pl = PruneList::empty();
 	pl.append(1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
-	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
+	assert_eq!(
+		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
+		std::slice::from_ref(&(2..3))
+	);
 	assert_eq!(pl.unpruned_iter(4).collect::<Vec<_>>(), [1, 3, 4]);
 
 	let mut pl = PruneList::empty();
@@ -310,7 +335,10 @@ fn test_unpruned_leaf_iter() {
 	let mut pl = PruneList::empty();
 	pl.append(1);
 	assert_eq!(pl.iter().collect::<Vec<_>>(), [2]);
-	assert_eq!(pl.pruned_bintree_range_iter().collect::<Vec<_>>(), [2..3]);
+	assert_eq!(
+		pl.pruned_bintree_range_iter().collect::<Vec<_>>(),
+		std::slice::from_ref(&(2..3))
+	);
 	assert_eq!(pl.unpruned_leaf_iter(5).collect::<Vec<_>>(), [1, 4, 5]);
 
 	let mut pl = PruneList::empty();

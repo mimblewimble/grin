@@ -19,15 +19,13 @@ use grin_util as util;
 #[macro_use]
 extern crate log;
 
-use std::path::Path;
 use std::sync::Arc;
-use std::{fs, io};
 
 use crate::chain::txhashset::BitmapChunk;
 use crate::chain::types::{NoopAdapter, Options};
 use crate::core::core::{
 	hash::{Hash, Hashed},
-	pmmr::segment::{Segment, SegmentIdentifier, SegmentType},
+	pmmr::segment::{Segment, SegmentIdentifier, SegmentType, SegmentTypeIdentifier},
 	Block, OutputIdentifier, TxKernel,
 };
 use crate::core::{genesis, global, pow};
@@ -36,20 +34,7 @@ use crate::util::secp::pedersen::RangeProof;
 use self::chain_test_helper::clean_output_dir;
 
 mod chain_test_helper;
-
-fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
-	fs::create_dir_all(&dst)?;
-	for entry in fs::read_dir(src)? {
-		let entry = entry?;
-		let ty = entry.file_type()?;
-		if ty.is_dir() {
-			copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
-		} else {
-			fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-		}
-	}
-	Ok(())
-}
+mod pibd;
 
 // Canned segmenter responder, which will simulate feeding back segments as requested
 // by the desegmenter
@@ -151,7 +136,12 @@ impl DesegmenterRequestor {
 		let src_chain = self.responder.chain();
 		let tip = src_chain.header_head().unwrap();
 		let dest_sync_head = self.chain.header_head().unwrap();
-		let copy_chunk_size = 1000;
+		// Keep test writes small enough for their 1 MB LMDB allocation
+		let copy_chunk_size = if global::is_production_mode() {
+			1000
+		} else {
+			10
+		};
 		let mut copied_header_index = 1;
 		let mut src_headers = vec![];
 		while copied_header_index <= tip.height {
@@ -178,7 +168,7 @@ impl DesegmenterRequestor {
 
 	// Emulate `continue_pibd` function, which would be called from state sync
 	// return whether is complete
-	pub fn continue_pibd(&mut self) -> bool {
+	pub fn continue_pibd(&mut self, previous_requests: &mut Vec<SegmentTypeIdentifier>) -> bool {
 		let archive_header = self.chain.txhashset_archive_header_header_only().unwrap();
 		let desegmenter = self.chain.desegmenter(&archive_header).unwrap();
 
@@ -200,6 +190,13 @@ impl DesegmenterRequestor {
 			is_complete = d.is_complete()
 		}
 
+		if !is_complete && !next_segment_ids.is_empty() {
+			assert_ne!(
+				next_segment_ids, *previous_requests,
+				"PIBD requested the same segments again"
+			);
+		}
+
 		debug!("Next segment IDS: {:?}", next_segment_ids);
 
 		// For each segment, pick a desirable peer and send message
@@ -207,35 +204,32 @@ impl DesegmenterRequestor {
 			// Perform request and response
 			match seg_id.segment_type {
 				SegmentType::Bitmap => {
-					let (seg, output_root) =
-						self.responder.get_bitmap_segment(seg_id.identifier.clone());
+					let (seg, output_root) = self.responder.get_bitmap_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_bitmap_segment(seg, output_root).unwrap();
 					}
 				}
 				SegmentType::Output => {
-					let (seg, bitmap_root) =
-						self.responder.get_output_segment(seg_id.identifier.clone());
+					let (seg, _bitmap_root) = self.responder.get_output_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
-						d.add_output_segment(seg, Some(bitmap_root)).unwrap();
+						d.add_output_segment(seg).unwrap();
 					}
 				}
 				SegmentType::RangeProof => {
-					let seg = self
-						.responder
-						.get_rangeproof_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_rangeproof_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_rangeproof_segment(seg).unwrap();
 					}
 				}
 				SegmentType::Kernel => {
-					let seg = self.responder.get_kernel_segment(seg_id.identifier.clone());
+					let seg = self.responder.get_kernel_segment(seg_id.identifier);
 					if let Some(d) = desegmenter.write().as_mut() {
 						d.add_kernel_segment(seg).unwrap();
 					}
 				}
 			};
 		}
+		*previous_requests = next_segment_ids;
 		is_complete
 	}
 
@@ -256,97 +250,52 @@ impl DesegmenterRequestor {
 		);
 	}
 }
-fn test_pibd_copy_impl(
-	is_test_chain: bool,
-	src_root_dir: &str,
-	dest_root_dir: &str,
-	dest_template_dir: Option<&str>,
-) {
+fn test_pibd_copy_impl(is_fixture: bool, src_root_dir: &str, dest_root_dir: &str) {
 	global::set_local_chain_type(global::ChainTypes::Testnet);
+	global::set_local_nrd_enabled(true);
 	let mut genesis = genesis::genesis_test();
 
-	if is_test_chain {
+	if is_fixture {
 		global::set_local_chain_type(global::ChainTypes::AutomatedTesting);
 		genesis = pow::mine_genesis_block().unwrap();
-	}
-
-	// Copy a starting point over for the destination, e.g. a copy of chain
-	// with all headers pre-applied
-	if let Some(td) = dest_template_dir {
-		debug!(
-			"Copying template dir for destination from {} to {}",
-			td, dest_root_dir
-		);
-		copy_dir_all(td, dest_root_dir).unwrap();
 	}
 
 	let src_responder = Arc::new(SegmenterResponder::new(src_root_dir, genesis.clone()));
 	let mut dest_requestor =
 		DesegmenterRequestor::new(dest_root_dir, genesis.clone(), src_responder);
 
-	// No template provided so copy headers from source
-	if dest_template_dir.is_none() {
-		dest_requestor.copy_headers_from_responder();
-		if !is_test_chain {
-			return;
-		}
-	}
+	dest_requestor.copy_headers_from_responder();
 
-	// Perform until desegmenter reports it's done
-	while !dest_requestor.continue_pibd() {}
+	let mut previous_requests = vec![];
+	while !dest_requestor.continue_pibd(&mut previous_requests) {}
 
 	dest_requestor.check_roots();
 }
 
 #[test]
-#[ignore]
 fn test_pibd_copy_sample() {
 	util::init_test_logger();
-	// Note there is now a 'test' in grin_wallet_controller/build_chain
-	// that can be manually tweaked to create a
-	// small test chain with actual transaction data
-
-	// Test on uncompacted and non-compacted chains
-	let src_root_dir = format!("./tests/test_data/chain_raw");
-	let dest_root_dir = format!("./tests/test_output/.segment_copy");
+	// Rebuild both fixtures via PIBD and compare their roots
+	let src_root_dir = "./tests/test_data/chain_raw".to_string();
+	let dest_root_dir = "./tests/test_output/.segment_copy".to_string();
 	clean_output_dir(&dest_root_dir);
-	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir, None);
-	let src_root_dir = format!("./tests/test_data/chain_compacted");
+	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
+	let src_root_dir = "./tests/test_data/chain_compacted".to_string();
 	clean_output_dir(&dest_root_dir);
-	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir, None);
+	test_pibd_copy_impl(true, &src_root_dir, &dest_root_dir);
 	clean_output_dir(&dest_root_dir);
 }
 
 #[test]
 #[ignore]
-// Note this test is intended to be run manually, as testing the copy of an
-// entire live chain is beyond the capability of current CI
-// As above, but run on a real instance of a chain pointed where you like
+// Run with --ignored and set GRIN_CHAIN_DATA to a synced, offline Testnet chain
 fn test_pibd_copy_real() {
 	util::init_test_logger();
-	// If set, just copy headers from source to target template dir and exit
-	// Used to set up a chain state simulating the start of PIBD to continue manual testing
-	let copy_headers_to_template = false;
-
-	// if testing against a real chain, insert location here
-	let src_root_dir = format!("/home/yeastplume/Projects/grin-project/servers/floo-1/chain_data");
-	let dest_template_dir = format!(
-		"/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_headers_only"
+	let source = pibd::copy_testnet_chain();
+	let destination = tempfile::tempdir().unwrap();
+	test_pibd_copy_impl(
+		false,
+		source.path().to_str().unwrap(),
+		destination.path().to_str().unwrap(),
 	);
-	let dest_root_dir =
-		format!("/home/yeastplume/Projects/grin-project/servers/floo-pibd-1/chain_data_test_copy");
-	if copy_headers_to_template {
-		clean_output_dir(&dest_template_dir);
-		test_pibd_copy_impl(false, &src_root_dir, &dest_template_dir, None);
-	} else {
-		clean_output_dir(&dest_root_dir);
-		test_pibd_copy_impl(
-			false,
-			&src_root_dir,
-			&dest_root_dir,
-			Some(&dest_template_dir),
-		);
-	}
-
-	//clean_output_dir(&dest_root_dir);
 }

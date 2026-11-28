@@ -418,10 +418,10 @@ impl ProofBuild for ViewKey {
 			if child_number.is_hardened() {
 				return Ok(None);
 			}
-			key = key.ckd_pub(&secp, &mut hasher, child_number)?;
+			key = key.ckd_pub(secp, &mut hasher, child_number)?;
 		}
 		let pub_key = key.commit(secp, amount, switch)?;
-		if commit.to_pubkey(&secp)? == pub_key {
+		if commit.to_pubkey(secp)? == pub_key {
 			Ok(Some((id, switch)))
 		} else {
 			Ok(None)
@@ -446,7 +446,7 @@ mod tests {
 		let switch = SwitchCommitmentType::Regular;
 		let commit = keychain.commit(amount, &id, switch).unwrap();
 		let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-		assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
+		assert!(verify(keychain.secp(), commit, proof, None).is_ok());
 		let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 		assert!(rewind.is_some());
 		let (r_amount, r_id, r_switch) = rewind.unwrap();
@@ -467,7 +467,7 @@ mod tests {
 			let switch = SwitchCommitmentType::Regular;
 			let commit = keychain.commit(amount, &id, switch).unwrap();
 			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
+			assert!(verify(keychain.secp(), commit, proof, None).is_ok());
 			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
@@ -481,7 +481,7 @@ mod tests {
 			let switch = SwitchCommitmentType::None;
 			let commit = keychain.commit(amount, &id, switch).unwrap();
 			let proof = create(&keychain, &builder, amount, &id, switch, commit, None).unwrap();
-			assert!(verify(&keychain.secp(), commit, proof, None).is_ok());
+			assert!(verify(keychain.secp(), commit, proof, None).is_ok());
 			let rewind = rewind(keychain.secp(), &builder, commit, None, proof).unwrap();
 			assert!(rewind.is_some());
 			let (r_amount, r_id, r_switch) = rewind.unwrap();
@@ -577,7 +577,7 @@ mod tests {
 		let id = ExtKeychain::derive_key_id(
 			3,
 			rng.gen::<u16>() as u32,
-			u32::max_value() - 2,
+			u32::MAX - 2,
 			rng.gen::<u16>() as u32,
 			0,
 		);

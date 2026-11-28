@@ -28,23 +28,26 @@ pub const RANGEPROOF_SEGMENT_HEIGHT: u8 = 11;
 /// Kernel segment height assumed for requests and segment calculation
 pub const KERNEL_SEGMENT_HEIGHT: u8 = 11;
 
-/// Maximum number of received segments to cache (across all trees) before we stop requesting others
-pub const MAX_CACHED_SEGMENTS: usize = 15;
+/// Maximum cached segment threshold used when dropping stale segment cache entries.
+pub const MAX_CACHED_SEGMENTS: usize = 30;
 
 /// Number of segments to apply in a single LMDB transaction
-pub const SEGMENT_APPLY_BATCH_SIZE: usize = 4;
+pub const SEGMENT_APPLY_BATCH_SIZE: usize = 12;
 
 /// How long the state sync should wait after requesting a segment from a peer before
 /// deciding the segment isn't going to arrive. The syncer will then re-request the segment
-pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 20;
+pub const SEGMENT_REQUEST_TIMEOUT_SECS: i64 = 30;
+
+/// How long a peer is excluded from retrying a PIBD segment after serving invalid data.
+pub const REJECTED_SEGMENT_RETRY_SECS: i64 = 600;
 
 /// Number of simultaneous requests for segments we should make. Note this is currently
 /// divisible by 3 to try and evenly spread requests amount the 3 main MMRs (Bitmap segments
 /// will always be requested first)
-pub const SEGMENT_REQUEST_COUNT: usize = 15;
+pub const SEGMENT_REQUEST_COUNT: usize = 9;
 
 /// How many blocks behind the tip a PIBD peer may be and still be considered usable.
-pub const PIBD_PEER_HEIGHT_SLACK_BLOCKS: u64 = 2;
+pub const SYNC_PEER_HEIGHT_SLACK_BLOCKS: u64 = 2;
 
 /// If the syncer hasn't seen a max work peer that supports PIBD in this number of seconds
 /// give up and revert back to the txhashset.zip download method

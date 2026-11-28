@@ -34,8 +34,8 @@ pub struct BlockSums {
 
 impl Writeable for BlockSums {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.utxo_sum)?;
-		writer.write_fixed_bytes(&self.kernel_sum)?;
+		writer.write_fixed_bytes(self.utxo_sum)?;
+		writer.write_fixed_bytes(self.kernel_sum)?;
 		Ok(())
 	}
 }
@@ -62,7 +62,7 @@ impl Default for BlockSums {
 /// It's a tuple but we can verify the "full" kernel sums on it.
 /// This means we can take a previous block_sums, apply a new block to it
 /// and verify the full kernel sums (full UTXO and kernel sets).
-impl<'a> Committed for (BlockSums, &'a dyn Committed) {
+impl Committed for (BlockSums, &dyn Committed) {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		self.1.inputs_committed()
 	}
