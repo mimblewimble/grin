@@ -106,7 +106,7 @@ mod test {
 	/// (method, [(param, is_option)]) for each fn in `trait_name`, parsed from its source.
 	fn trait_methods(src: &str, trait_name: &str) -> Vec<(String, Vec<(String, bool)>)> {
 		let start = src.find(&format!("pub trait {}", trait_name)).unwrap();
-		let body = &src[start..];
+		let body = src[start..].replace("\r\n", "\n");
 		let body = &body[..body.find("\n}\n").unwrap()];
 		let body = Regex::new(r"(?s)/\*\*.*?\*/")
 			.unwrap()
